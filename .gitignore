@@ -1,0 +1,8 @@
+node_modules/
+.emu-composer/
+*.log
+.DS_Store
+# never: keys, jars, venvs — they live in ~/.config/emu-composer
+openai-key
+u2.jar
+u2venv/

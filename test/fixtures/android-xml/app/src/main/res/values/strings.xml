@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_schedule">Schedule</string>
+    <string name="error_with_status">Error (%d)</string>
+    <string name="greeting">Don\'t panic, <xliff:g id="name">%1$s</xliff:g></string>
+</resources>

@@ -1,0 +1,701 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>emu-composer</title>
+<style>
+  :root{
+    --bg:#0d0e13; --panel:#14161d; --panel2:#1b1e27; --line:#262a36; --line2:#333949;
+    --fg:#e7e9f0; --dim:#868da3; --dim2:#5d6478;
+    --accent:#f97316; --accent-fg:#140b03; --accent2:#38bdf8; --ok:#34d399; --bad:#f87171; --warn:#fbbf24; --rec:#ef4444;
+    --r:4px; --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);height:100vh;overflow:hidden;display:flex;
+       font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .lbl{font:600 10px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim2)}
+  kbd{font:500 10px/1 var(--mono);color:var(--dim);border:1px solid var(--line2);border-radius:3px;padding:2px 4px;margin-inline-start:6px}
+
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);
+         padding:6px 12px;font:550 12px/1.35 inherit;cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap}
+  button:hover:not(:disabled){background:#252936;border-color:#454c62}
+  button:active:not(:disabled){background:#2c3140}
+  button:disabled{opacity:.35;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:650}
+  button.primary:hover:not(:disabled){background:#fb8a3c;border-color:#fb8a3c}
+  button.ghost{background:none;border-color:transparent;color:var(--dim)}
+  button.ghost:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
+  input{background:#0a0b0f;color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);padding:6px 9px;font:12px/1.4 var(--mono);outline:none}
+  input:focus{border-color:var(--accent2)}
+  .seg{display:flex;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden;flex:0 0 auto}
+  .seg button{border:none;border-radius:0;background:var(--panel);color:var(--dim);padding:6px 13px}
+  .seg button + button{border-inline-start:1px solid var(--line2)}
+  .seg button.on{background:var(--accent);color:var(--accent-fg);font-weight:650}
+  .seg button.on.alt{background:var(--accent2);color:#04202b}
+  .pill{font:600 10px/1 var(--mono);letter-spacing:.06em;padding:4px 7px;border-radius:3px;border:1px solid var(--line2);color:var(--dim2)}
+  .pill.on{color:var(--ok);border-color:#1f5c48}
+  .pill.bad{color:var(--bad);border-color:#5c2a2a}
+
+  /* ================= emulator column ================= */
+  #left{flex:0 0 auto;display:flex;flex-direction:column;gap:10px;padding:12px;border-inline-end:1px solid var(--line);background:var(--panel)}
+  .bar{display:flex;align-items:center;gap:8px}
+  #modehint{color:var(--dim2);font-size:11px;margin-inline-start:auto;text-align:end;max-width:220px;line-height:1.35}
+  #screen{position:relative;line-height:0;overflow:hidden;border:1px solid var(--line2);background:#000;align-self:center;outline:none}
+  body.collect #screen{border-color:var(--accent);cursor:crosshair}
+  body.use #screen{border-color:var(--accent2)}
+  body.use #screen:focus{box-shadow:0 0 0 1px var(--accent2)}
+  #shot{display:block;max-height:calc(100vh - 132px);width:auto;user-select:none;-webkit-user-drag:none}
+  #ov{position:absolute;inset:0}
+  .box{position:absolute;border:1px solid transparent;pointer-events:none}
+  .box.hot{border-color:var(--accent2);background:#38bdf81c;box-shadow:0 0 0 1px #0009 inset}
+  .box.pick{border-color:var(--accent);background:#f9731626}
+  .tag{position:absolute;top:0;inset-inline-start:0;transform:translateY(-100%);background:var(--accent2);color:#04202b;
+       font:700 10px/1.6 var(--mono);padding:0 5px;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;direction:ltr}
+  .box.pick .tag{background:var(--accent);color:var(--accent-fg)}
+  .box.flip .tag{top:auto;bottom:0;transform:translateY(100%)}
+  #busy{position:absolute;inset-inline-end:8px;top:8px;font:600 10px/1 var(--mono);color:var(--accent2);background:#0009;padding:4px 6px;display:none}
+  #busy.show{display:block}
+  #lost{position:absolute;inset:0;background:#000c;color:var(--bad);display:none;align-items:center;justify-content:center;
+        font:600 12px/1.5 var(--mono);text-align:center;padding:20px}
+  #lost.show{display:flex}
+  #navbar{display:flex;gap:5px;justify-content:center}
+  #navbar button{padding:5px 12px;font-size:11px;font-family:var(--mono)}
+
+  /* ================= composer column ================= */
+  #right{flex:1 1 auto;min-width:430px;display:flex;flex-direction:column;overflow:hidden}
+  .row{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  #rec{display:flex;align-items:center;gap:7px}
+  #rec.on{background:var(--rec);border-color:var(--rec);color:#fff}
+  #dot{width:7px;height:7px;background:currentColor;opacity:.5}
+  #rec.on #dot{animation:pulse .9s infinite}
+  @keyframes pulse{50%{opacity:.12}}
+  #level{width:46px;height:3px;background:#ffffff33;overflow:hidden;display:none}
+  #rec.on #level{display:block}
+  #level i{display:block;height:100%;width:0;background:#fff;transition:width .07s}
+  #status{margin-inline-start:auto;color:var(--dim);font-size:11.5px;text-align:end;flex:0 1 auto;min-width:0;max-width:340px;
+          font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #status.busy{color:var(--accent2)} #status.err{color:var(--bad)} #status.ok{color:var(--ok)}
+
+  #editor{flex:1 1 auto;overflow:auto;padding:18px 20px;font-size:14.5px;line-height:1.8;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
+  #editor:empty::before{content:attr(data-ph);color:var(--dim2);font-size:13px}
+  .chip{display:inline-block;vertical-align:baseline;background:#f973161f;border:1px solid #f9731670;color:#fdba74;border-radius:2px;padding:0 7px;margin:0 2px;
+        font:600 12px/1.7 var(--mono);cursor:pointer;user-select:none;direction:ltr;unicode-bidi:isolate;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chip:hover{background:#f9731636;border-color:var(--accent)}
+  .chip.flash{background:var(--ok);border-color:var(--ok);color:#04231a}
+  .chip.stale{border-style:dashed;opacity:.8}
+  .chip b{opacity:.6;font-weight:700}
+  .interim{color:var(--accent2);opacity:.7;border-bottom:1px dotted var(--accent2)}
+
+  #keyrow{display:none;gap:8px;align-items:center;background:#171213;border-bottom:1px solid #3a2a20}
+  #keyrow.show{display:flex}
+  #apikey{flex:1 1 auto;min-width:200px}
+  #warn{display:none;width:100%;color:var(--warn);font-size:11.5px;font-family:var(--mono)}
+  #warn.show{display:block}
+  #ctx{margin-inline-start:auto;color:var(--dim2);font:11px/1.5 var(--mono);text-align:end;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+  label.opt{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:11.5px;cursor:pointer;user-select:none}
+
+  /* history panel */
+  #hist{position:absolute;inset-inline-end:0;top:0;bottom:0;width:min(520px,60vw);background:var(--panel);border-inline-start:1px solid var(--line2);
+        display:none;flex-direction:column;z-index:5;box-shadow:-10px 0 30px #0008}
+  #hist.show{display:flex}
+  #hist .row{justify-content:space-between}
+  #histlist{overflow:auto;flex:1 1 auto}
+  .hitem{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer}
+  .hitem:hover{background:var(--panel2)}
+  .hitem .t{font:500 10.5px/1 var(--mono);color:var(--dim2);margin-bottom:4px}
+  .hitem .p{font-size:12.5px;color:var(--fg);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  #right{position:relative}
+</style>
+
+<div id="left">
+  <div class="bar">
+    <div class="seg">
+      <button id="mCollect" class="on">איסוף</button>
+      <button id="mUse" class="alt">שימוש</button>
+    </div>
+    <kbd>⌘E</kbd>
+    <span id="modehint"></span>
+  </div>
+  <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><span id="busy">…</span><div id="lost"></div></div>
+  <div id="navbar">
+    <button data-key="4">‹ BACK</button><button data-key="3">HOME</button>
+    <button data-key="187">RECENTS</button><button id="recap">↻ REFRESH</button>
+    <span id="agentpill" class="pill" title="on-device agent">AGENT</span>
+  </div>
+</div>
+
+<div id="right">
+  <div class="row">
+    <span class="lbl">Prompt</span>
+    <div class="seg" id="dirseg">
+      <button data-dir="rtl" class="on">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button>
+    </div>
+    <button id="rec"><span id="dot"></span><span id="reclabel">הקלטה</span><span id="level"><i></i></span></button>
+    <button id="histbtn" class="ghost">היסטוריה</button>
+    <button id="keytoggle" class="ghost" title="מפתח OpenAI לתמלול">מפתח API</button>
+    <span id="status">מוכן</span>
+  </div>
+  <div class="row" id="keyrow">
+    <span class="lbl">OpenAI key</span>
+    <input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+    <button id="keysave" class="primary">שמור</button>
+    <span style="color:var(--dim2);font-size:11px">נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.</span>
+  </div>
+  <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
+       data-ph="כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד."></div>
+  <div class="row" style="border-bottom:none;border-top:1px solid var(--line)">
+    <button id="copyAll" class="primary">העתק פרומפט מלא <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
+    <button id="save">שמור לקובץ</button>
+    <button id="clear" class="ghost">נקה</button>
+    <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> הערות לסוכן</label>
+    <span id="warn"></span>
+    <span id="ctx"></span>
+  </div>
+
+  <div id="hist">
+    <div class="row"><span class="lbl">History</span><button id="histclose" class="ghost">סגור</button></div>
+    <div id="histlist"></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s)
+const ed = $('#editor'), img = $('#shot')
+let nodes = [], captureId = 0, scale = 1, ctx = null, mode = 'collect', notesText = '', sttLanguage = ''
+let refs = new Map()   // uid -> { label, block, node, captureId }
+let refN = 0
+const setStatus = (t, c = '') => { $('#status').textContent = t; $('#status').className = c }
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+// ------------------------------------------------------------------ modes ---
+// Switching is instant either way: the last frame stays on screen, the overlay arrives
+// when the capture lands, and the live loop starts on the next tick.
+function setMode(m) {
+  if (m === mode && nodes.length) return
+  mode = m
+  document.body.className = m
+  $('#mCollect').classList.toggle('on', m === 'collect')
+  $('#mUse').classList.toggle('on', m === 'use')
+  $('#modehint').textContent = m === 'collect'
+    ? 'לחיצה = רפרנס · ימני = הקשה · ⇧+גלגלת = גלילה'
+    : 'האמולטור חי — קליקים, גרירות, גלילה ומקלדת (כולל עברית) עוברים למכשיר'
+  $('#ov').style.display = m === 'collect' ? 'block' : 'none'
+  if (m === 'use') { $('#screen').focus(); pumpFrames() }
+  else capture()
+}
+$('#mCollect').onclick = () => setMode('collect')
+$('#mUse').onclick = () => setMode('use')
+$('#recap').onclick = () => mode === 'collect' ? capture() : setMode('collect')
+
+// ------------------------------------------------------------ live frames ---
+let pumping = false, lostCount = 0
+function markLost(msg) {
+  lostCount++
+  if (lostCount >= 3) { $('#lost').textContent = msg; $('#lost').classList.add('show') }
+}
+function markAlive() { lostCount = 0; $('#lost').classList.remove('show') }
+async function pumpFrames() {
+  if (pumping) return
+  pumping = true
+  let url = ''
+  while (mode === 'use') {
+    if (document.hidden) { await sleep(300); continue }
+    try {
+      const r = await fetch('/api/frame', { cache: 'no-store' })
+      if (r.status === 429) { await sleep(40); continue }
+      if (!r.ok) throw new Error((await r.json()).error || r.status)
+      const next = URL.createObjectURL(await r.blob())
+      await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = next })
+      if (url) URL.revokeObjectURL(url)
+      url = next
+      markAlive()
+    } catch (e) { markLost('המכשיר לא מגיב — ' + e.message); await sleep(500) }
+  }
+  pumping = false
+  if (url) URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------- capture ---
+let capturing = null
+async function capture() {
+  if (capturing) return capturing
+  $('#busy').classList.add('show')
+  capturing = (async () => {
+    try {
+      const r = await fetch('/api/capture', { method: 'POST' })
+      const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      nodes = d.nodes; ctx = d.context; captureId = d.id
+      await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = `data:${d.image.mime};base64,${d.image.b64}` })
+      const root = nodes[0]
+      scale = root && root.w ? img.naturalWidth / root.w : 1
+      drawOverlay()
+      markAlive()
+      $('#ctx').textContent = `${ctx.screen || '?'} · ${ctx.app.match(/\d+\.\d+\.\d+/)?.[0] || ''} · ${ctx.repo.split(' ')[0]}`
+      $('#ctx').title = ctx.block
+      $('#warn').classList.toggle('show', Boolean(ctx.versionMismatch))
+      $('#warn').textContent = ctx.versionMismatch ? '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD' : ''
+      for (const c of ed.querySelectorAll('.chip')) c.classList.toggle('stale', refs.get(c.dataset.uid)?.captureId !== captureId)
+      setStatus(`${nodes.length} אלמנטים · ${d.ms}ms${d.source === 'agent' ? '' : ' · slow path'}`, 'ok')
+    } catch (e) { setStatus(e.message, 'err'); markLost(e.message) }
+    finally { $('#busy').classList.remove('show'); capturing = null }
+  })()
+  return capturing
+}
+
+// --------------------------------------------------------- coordinate map ---
+const kFactor = () => (img.clientWidth / img.naturalWidth) * (mode === 'collect' ? scale : 1)
+const toDisplay = (cx, cy) => { const k = kFactor(), r = img.getBoundingClientRect(); return { x: (cx - r.left) / k, y: (cy - r.top) / k } }
+
+function drawOverlay(hot = -1, pick = null) {
+  const ov = $('#ov'); ov.innerHTML = ''
+  const k = kFactor()
+  const add = (n, cls, label) => {
+    const d = document.createElement('div'); d.className = 'box ' + cls + (n.y * k < 18 ? ' flip' : '')
+    d.style.cssText = `left:${n.x * k}px;top:${n.y * k}px;width:${n.w * k}px;height:${n.h * k}px`
+    if (label) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = label; d.appendChild(t) }
+    ov.appendChild(d)
+  }
+  if (pick) add(pick, 'pick', '@' + (pick.text || pick.desc || pick.cls.split('.').pop()).slice(0, 40))
+  if (hot >= 0) { const n = nodes[hot]; add(n, 'hot', (n.text || n.desc || n.rid?.split('/').pop() || n.cls.split('.').pop()).slice(0, 48)) }
+}
+function hitTest(cx, cy) {
+  const { x, y } = toDisplay(cx, cy)
+  const hits = nodes.map((n, i) => ({ n, i })).filter(({ n }) => n.w > 0 && n.h > 0 && x >= n.x && y >= n.y && x <= n.x + n.w && y <= n.y + n.h)
+  if (!hits.length) return -1
+  const named = hits.filter(({ n }) => n.text || n.desc || n.rid || n.clickable)
+  const pool = named.length ? named : hits
+  pool.sort((a, b) => a.n.w * a.n.h - b.n.w * b.n.h)
+  return pool[0].i
+}
+
+// ------------------------------------------------------- collect: picking ---
+let hotIdx = -1
+$('#screen').addEventListener('mousemove', e => {
+  if (mode !== 'collect') return
+  const i = hitTest(e.clientX, e.clientY)
+  if (i !== hotIdx) { hotIdx = i; drawOverlay(i) }
+})
+$('#screen').addEventListener('mouseleave', () => { if (mode === 'collect') { hotIdx = -1; drawOverlay() } })
+$('#screen').addEventListener('click', e => {
+  if (mode !== 'collect') return
+  const i = hitTest(e.clientX, e.clientY)
+  if (i >= 0) insertRef(i)
+})
+// Right-click in collect mode = a tap on the device without leaving collect. The screen
+// re-captures after the tap so the overlay matches what the tap produced.
+$('#screen').addEventListener('contextmenu', async e => {
+  e.preventDefault()
+  if (mode !== 'collect') return
+  const p = toDisplay(e.clientX, e.clientY)
+  await input({ type: 'tap', x: p.x, y: p.y })
+  await sleep(650); capture()
+})
+
+// -------------------------------------------------------- use: mirroring ----
+// Every command goes through ONE queue so nothing is dropped and order is kept; typed
+// characters coalesce into a single `text` command (one clipboard paste per burst).
+const queue = []
+let draining = false, textBuf = '', textTimer = null
+function input(cmd) { return new Promise((ok, bad) => { queue.push({ cmd, ok, bad }); drain() }) }
+async function drain() {
+  if (draining) return
+  draining = true
+  while (queue.length) {
+    const batch = queue.splice(0, 8)
+    try {
+      const d = await (await fetch('/api/input', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cmds: batch.map(b => b.cmd) }) })).json()
+      if (d.error) { setStatus(d.error, 'err'); batch.forEach(b => b.ok()) } else { batch.forEach(b => b.ok()); markAlive() }
+    } catch (e) { setStatus(e.message, 'err'); batch.forEach(b => b.ok()) }
+  }
+  draining = false
+}
+function typeChar(ch) {
+  textBuf += ch
+  clearTimeout(textTimer)
+  textTimer = setTimeout(flushText, 60)
+}
+function flushText() { clearTimeout(textTimer); if (textBuf) { const s = textBuf; textBuf = ''; input({ type: 'text', s }) } }
+
+let down = null
+$('#screen').addEventListener('mousedown', e => {
+  if (mode !== 'use' || e.button !== 0) return
+  e.preventDefault(); $('#screen').focus()
+  down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY }
+})
+addEventListener('mouseup', e => {
+  if (mode !== 'use' || !down) return
+  const up = toDisplay(e.clientX, e.clientY)
+  const moved = Math.hypot(e.clientX - down.cx, e.clientY - down.cy)
+  const ms = Date.now() - down.t
+  const cmd = moved > 10
+    ? { type: 'swipe', x1: down.x, y1: down.y, x2: up.x, y2: up.y, ms: Math.min(800, Math.max(80, ms)) }
+    : { type: 'tap', x: down.x, y: down.y }
+  down = null
+  input(cmd)
+})
+// Wheel: scrolls the device in use mode, or with Shift held in collect mode (then re-captures).
+let wheelAcc = 0, wheelTimer = null, wheelPt = null
+$('#screen').addEventListener('wheel', e => {
+  if (mode === 'collect' && !e.shiftKey) return
+  e.preventDefault()
+  wheelAcc += e.deltaY; wheelPt = toDisplay(e.clientX, e.clientY)
+  clearTimeout(wheelTimer)
+  wheelTimer = setTimeout(async () => {
+    const dy = Math.max(-900, Math.min(900, wheelAcc * 2.5)); wheelAcc = 0
+    if (Math.abs(dy) < 20) return
+    await input({ type: 'swipe', x1: wheelPt.x, y1: wheelPt.y, x2: wheelPt.x, y2: wheelPt.y - dy, ms: 140 })
+    if (mode === 'collect') { await sleep(500); capture() }
+  }, 70)
+}, { passive: false })
+$('#navbar').addEventListener('click', async e => {
+  const b = e.target.closest('[data-key]'); if (!b) return
+  await input({ type: 'key', code: Number(b.dataset.key) })
+  if (mode === 'collect') { await sleep(600); capture() }
+})
+// Keyboard reaches the device only while the emulator panel has focus. Hebrew and
+// everything else goes through the agent's clipboard, so any character is fine.
+const KEYS = { Backspace: 67, Enter: 66, Tab: 61, Escape: 4, ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Delete: 112, Home: 122, End: 123 }
+$('#screen').addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey) return           // shortcuts belong to the page
+  if (mode !== 'use') return
+  e.preventDefault()
+  if (KEYS[e.key]) { flushText(); return input({ type: 'key', code: KEYS[e.key] }) }
+  if (e.key.length === 1) typeChar(e.key)
+})
+$('#screen').addEventListener('paste', e => {
+  if (mode !== 'use') return
+  e.preventDefault()
+  const t = (e.clipboardData || window.clipboardData).getData('text/plain')
+  if (t) input({ type: 'text', s: t })
+})
+
+// ------------------------------------------------------------- the caret ---
+// Clicking the emulator (or a button) moves focus out of the editor and the browser drops
+// the selection, so the caret is remembered and restored on every insert.
+let savedRange = null
+function rememberCaret() { const s = getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange() }
+function restoreCaret() {
+  ed.focus()
+  const s = getSelection()
+  try { if (savedRange && ed.contains(savedRange.startContainer)) { s.removeAllRanges(); s.addRange(savedRange); return } } catch {}
+  const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r)
+}
+document.addEventListener('selectionchange', rememberCaret)
+function caretAfter(el) {
+  if (!el) return
+  const r = document.createRange(), after = el.nextSibling
+  if (after && after.nodeType === 3) r.setStart(after, Math.min(1, after.nodeValue.length)); else r.setStartAfter(el)
+  r.collapse(true)
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r)
+  rememberCaret()
+}
+function insertHTMLAtCaret(html) { restoreCaret(); document.execCommand('insertHTML', false, html); rememberCaret() }
+
+// ------------------------------------------------------------- the chips ----
+// A container with no text of its own (a card, a row) is named after the first text
+// inside it — three cards read "@View @View @View" before this.
+function labelFor(i) {
+  const n = nodes[i]
+  let t = n.text || n.desc
+  if (!t) for (let j = i + 1; j < nodes.length && nodes[j].depth > n.depth; j++) { if (nodes[j].text || nodes[j].desc) { t = nodes[j].text || nodes[j].desc; break } }
+  return (t || n.rid?.split('/').pop() || n.cls.split('.').pop()).slice(0, 34)
+}
+async function insertRef(i) {
+  if (i < 0 || !nodes[i]) return
+  const node = nodes[i]
+  const label = labelFor(i)
+  const uid = 'r' + (++refN)
+  // Insert immediately with a placeholder block; the resolved block replaces it when the
+  // server answers. The user never waits on the network to keep typing.
+  refs.set(uid, { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId })
+  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="לחץ להעתקת הרפרנס · הובר מדגיש במסך"><b>@</b>${escapeHTML(label)}</span>&nbsp;`)
+  caretAfter(ed.querySelector(`[data-uid="${uid}"]`))
+  saveDraft()
+  try {
+    const d = await (await fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ captureId, i }) })).json()
+    if (d.error) throw new Error(d.error)
+    const r = refs.get(uid); if (r) { r.block = d.block; r.what = d.what }
+    setStatus(`@${label} — ${d.what}`, 'ok')
+    saveDraft()
+  } catch (e) { setStatus(e.message, 'err') }
+}
+ed.addEventListener('mousedown', async e => {
+  const chip = e.target.closest('.chip'); if (!chip) return
+  e.preventDefault()
+  const r = refs.get(chip.dataset.uid); if (!r) return
+  await navigator.clipboard.writeText(`### @${r.label}\n${r.block}`).catch(() => {})
+  chip.classList.add('flash'); setTimeout(() => chip.classList.remove('flash'), 550)
+  setStatus(`הרפרנס "${r.label}" הועתק`, 'ok')
+})
+// Hovering a chip shows which element it is — when it came from the current capture.
+ed.addEventListener('mouseover', e => {
+  const chip = e.target.closest('.chip'); if (!chip || mode !== 'collect') return
+  const r = refs.get(chip.dataset.uid)
+  if (r && r.captureId === captureId) drawOverlay(-1, r.node)
+})
+ed.addEventListener('mouseout', e => { if (e.target.closest('.chip') && mode === 'collect') drawOverlay() })
+ed.addEventListener('paste', e => {
+  e.preventDefault()
+  document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text/plain'))
+})
+ed.addEventListener('input', () => saveDraft())
+
+// ----------------------------------------------------- assembling the text --
+function serialize() {
+  const used = []
+  const walk = n => {
+    if (n.nodeType === 3) return n.nodeValue
+    if (n.nodeType !== 1) return ''
+    if (n.classList.contains('interim')) return ''
+    if (n.classList.contains('chip')) {
+      const r = refs.get(n.dataset.uid); if (!r) return ''
+      let i = used.findIndex(u => u.uid === n.dataset.uid)
+      if (i < 0) { used.push({ uid: n.dataset.uid, ...r }); i = used.length - 1 }
+      return `@ui${i + 1}`
+    }
+    let out = ''
+    if (/^(DIV|P)$/.test(n.tagName) && n.previousSibling) out += '\n'
+    if (n.tagName === 'BR') return '\n'
+    for (const c of n.childNodes) out += walk(c)
+    return out
+  }
+  let body = ''
+  for (const c of ed.childNodes) body += walk(c)
+  body = body.replace(/ /g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim()
+
+  const L = ['# Task', body || '(no text)', '']
+  if (used.length) {
+    L.push('# Elements', '')
+    used.forEach((u, i) => L.push(`### @ui${i + 1} — ${JSON.stringify(u.label)}${u.what ? `  (${u.what})` : ''}`, u.block, ''))
+  }
+  if (ctx) L.push(ctx.block, '')
+  if ($('#optNotes').checked && notesText) L.push(notesText, '')
+  return { text: L.join('\n').trim() + '\n', used }
+}
+
+$('#copyAll').onclick = async () => {
+  const { text, used } = serialize()
+  try { await navigator.clipboard.writeText(text) } catch { return setStatus('ההעתקה נחסמה — סמן והעתק ידנית', 'err') }
+  pushHistory(text)
+  setStatus(`הועתק — ${used.length} רפרנסים, ${text.length} תווים`, 'ok')
+}
+$('#save').onclick = async () => {
+  const { text, used } = serialize()
+  setStatus('שומר…', 'busy')
+  try {
+    const crops = used.map(u => u.captureId === captureId ? cropOf(u.node) : '')
+    const d = await (await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, crops, screen: fullShot() }) })).json()
+    if (d.error) throw new Error(d.error)
+    await navigator.clipboard.writeText(d.text).catch(() => {})
+    setStatus('נשמר והועתק — ' + d.file, 'ok')
+  } catch (e) { setStatus(e.message, 'err') }
+}
+$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); setStatus('נוקה') }
+
+function cropOf(n, pad = 8) {
+  if (!img.naturalWidth || mode !== 'collect') return ''
+  const c = document.createElement('canvas')
+  const x = Math.max(0, n.x * scale - pad), y = Math.max(0, n.y * scale - pad)
+  const w = Math.min(img.naturalWidth - x, n.w * scale + pad * 2), h = Math.min(img.naturalHeight - y, n.h * scale + pad * 2)
+  if (w <= 0 || h <= 0) return ''
+  c.width = w; c.height = h
+  c.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h)
+  return c.toDataURL('image/png')
+}
+function fullShot() {
+  if (!img.naturalWidth) return ''
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight
+  c.getContext('2d').drawImage(img, 0, 0)
+  return c.toDataURL('image/jpeg', 0.85)
+}
+
+// --------------------------------------------------------- draft + history --
+function saveDraft() {
+  try { localStorage.setItem('emucomposer.draft', JSON.stringify({ html: ed.innerHTML, refs: [...refs], refN })) } catch {}
+}
+function loadDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem('emucomposer.draft') || 'null'); if (!d) return
+    ed.innerHTML = d.html || ''; refs = new Map(d.refs || []); refN = d.refN || 0
+    for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+  } catch {}
+}
+function pushHistory(text) {
+  try {
+    const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')
+    h.unshift({ at: Date.now(), text, html: ed.innerHTML, refs: [...refs], refN })
+    localStorage.setItem('emucomposer.history', JSON.stringify(h.slice(0, 40)))
+  } catch {}
+}
+function renderHistory() {
+  let h = []; try { h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]') } catch {}
+  $('#histlist').innerHTML = h.map((x, i) => {
+    const task = (x.text.split('\n# ')[0] || '').replace(/^# Task\n/, '')
+    return `<div class="hitem" data-i="${i}"><div class="t">${new Date(x.at).toLocaleString('he-IL')}</div><div class="p">${escapeHTML(task)}</div></div>`
+  }).join('') || '<div class="hitem" style="color:var(--dim2)">אין עדיין פרומפטים שהועתקו.</div>'
+}
+$('#histbtn').onclick = () => { renderHistory(); $('#hist').classList.add('show') }
+$('#histclose').onclick = () => $('#hist').classList.remove('show')
+$('#histlist').addEventListener('click', async e => {
+  const it = e.target.closest('.hitem[data-i]'); if (!it) return
+  const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[Number(it.dataset.i)]; if (!h) return
+  if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus('הפרומפט הועתק מההיסטוריה', 'ok'); return }
+  ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
+  for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+  $('#hist').classList.remove('show'); saveDraft(); setStatus('שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', 'ok')
+})
+
+// ------------------------------------------------------------- dictation ----
+// Segments are cut at PAUSES, not on a timer: the meter watches the input level and stops
+// the recorder ~450 ms into silence once a segment holds speech, so a word is never split
+// mid-syllable. A hard cap keeps a monologue from becoming one giant upload. Each segment
+// leaves an interim marker at the caret the moment it is cut, and the transcript replaces
+// that marker — so the text lands where the caret WAS, even if you kept typing elsewhere.
+let mediaRec = null, recOn = false, audioCtx = null, stream = null
+let seg = null, segN = 0, lastTranscript = ''
+const SEG_MIN_MS = 1200, SEG_MAX_MS = 15000, SILENCE_MS = 450, SPEECH_LEVEL = 0.06
+
+async function toggleRec() {
+  if (recOn) return stopRec()
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  } catch (e) { return setStatus('אין גישה למיקרופון: ' + e.message, 'err') }
+  recOn = true
+  $('#rec').classList.add('on'); $('#reclabel').textContent = 'עצור'
+  setStatus('מקליט… (מקטע נחתך בהפסקה)', 'busy')
+  startMeter()
+  startSegment()
+}
+function startSegment() {
+  if (!recOn) return
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || ''
+  mediaRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+  const s = seg = { n: ++segN, t0: Date.now(), lastLoud: Date.now(), hadSpeech: false, marker: null }
+  mediaRec.ondataavailable = ev => { if (s.hadSpeech && ev.data.size > 1000) sendSegment(ev.data, s); else s.marker?.remove() }
+  mediaRec.onstop = () => { if (recOn) startSegment(); else stream?.getTracks().forEach(t => t.stop()) }
+  mediaRec.start()
+}
+function cutSegment() {
+  if (!seg || mediaRec?.state !== 'recording') return
+  if (seg.hadSpeech) {
+    // Marker goes in NOW, at the caret, so the transcript has a home even if the user moves on.
+    restoreCaret()
+    document.execCommand('insertHTML', false, `<span class="interim" data-seg="${seg.n}">…</span>`)
+    seg.marker = ed.querySelector(`.interim[data-seg="${seg.n}"]`)
+    caretAfter(seg.marker)
+  }
+  mediaRec.stop()
+}
+function stopRec() {
+  recOn = false
+  if (mediaRec?.state === 'recording') cutSegment()
+  $('#rec').classList.remove('on'); $('#reclabel').textContent = 'הקלטה'
+  audioCtx?.close().catch(() => {}); audioCtx = null
+  setStatus('ההקלטה הסתיימה', 'ok')
+}
+function startMeter() {
+  audioCtx = new AudioContext()
+  const src = audioCtx.createMediaStreamSource(stream)
+  const an = audioCtx.createAnalyser(); an.fftSize = 1024; src.connect(an)
+  const buf = new Float32Array(an.fftSize)
+  const tick = () => {
+    if (!recOn) return
+    an.getFloatTimeDomainData(buf)
+    let sum = 0; for (const v of buf) sum += v * v
+    const rms = Math.sqrt(sum / buf.length)
+    $('#level i').style.width = Math.min(100, rms / 0.25 * 100) + '%'
+    const now = Date.now()
+    if (seg) {
+      if (rms > SPEECH_LEVEL) { seg.lastLoud = now; seg.hadSpeech = true }
+      const len = now - seg.t0, quiet = now - seg.lastLoud
+      if ((seg.hadSpeech && len > SEG_MIN_MS && quiet > SILENCE_MS) || len > SEG_MAX_MS) cutSegment()
+    }
+    requestAnimationFrame(tick)
+  }
+  tick()
+}
+async function sendSegment(blob, s) {
+  const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(blob) })
+  try {
+    const d = await (await fetch('/api/transcribe', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttLanguage, prompt: lastTranscript }) })).json()
+    if (d.error) { setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
+    const t = (d.text || '').trim()
+    if (!t) { s.marker?.remove(); return }
+    lastTranscript = (lastTranscript + ' ' + t).slice(-600)
+    placeTranscript(s.marker, t)
+    if (recOn) setStatus('מקליט…', 'busy')
+  } catch (e) { setStatus('תמלול נכשל: ' + e.message, 'err'); s.marker?.remove() }
+}
+// Replace the marker through the selection so the insert is undoable, then put the user's
+// caret back where it was.
+function placeTranscript(marker, text) {
+  const s = getSelection()
+  const userRange = s.rangeCount && ed.contains(s.anchorNode) ? s.getRangeAt(0).cloneRange() : null
+  ed.focus()
+  if (marker && ed.contains(marker)) {
+    const r = document.createRange(); r.selectNode(marker); s.removeAllRanges(); s.addRange(r)
+  } else restoreCaret()
+  const before = s.getRangeAt(0).startContainer, off = s.getRangeAt(0).startOffset
+  const prev = before.nodeType === 3 ? before.nodeValue.slice(0, off) : ''
+  document.execCommand('insertText', false, (prev && !/\s$/.test(prev) ? ' ' : '') + text + ' ')
+  if (userRange && !(marker && userRange.intersectsNode?.(marker))) { try { s.removeAllRanges(); s.addRange(userRange) } catch {} }
+  rememberCaret(); saveDraft()
+}
+$('#rec').onclick = toggleRec
+
+// ------------------------------------------------------ direction & key -----
+$('#dirseg').addEventListener('click', e => {
+  const b = e.target.closest('[data-dir]'); if (!b) return
+  ;[...$('#dirseg').children].forEach(x => x.classList.toggle('on', x === b))
+  ed.dir = b.dataset.dir
+  ed.style.textAlign = b.dataset.dir === 'ltr' ? 'left' : b.dataset.dir === 'rtl' ? 'right' : ''
+  try { localStorage.setItem('emucomposer.dir', b.dataset.dir) } catch {}
+})
+$('#keytoggle').onclick = () => { $('#keyrow').classList.toggle('show'); if ($('#keyrow').classList.contains('show')) $('#apikey').focus() }
+$('#keysave').onclick = async () => {
+  const key = $('#apikey').value.trim()
+  if (!key) return setStatus('לא הוזן מפתח', 'err')
+  try {
+    const d = await (await fetch('/api/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })).json()
+    if (d.error) throw new Error(d.error)
+    $('#apikey').value = ''; $('#keyrow').classList.remove('show'); $('#rec').disabled = false
+    $('#keytoggle').innerHTML = 'מפתח <bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
+    setStatus('המפתח נשמר — תמלול פעיל', 'ok')
+  } catch (e) { setStatus(e.message, 'err') }
+}
+$('#apikey').addEventListener('keydown', e => e.key === 'Enter' && $('#keysave').click())
+
+// ---------------------------------------------------------------- startup ---
+addEventListener('keydown', e => {
+  const meta = e.metaKey || e.ctrlKey
+  if (meta && e.key === 'Enter') { e.preventDefault(); $('#copyAll').click() }
+  else if (meta && e.key.toLowerCase() === 'e') { e.preventDefault(); setMode(mode === 'collect' ? 'use' : 'collect') }
+  else if (meta && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); toggleRec() }
+  else if (e.key === 'Escape' && $('#hist').classList.contains('show')) $('#hist').classList.remove('show')
+})
+addEventListener('resize', () => mode === 'collect' && drawOverlay())
+document.addEventListener('visibilitychange', () => { if (!document.hidden && mode === 'collect' && !nodes.length) capture() })
+async function health() {
+  try {
+    const h = await (await fetch('/api/health')).json()
+    $('#rec').disabled = !h.stt
+    sttLanguage = h.language || ''
+    if (h.app) document.title = `${h.app} · emu-composer`
+    if (!h.stt) { $('#rec').title = 'צריך מפתח OpenAI — לחץ "מפתח API"'; $('#keyrow').classList.add('show') }
+    else $('#keytoggle').innerHTML = 'מפתח <bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>'
+    const p = $('#agentpill')
+    p.className = 'pill ' + (h.agent ? 'on' : h.device === 'device' ? 'bad' : 'bad')
+    p.title = h.agent ? 'on-device agent: fast dumps, JPEG frames, Unicode input' : ('agent off — ' + (h.agentReason || 'no device') + ' (click to retry)')
+    if (h.device !== 'device') markLost('אין מכשיר מחובר (adb get-state: ' + h.device + ')')
+  } catch {}
+}
+$('#agentpill').onclick = async () => { setStatus('מפעיל את הסוכן…', 'busy'); const d = await (await fetch('/api/agent/restart', { method: 'POST' })).json(); setStatus(d.ok ? 'הסוכן פעיל' : d.reason, d.ok ? 'ok' : 'err'); health() }
+fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
+try { const d = localStorage.getItem('emucomposer.dir'); if (d) $(`#dirseg [data-dir="${d}"]`)?.click() } catch {}
+loadDraft()
+health(); setInterval(health, 20000)
+setMode('collect')
+</script>
