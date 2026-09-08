@@ -25,6 +25,7 @@ expands to is below.*
 ```
 ### @ui1 — "Schedule"  (label of the selected tab)
 what:     label of the selected tab · TextView · bottom bar, centre · 3 of 5 in its row
+screen:   Schedule
 bounds:   [485,2259]→[595,2289] (110×30px)
 state:    selected (the container is the selected one)
 tap:      its container View [441,2127]→[640,2337] — currently selected, so it has no click action
@@ -45,7 +46,10 @@ Text the app builds at runtime resolves to nothing; the block says so and names 
 text that *does* resolve as an anchor. Printf-shaped copy template-matches (`"Error (404)"`
 → `error_with_status`). A label inside a button reports the button as its `tap:` target.
 Compose's selected tab has no click action — the block says that too, rather than "not
-tappable".
+tappable". Keys that share the same copy are ranked by the row they sit in: when four
+sibling tabs resolved to `LShell.*` in `RootScreen.kt`, the fifth is theirs too — never the
+CarPlay or widget variant. Each block names the screen it was picked on, and the prompt says
+when elements come from several screens.
 
 ## Two modes, one toggle (`⌘E`)
 

@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- Region words come from the display size, not the first window in the dump (everything
+  read "bottom bar" when the status-bar window came first).
+- Row-consistent ranking: keys and call sites are ranked by what the element's siblings
+  resolved to; CarPlay/widget/AI/notification surfaces never win for an on-screen element.
+- Screen title = selected bottom tab › header; never an amount or a time. Each element
+  block carries `screen:`, and the prompt lists the screens when they differ.
+- Hit test climbs from a bare icon to the tab that owns it; ⌥ picks the raw node. The
+  server's title becomes the chip label (`@מקומות`, not `@View`). Checkable chips are
+  "selectable chip", tab containers are "tab" / "selected tab".
 - Chips are inline boxes on the sentence's baseline at the sentence's size (they floated
   above the line before), and a Hebrew label no longer pushes the `@` to the wrong side.
 - The reference now lives on the chip element (`data-ref`); the in-memory map is a cache

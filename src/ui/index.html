@@ -182,7 +182,7 @@ function setMode(m) {
   $('#mCollect').classList.toggle('on', m === 'collect')
   $('#mUse').classList.toggle('on', m === 'use')
   $('#modehint').textContent = m === 'collect'
-    ? 'לחיצה = רפרנס · ימני = הקשה · ⇧+גלגלת = גלילה'
+    ? 'לחיצה = רפרנס · ימני = הקשה · ⇧גלגלת = גלילה · ⌥ = צומת גולמי'
     : 'האמולטור חי — קליקים, גרירות, גלילה ומקלדת (כולל עברית) עוברים למכשיר'
   $('#ov').style.display = m === 'collect' ? 'block' : 'none'
   if (m === 'use') { $('#screen').focus(); pumpFrames() }
@@ -264,15 +264,32 @@ function drawOverlay(hot = -1, pick = null) {
   if (pick) add(pick, 'pick', '@' + (pick.text || pick.desc || pick.cls.split('.').pop()).slice(0, 40))
   if (hot >= 0) { const n = nodes[hot]; add(n, 'hot', (n.text || n.desc || n.rid?.split('/').pop() || n.cls.split('.').pop()).slice(0, 48)) }
 }
+// Smallest node under the cursor that MEANS something: it has text/desc/id, or it is
+// interactive (clickable, selected — Compose's current tab —, checkable, long-clickable), or
+// it contains text. A bare icon View inside the selected tab used to win and read "View";
+// now the tab container does. Hold ⌥ to take the raw smallest node instead.
+const meaningful = n => n.text || n.desc || n.rid || n.clickable || n.selected || n.checkable || n.longClickable
+const parentOf = i => { const n = nodes[i]; for (let j = i - 1; j >= 0; j--) if (nodes[j].depth < n.depth) return j; return -1 }
+const hasInnerText = i => { for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text || nodes[j].desc) return true; return false }
+let rawPick = false
 function hitTest(cx, cy) {
   const { x, y } = toDisplay(cx, cy)
   const hits = nodes.map((n, i) => ({ n, i })).filter(({ n }) => n.w > 0 && n.h > 0 && x >= n.x && y >= n.y && x <= n.x + n.w && y <= n.y + n.h)
   if (!hits.length) return -1
-  const named = hits.filter(({ n }) => n.text || n.desc || n.rid || n.clickable)
-  const pool = named.length ? named : hits
-  pool.sort((a, b) => a.n.w * a.n.h - b.n.w * b.n.h)
-  return pool[0].i
+  hits.sort((a, b) => a.n.w * a.n.h - b.n.w * b.n.h)
+  if (rawPick) return hits[0].i
+  const named = hits.filter(({ n }) => n.text || n.desc || n.rid)
+  // Direct text/desc wins when the cursor is on it; otherwise climb from the smallest hit.
+  if (named.length && named[0].n.w * named[0].n.h <= hits[0].n.w * hits[0].n.h * 4) return named[0].i
+  let i = hits[0].i
+  for (let k = 0; k < 6 && i >= 0; k++) {
+    if (meaningful(nodes[i]) || hasInnerText(i)) return i
+    i = parentOf(i)
+  }
+  return hits[0].i
 }
+addEventListener('keydown', e => { if (e.key === 'Alt') rawPick = true })
+addEventListener('keyup', e => { if (e.key === 'Alt') rawPick = false })
 
 // ------------------------------------------------------- collect: picking ---
 let hotIdx = -1
@@ -425,7 +442,7 @@ async function insertRef(i) {
   const uid = 'r' + (++refN)
   // Insert immediately with a placeholder block; the resolved block replaces it when the
   // server answers. The user never waits on the network to keep typing.
-  const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId }
+  const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId, screen: ctx?.screen || '' }
   // <bdi> keeps a Hebrew label from dragging the "@" to its far side inside the LTR chip.
   insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="לחץ להעתקת הרפרנס · הובר מדגיש במסך"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
   const el = ed.querySelector(`[data-uid="${uid}"]`)
@@ -435,8 +452,11 @@ async function insertRef(i) {
   try {
     const d = await (await fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ captureId, i }) })).json()
     if (d.error) throw new Error(d.error)
-    setRef(el, { ...ref, block: d.block, what: d.what })
-    setStatus(`@${label} — ${d.what}`, 'ok')
+    // The server's title is authoritative: a textless container gets its inner text.
+    const better = d.title && (/^[A-Z]\w*$/.test(label) || label === node.cls.split('.').pop()) ? d.title.slice(0, 34) : label
+    if (better !== label) el.querySelector('bdi').textContent = better
+    setRef(el, { ...ref, label: better, block: d.block, what: d.what, screen: d.screen })
+    setStatus(`@${better} — ${d.what}`, 'ok')
     saveDraft()
   } catch (e) { setStatus(e.message, 'err') }
 }
@@ -545,7 +565,13 @@ function serialize() {
     L.push('# Elements', '')
     used.forEach((u, i) => L.push(`### @ui${i + 1} — ${JSON.stringify(u.label)}${u.what ? `  (${u.what})` : ''}`, u.block, ''))
   }
-  if (ctx) L.push(ctx.block, '')
+  if (ctx) {
+    L.push(ctx.block)
+    // Elements picked across several screens: say so, so the agent does not assume one.
+    const screens = [...new Set(used.map(u => u.screen).filter(Boolean))]
+    if (screens.length > 1 || (screens.length === 1 && screens[0] !== ctx.screen)) L.push(`elements: picked on ${screens.length} screen${screens.length > 1 ? 's' : ''} — ${screens.join(' · ')}`)
+    L.push('')
+  }
   if ($('#optNotes').checked && notesText) L.push(notesText, '')
   return { text: L.join('\n').trim() + '\n', used, orphans }
 }

@@ -14,7 +14,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Agent } from './agent.mjs'
-import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise } from './resolve.mjs'
+import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise, firstText, countTexts, rankKeys, siblingHints } from './resolve.mjs'
 import { HOME } from './config.mjs'
 
 const execFileP = promisify(execFile)
@@ -218,9 +218,14 @@ async function gatherContext(nodes, activity) {
   const focused = appNodes.find(n => n.focused && /EditText/.test(n.cls))
   // Screen title = the largest static text near the top. Editable text is excluded, or a
   // search query would be reported as the screen's name (it was: screen "שלום ab").
-  const top = appNodes.filter(n => n.text && n.y < 400 && n.h >= 40 && n.w < 900 && !/EditText/.test(n.cls)
+  const isLabel = t => /\p{L}{2,}/u.test(t) && !/^[\s\d$€£₪.,:%+-]+$/.test(t)   // "$0", "15:00" are not titles
+  const top = appNodes.filter(n => n.text && isLabel(n.text) && n.y < 400 && n.h >= 40 && n.w < 900 && !/EditText/.test(n.cls)
       && !(focused && n.text === focused.text))
     .sort((a, b) => (b.h * b.w) - (a.h * a.w))[0]
+  // The selected tab of a bottom bar names the section the screen belongs to.
+  const H = Number((/x(\d+)/.exec(s.size) || [])[1]) || 2400
+  const selTab = appNodes.find(n => n.selected && n.y > H * 0.8 && n.h > 100)
+  const selText = selTab ? appNodes.find(m => m.i > selTab.i && m.depth > selTab.depth && m.text && isLabel(m.text)) : null
   const labels = (cfg.signInLabels || []).map(l => normalise(l).toLowerCase())
   const signIn = appNodes.some(n => labels.includes(normalise(n.text || n.desc).toLowerCase()))
   // Foreground from the TREE, not only the focus line: the app's own root fills the screen.
@@ -228,12 +233,12 @@ async function gatherContext(nodes, activity) {
   const mismatch = Boolean(s.installedVer && s.repoVer && s.installedVer !== s.repoVer)
   const ctx = {
     app: `${APP} (${PKG} ${s.installedVer || '?'}${s.installedCode ? `, code ${s.installedCode}` : ''}) — Android, ${s.debuggable ? 'debug' : 'release'} build`,
-    screen: top ? top.text : '',
+    screen: [selText?.text, top?.text].filter((t, k, a) => t && a.indexOf(t) === k).join(' › '),
     activity,
     foreground,
     session: !foreground ? `n/a — ${APP} is not the foreground app`
       : signIn ? 'signed-out (derived: a "Sign in" affordance is on screen)'
-      : 'signed-in (derived: no sign-in affordance; identity is not readable from a release build)',
+      : `signed-in (derived: no sign-in affordance; the identity itself is not read${s.debuggable ? '' : ' — release build'})`,
     focusedField: focused ? (focused.text ? `text field focused, contains "${focused.text.slice(0, 60)}"` : 'empty text field focused') : '',
     device: `${s.model} · Android ${s.release} (API ${s.sdk}) · ${s.size} @ ${s.density}dpi · locale ${s.locale}`,
     repo: `${branch || '?'} @ ${head || '?'}${dirty ? ` (${dirty} uncommitted)` : ''}${s.repoVer ? ` · declares ${s.repoVer} (${s.repoCode})${mismatch ? '' : ' — matches the installed build'}` : ''}`,
@@ -259,16 +264,6 @@ function renderScreenBlock(c) {
 const q = s => JSON.stringify(String(s))
 const short = f => { for (const r of cfg.sourceRoots) if (f.startsWith(r + '/')) return f.slice(r.length + 1); return f }
 
-function firstText(nodes, i) {
-  for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text || nodes[j].desc) return nodes[j]
-  return null
-}
-function countTexts(nodes, i) {
-  let c = 0
-  for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text) c++
-  return c
-}
-
 function stateWords(n) {
   const w = []
   if (n.selected) w.push('selected'); if (n.checked) w.push('checked'); if (n.focused) w.push('focused')
@@ -278,22 +273,15 @@ function stateWords(n) {
 
 // Rank candidate keys by how the node presents the text: an icon's content-desc is more
 // likely the key whose call sites pass `contentDescription`; visible text prefers `Text(`.
-function rankKeys(entries, node, viaDesc) {
-  const score = e => {
-    const codes = (e.usedBy || []).map(u => u.code).join(' ')
-    let s = 0
-    if (viaDesc && /contentDescription/.test(codes)) s += 2
-    if (!viaDesc && /\bText\(|label|title/.test(codes)) s += 2
-    if (/A11y$/.test(e.key) === viaDesc) s += 1
-    return s
-  }
-  return [...entries].sort((a, b) => score(b) - score(a))
-}
-
+let debugHints = null
 async function referenceFor(cap, i) {
   await index.ensure()
+  debugHints = null
   const nodes = cap.nodes, n = nodes[i]
-  const W = nodes[0]?.w || 1080, H = nodes[0]?.h || 2400
+  // The first node is whichever WINDOW the dump lists first (often the status bar), so its
+  // height is not the screen's — every element read "bottom bar" once. Use the display.
+  const sz = /(\d+)x(\d+)/.exec((await staticContext()).size || '')
+  const W = sz ? Number(sz[1]) : Math.max(...nodes.map(x => x.x + x.w)), H = sz ? Number(sz[2]) : Math.max(...nodes.map(x => x.y + x.h))
   const target = tapTarget(nodes, i)
   const pos = siblingPosition(nodes, target)
   const what = role(n, target, pos)
@@ -304,6 +292,7 @@ async function referenceFor(cap, i) {
 
   const L = []
   L.push(`what:     ${what} · ${n.cls.split('.').pop()} · ${region(n, W, H)}${pos ? ` · ${pos.index} of ${pos.of} in its ${pos.axis}` : ''}`)
+  if (cap.ctx?.screen) L.push(`screen:   ${cap.ctx.screen}`)
   if (inner) L.push(`contains: ${q(inner.text || inner.desc)}${countTexts(nodes, i) > 1 ? ` (+${countTexts(nodes, i) - 1} more text nodes)` : ''} — the container itself has no text`)
   L.push(`bounds:   [${n.x},${n.y}]→[${n.x + n.w},${n.y + n.h}] (${n.w}×${n.h}px)`)
   if (n.desc && n.desc !== n.text) L.push(`a11y:     ${q(n.desc)}`)
@@ -323,7 +312,11 @@ async function referenceFor(cap, i) {
   let resolved = false
   if (primary) {
     const r = index.lookup(primary.text, hint)
-    const keys = rankKeys(r.keys, n, primary.viaDesc)
+    const hints = siblingHints(index, nodes, target, hint)
+    debugHints = hints
+    const keys = rankKeys(r.keys, n, primary.viaDesc, hints)
+    // Rendered-file order follows the row too: the tab's own RootScreen line over a screen title.
+    if (keys.length) keys[0].usedBy = [...(keys[0].usedBy || [])].sort((a, b) => hints.files.includes(b.file) - hints.files.includes(a.file))
     if (keys.length) {
       resolved = true
       const k = keys[0]
@@ -360,7 +353,7 @@ async function referenceFor(cap, i) {
     const rd = index.lookup(n.desc)
     if (rd.keys.length) L.push(`a11y key: ${rd.keys[0].key} (${short(rd.keys[0].file)}:${rd.keys[0].line})`)
   }
-  return { title, what, lines: L, block: L.join('\n') }
+  return { title, what, screen: cap.ctx?.screen || '', lines: L, block: L.join('\n'), _hints: debugHints }
 }
 
 function agentNotes(size) {

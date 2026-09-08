@@ -211,6 +211,62 @@ async function walk(dir, re, out = []) {
   return out
 }
 
+
+// ------------------------------------------------------------ ranking -----
+
+// An element on the phone screen is never rendered by CarPlay / widget / AI / notification
+// code — those keys lose, however well their copy matches.
+export const OFF_PHONE = /^(LCarPlay|LCar|LWidget|LAi|LNotify|LWatch|LWear)\b|\/(car|widget|notify|watch|wear)\//
+
+export function firstText(nodes, i) {
+  for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text || nodes[j].desc) return nodes[j]
+  return null
+}
+export function countTexts(nodes, i) {
+  let c = 0
+  for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text) c++
+  return c
+}
+
+// Rank candidate keys by how the node presents the text, by surface, and by ROW
+// CONSISTENCY: when four sibling tabs resolved to LShell.* rendered in RootScreen.kt, the
+// fifth is theirs too — "מקומות" once went to LCarPlay.tabPlaces and "הגדרות" to the
+// settings screen's title while their neighbours pointed at RootScreen.kt.
+export function rankKeys(entries, node, viaDesc, hints = { objects: [], files: [] }) {
+  const score = e => {
+    const codes = (e.usedBy || []).map(u => u.code).join(' ')
+    let s = 0
+    if (viaDesc && /contentDescription/.test(codes)) s += 2
+    if (!viaDesc && /\bText\(|label|title/.test(codes)) s += 2
+    if (/A11y$/.test(e.key) === viaDesc) s += 1
+    if (OFF_PHONE.test(e.key) || OFF_PHONE.test(e.file)) s -= 4
+    if (hints.objects.includes(e.key.split('.')[0])) s += 3
+    if ((e.usedBy || []).some(u => hints.files.includes(u.file))) s += 2
+    return s
+  }
+  const ranked = [...entries].sort((a, b) => score(b) - score(a))
+  // The rendered line follows the row too: the tab's RootScreen call over a screen title.
+  for (const k of ranked) k.usedBy = [...(k.usedBy || [])].sort((a, b) => Number(hints.files.includes(b.file)) - Number(hints.files.includes(a.file)))
+  return ranked
+}
+
+// What the interactive SIBLINGS of this element's tap target resolved to: their key
+// objects and their rendered files.
+export function siblingHints(index, nodes, target, hint = '') {
+  const out = { objects: [], files: [] }
+  if (!target || target.parent < 0) return out
+  const sibs = nodes[target.parent].children.map(c => nodes[c]).filter(c => c !== target && (c.clickable || c.selected || c.checkable))
+  for (const c of sibs.slice(0, 8)) {
+    const t = c.text || c.desc || (firstText(nodes, c.i) || {}).text
+    if (!t) continue
+    for (const k of index.lookup(t, hint).keys.filter(k => !OFF_PHONE.test(k.key) && !OFF_PHONE.test(k.file))) {
+      out.objects.push(k.key.split('.')[0])
+      for (const u of (k.usedBy || []).slice(0, 3)) out.files.push(u.file)
+    }
+  }
+  return out
+}
+
 // ------------------------------------------------------------------ tree ----
 
 // uiautomator's flat dump carries depth; rebuild parent links so a reference can name the
@@ -266,11 +322,12 @@ export function region(n, W, H) {
 
 export function role(n, target, pos) {
   const cls = n.cls.split('.').pop()
-  if (n.checkable) return n.cls.includes('Switch') ? 'switch' : 'checkbox'
+  if (n.checkable) return n.cls.includes('Switch') ? 'switch' : /CheckBox|RadioButton/.test(cls) ? cls.toLowerCase() : 'selectable chip'
   if (/EditText/.test(cls)) return 'text field'
   if (/Button/.test(cls)) return 'button'
   if (target && target.selected && target !== n) return 'label of the selected tab'
   if (target && pos && pos.axis === 'row' && /TextView/.test(cls)) return 'tab label'
+  if (target === n && pos && pos.axis === 'row' && !n.text && !n.desc) return n.selected ? 'selected tab' : 'tab'
   if (/ImageView|Image/.test(cls) && (n.desc || target)) return 'icon button'
   if (!n.text && n.desc && n.w <= 200 && n.h <= 200 && target) return 'icon button'
   if (n.scrollable) return 'scrollable list'
