@@ -21,6 +21,9 @@
   button:disabled{opacity:.35;cursor:default}
   button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:650}
   button.primary:hover:not(:disabled){background:#fb8a3c;border-color:#fb8a3c}
+  button.primary.done{background:var(--ok);border-color:var(--ok);color:#04231a;transform:scale(1.03)}
+  button.primary.fail{background:var(--bad);border-color:var(--bad);color:#fff}
+  button.primary{transition:background .15s,border-color .15s,transform .15s}
   button.ghost{background:none;border-color:transparent;color:var(--dim)}
   button.ghost:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
   input{background:#0a0b0f;color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);padding:6px 9px;font:12px/1.4 var(--mono);outline:none}
@@ -142,7 +145,7 @@
   <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
        data-ph="כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד."></div>
   <div class="row" style="border-bottom:none;border-top:1px solid var(--line)">
-    <button id="copyAll" class="primary">העתק פרומפט מלא <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
+    <button id="copyAll" class="primary"><span>העתק פרומפט מלא</span> <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
     <button id="save">שמור לקובץ</button>
     <button id="clear" class="ghost">נקה</button>
     <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> הערות לסוכן</label>
@@ -435,9 +438,63 @@ ed.addEventListener('mouseover', e => {
   if (r && r.captureId === captureId) drawOverlay(-1, r.node)
 })
 ed.addEventListener('mouseout', e => { if (e.target.closest('.chip') && mode === 'collect') drawOverlay() })
+// Copy/cut inside the editor: plain text gets each chip as "@label" plus the full reference
+// blocks appended, so what leaves the editor is complete; a private payload carries the
+// chips themselves, so pasting back INTO the editor re-materializes them as chips.
+const CHIP_MIME = 'application/x-emu-composer-chips'
+function selectionPayload() {
+  const sel = getSelection(); if (!sel.rangeCount || sel.isCollapsed) return null
+  const frag = sel.getRangeAt(0).cloneContents()
+  const box = document.createElement('div'); box.appendChild(frag)
+  const chips = [...box.querySelectorAll('.chip')].map(c => refs.get(c.dataset.uid) && { uid: c.dataset.uid, ...refs.get(c.dataset.uid) }).filter(Boolean)
+  let plain = ''
+  const walk = n => {
+    if (n.nodeType === 3) return n.nodeValue
+    if (n.nodeType !== 1) return ''
+    if (n.classList.contains('chip')) { const r = refs.get(n.dataset.uid); return r ? `@${r.label}` : '' }
+    if (n.classList.contains('interim')) return ''
+    if (n.tagName === 'BR') return '\n'
+    let out = /^(DIV|P)$/.test(n.tagName) && n.previousSibling ? '\n' : ''
+    for (const c of n.childNodes) out += walk(c)
+    return out
+  }
+  for (const c of box.childNodes) plain += walk(c)
+  plain = plain.replace(/ /g, ' ')
+  if (chips.length) plain += '\n\n' + chips.map(r => `### @${r.label}\n${r.block}`).join('\n\n')
+  return { plain, html: box.innerHTML, chips }
+}
+function onCopyCut(e, cut) {
+  const p = selectionPayload(); if (!p) return
+  e.preventDefault()
+  e.clipboardData.setData('text/plain', p.plain)
+  e.clipboardData.setData(CHIP_MIME, JSON.stringify({ html: p.html, chips: p.chips }))
+  if (cut) document.execCommand('delete')
+  setStatus(p.chips.length ? `${cut ? 'נגזר' : 'הועתק'} עם ${p.chips.length} רפרנסים מלאים` : (cut ? 'נגזר' : 'הועתק'), 'ok')
+}
+ed.addEventListener('copy', e => onCopyCut(e, false))
+ed.addEventListener('cut', e => onCopyCut(e, true))
 ed.addEventListener('paste', e => {
   e.preventDefault()
-  document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text/plain'))
+  const cd = e.clipboardData || window.clipboardData
+  const own = cd.getData(CHIP_MIME)
+  if (own) {
+    try {
+      const { html, chips } = JSON.parse(own)
+      // Fresh uids, so a copy pasted twice yields two independent chips.
+      const box = document.createElement('div'); box.innerHTML = html
+      for (const c of box.querySelectorAll('.chip')) {
+        const src = chips.find(x => x.uid === c.dataset.uid); if (!src) { c.remove(); continue }
+        const uid = 'r' + (++refN)
+        refs.set(uid, { label: src.label, block: src.block, node: src.node, captureId: src.captureId, what: src.what })
+        c.dataset.uid = uid; c.classList.toggle('stale', src.captureId !== captureId)
+      }
+      for (const x of box.querySelectorAll('.interim')) x.remove()
+      insertHTMLAtCaret(box.innerHTML)
+      saveDraft()
+      return setStatus(`הודבק — ${box.querySelectorAll('.chip').length} רפרנסים שוחזרו כתגים`, 'ok')
+    } catch {}
+  }
+  document.execCommand('insertText', false, cd.getData('text/plain'))
 })
 ed.addEventListener('input', () => saveDraft())
 
@@ -474,10 +531,16 @@ function serialize() {
   return { text: L.join('\n').trim() + '\n', used }
 }
 
+// The button itself confirms the copy — a status line far from the cursor is easy to miss.
+let copyFlash = null
 $('#copyAll').onclick = async () => {
   const { text, used } = serialize()
-  try { await navigator.clipboard.writeText(text) } catch { return setStatus('ההעתקה נחסמה — סמן והעתק ידנית', 'err') }
+  const b = $('#copyAll')
+  try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus('ההעתקה נחסמה — סמן והעתק ידנית', 'err') }
   pushHistory(text)
+  clearTimeout(copyFlash)
+  b.classList.add('done'); b.querySelector('span').textContent = `הועתק ✓ ${used.length} רפרנסים`
+  copyFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = 'העתק פרומפט מלא' }, 1600)
   setStatus(`הועתק — ${used.length} רפרנסים, ${text.length} תווים`, 'ok')
 }
 $('#save').onclick = async () => {
