@@ -28,6 +28,9 @@
   button.ghost:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
   input{background:#0a0b0f;color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);padding:6px 9px;font:12px/1.4 var(--mono);outline:none}
   input:focus{border-color:var(--accent2)}
+  select{background:var(--panel2);color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);padding:5px 8px;font:550 11.5px/1.3 var(--mono);max-width:210px;outline:none;cursor:pointer}
+  select:focus{border-color:var(--accent2)}
+  select.bad{color:var(--bad);border-color:#5c2a2a}
   .seg{display:flex;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden;flex:0 0 auto}
   .seg button{border:none;border-radius:0;background:var(--panel);color:var(--dim);padding:6px 13px}
   .seg button + button{border-inline-start:1px solid var(--line2)}
@@ -99,9 +102,12 @@
   label.opt{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:11.5px;cursor:pointer;user-select:none}
 
   /* history panel */
-  #hist{position:absolute;inset-inline-end:0;top:0;bottom:0;width:min(520px,60vw);background:var(--panel);border-inline-start:1px solid var(--line2);
+  .side{position:absolute;inset-inline-end:0;top:0;bottom:0;width:min(520px,60vw);background:var(--panel);border-inline-start:1px solid var(--line2);
         display:none;flex-direction:column;z-index:5;box-shadow:-10px 0 30px #0008}
-  #hist.show{display:flex}
+  .side.show{display:flex}
+  .sbody{padding:8px 14px;overflow:auto}
+  .srow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .snote{color:var(--dim2);font-size:11px;padding:8px 0 4px}
   #hist .row{justify-content:space-between}
   #histlist{overflow:auto;flex:1 1 auto}
   .hitem{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer}
@@ -114,10 +120,11 @@
 <div id="left">
   <div class="bar">
     <div class="seg">
-      <button id="mCollect" class="on">איסוף</button>
-      <button id="mUse" class="alt">שימוש</button>
+      <button id="mCollect" class="on" data-t="mode_collect">איסוף</button>
+      <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
     </div>
     <kbd>⌘E</kbd>
+    <select id="device" data-t-title="device_title"></select>
     <span id="modehint"></span>
   </div>
   <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><span id="busy">…</span><div id="lost"></div></div>
@@ -130,40 +137,114 @@
 
 <div id="right">
   <div class="row">
-    <span class="lbl">Prompt</span>
+    <span class="lbl" data-t="prompt">Prompt</span>
     <div class="seg" id="dirseg">
       <button data-dir="rtl" class="on">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button>
     </div>
-    <button id="rec"><span id="dot"></span><span id="reclabel">הקלטה</span><span id="level"><i></i></span></button>
-    <button id="histbtn" class="ghost">היסטוריה</button>
-    <button id="keytoggle" class="ghost" title="מפתח OpenAI לתמלול">מפתח API</button>
-    <span id="status">מוכן</span>
+    <button id="rec"><span id="dot"></span><span id="reclabel" data-t="rec">הקלטה</span><span id="level"><i></i></span></button>
+    <button id="histbtn" class="ghost" data-t="history">היסטוריה</button>
+    <button id="settingsbtn" class="ghost" data-t-title="settings_title" title="הגדרות">⚙</button>
+    <span id="status" data-t="ready">מוכן</span>
   </div>
-  <div class="row" id="keyrow">
-    <span class="lbl">OpenAI key</span>
-    <input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
-    <button id="keysave" class="primary">שמור</button>
-    <span style="color:var(--dim2);font-size:11px">נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.</span>
-  </div>
+
   <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
-       data-ph="כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד."></div>
+       data-t-ph="placeholder" data-ph=""></div>
   <div class="row" style="border-bottom:none;border-top:1px solid var(--line)">
-    <button id="copyAll" class="primary"><span>העתק פרומפט מלא</span> <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
-    <button id="save">שמור לקובץ</button>
-    <button id="clear" class="ghost">נקה</button>
-    <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> הערות לסוכן</label>
+    <button id="copyAll" class="primary"><span data-t="copy_all">העתק פרומפט מלא</span> <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
+    <button id="save" data-t="save">שמור לקובץ</button>
+    <button id="clear" class="ghost" data-t="clear">נקה</button>
+    <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> <span data-t="notes">הערות לסוכן</span></label>
     <span id="warn"></span>
     <span id="ctx"></span>
   </div>
 
-  <div id="hist">
-    <div class="row"><span class="lbl">History</span><button id="histclose" class="ghost">סגור</button></div>
+  <div id="hist" class="side">
+    <div class="row"><span class="lbl" data-t="history_lbl">History</span><button id="histclose" class="ghost" data-t="close">סגור</button></div>
     <div id="histlist"></div>
+  </div>
+
+  <div id="settings" class="side">
+    <div class="row"><span class="lbl" data-t="settings_lbl">Settings</span><button id="settingsclose" class="ghost" data-t="close">סגור</button></div>
+    <div class="sbody">
+      <div class="srow"><span data-t="s_ui_lang">שפת הממשק</span>
+        <div class="seg" id="langseg"><button data-lang="he">עברית</button><button data-lang="en">English</button></div></div>
+      <div class="srow"><span data-t="s_stt_lang">שפת ההקלטה</span>
+        <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
+      <div class="srow"><span data-t="s_key">מפתח OpenAI</span>
+        <div style="display:flex;gap:6px;flex:1 1 auto;justify-content:flex-end"><input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" style="flex:1 1 auto;min-width:120px;max-width:260px"><button id="keysave" class="primary" data-t="save_key">שמור</button></div></div>
+      <div class="snote" data-t="key_note">נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.</div>
+      <div class="snote" id="keystate"></div>
+      <div class="srow"><span data-t="s_notes">הערות לסוכן בפרומפט</span><input type="checkbox" id="optNotes2"></div>
+      <div class="srow"><span data-t="s_dir">כיוון טקסט</span><div class="seg" id="dirseg2"><button data-dir="rtl">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button></div></div>
+    </div>
   </div>
 </div>
 
 <script>
 const $ = s => document.querySelector(s)
+
+// ------------------------------------------------------------------- i18n ---
+const I18N = {
+  he: {
+    mode_collect: 'איסוף', mode_use: 'שימוש', prompt: 'Prompt', rec: 'הקלטה', rec_stop: 'עצור', history: 'היסטוריה',
+    settings_title: 'הגדרות', copy_all: 'העתק פרומפט מלא', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
+    history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
+    s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
+    key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
+    device_title: 'איזה מכשיר לשקף', device_none: 'אין מכשיר מחובר', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
+    hint_collect: 'לחיצה = רפרנס · ימני = הקשה · ⇧גלגלת = גלילה · ⌥ = צומת גולמי',
+    hint_use: 'האמולטור חי — קליקים, גרירות, גלילה ומקלדת (כולל עברית) עוברים למכשיר',
+    placeholder: 'כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד.',
+    chip_title: 'לחץ להעתקת הרפרנס · הובר מדגיש במסך',
+    st_elements: '{0} אלמנטים · {1}ms', st_slow: ' · slow path', st_lost: 'המכשיר לא מגיב — {0}', st_no_device: 'אין מכשיר מחובר',
+    st_resolving: '@{0} — {1}', st_chip_copied: 'הרפרנס "{0}" הועתק', st_copied: 'הועתק — {0} רפרנסים, {1} תווים',
+    btn_copied: 'הועתק ✓ {0} רפרנסים', st_copy_blocked: 'ההעתקה נחסמה — סמן והעתק ידנית', st_orphans: 'אזהרה: {0} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד',
+    st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'אין עדיין פרומפטים שהועתקו.',
+    st_hist_restored: 'שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', st_pasted: 'הודבק — {0} רפרנסים שוחזרו כתגים',
+    st_copied_sel: 'הועתק עם {0} רפרנסים מלאים', st_cut_sel: 'נגזר עם {0} רפרנסים מלאים', st_copied_plain: 'הועתק', st_cut_plain: 'נגזר',
+    st_mic: 'אין גישה למיקרופון: {0}', st_rec: 'מקליט…', st_rec_hint: 'מקליט… (מקטע נחתך בהפסקה)', st_rec_done: 'ההקלטה הסתיימה', st_stt_fail: 'תמלול נכשל: {0}',
+    st_key_missing: 'לא הוזן מפתח', st_key_saved: 'המפתח נשמר — תמלול פעיל', key_needed: 'צריך מפתח OpenAI — פתח את ההגדרות ⚙', key_set: 'מפתח שמור: ',
+    st_switching: 'עובר ל-{0}…', st_mirroring: 'משקף את {0}', st_connected: 'מחובר ל-{0}', st_agent_starting: 'מפעיל את הסוכן…', st_agent_on: 'הסוכן פעיל',
+    warn_mismatch: '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD',
+    no_device_state: 'אין מכשיר מחובר (adb get-state: {0})', agent_on_tip: 'סוכן על המכשיר: לכידות מהירות, פריימים JPEG, קלט Unicode', agent_off_tip: 'הסוכן כבוי — {0} (לחץ לניסיון חוזר)',
+  },
+  en: {
+    mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt', rec: 'Record', rec_stop: 'Stop', history: 'History',
+    settings_title: 'Settings', copy_all: 'Copy full prompt', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
+    history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
+    s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
+    key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
+    device_title: 'Which device to mirror', device_none: 'No device attached', device_many: '{0} devices — pick the one to mirror',
+    hint_collect: 'click = reference · right-click = tap · ⇧wheel = scroll · ⌥ = raw node',
+    hint_use: 'Live — clicks, drags, wheel and keyboard (any script) go to the device',
+    placeholder: 'Write here. In collect mode every click on an element inserts a reference at the caret. Right-click on the emulator = tap the device without leaving collect. Click a reference to copy it alone.',
+    chip_title: 'Click to copy this reference · hover to highlight it on screen',
+    st_elements: '{0} elements · {1}ms', st_slow: ' · slow path', st_lost: 'device not responding — {0}', st_no_device: 'no device attached',
+    st_resolving: '@{0} — {1}', st_chip_copied: 'reference "{0}" copied', st_copied: 'copied — {0} references, {1} chars',
+    btn_copied: 'Copied ✓ {0} references', st_copy_blocked: 'clipboard blocked — select and copy by hand', st_orphans: 'warning: {0} chips without reference data — copied as plain text',
+    st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No copied prompts yet.',
+    st_hist_restored: 'restored from history (⌥-click copies without restoring)', st_pasted: 'pasted — {0} references restored as chips',
+    st_copied_sel: 'copied with {0} full references', st_cut_sel: 'cut with {0} full references', st_copied_plain: 'copied', st_cut_plain: 'cut',
+    st_mic: 'no microphone access: {0}', st_rec: 'recording…', st_rec_hint: 'recording… (segments cut at pauses)', st_rec_done: 'recording stopped', st_stt_fail: 'transcription failed: {0}',
+    st_key_missing: 'no key entered', st_key_saved: 'key saved — dictation is on', key_needed: 'an OpenAI key is needed — open settings ⚙', key_set: 'key stored: ',
+    st_switching: 'switching to {0}…', st_mirroring: 'mirroring {0}', st_connected: 'connected to {0}', st_agent_starting: 'starting the agent…', st_agent_on: 'agent is on',
+    warn_mismatch: "⚠︎ the installed build is not the version the repo declares — the running app may not contain HEAD's changes",
+    no_device_state: 'no device attached (adb get-state: {0})', agent_on_tip: 'on-device agent: fast dumps, JPEG frames, Unicode input', agent_off_tip: 'agent off — {0} (click to retry)',
+  },
+}
+let lang = 'he'
+try { lang = localStorage.getItem('emucomposer.lang') || (navigator.language.startsWith('he') ? 'he' : 'en') } catch {}
+const t = (k, ...a) => String(I18N[lang]?.[k] ?? I18N.en[k] ?? k).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '')
+function applyLang() {
+  document.documentElement.lang = lang
+  for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t)
+  for (const el of document.querySelectorAll('[data-t-title]')) el.title = t(el.dataset.tTitle)
+  for (const el of document.querySelectorAll('[data-t-ph]')) el.dataset.ph = t(el.dataset.tPh)
+  for (const b of document.querySelectorAll('#langseg [data-lang]')) b.classList.toggle('on', b.dataset.lang === lang)
+  for (const c of document.querySelectorAll('.chip')) c.title = t('chip_title')
+  if (typeof recOn !== 'undefined' && recOn) $('#reclabel').textContent = t('rec_stop')
+  if (typeof mode !== 'undefined') $('#modehint').textContent = mode === 'collect' ? t('hint_collect') : t('hint_use')
+}
 const ed = $('#editor'), img = $('#shot')
 let nodes = [], captureId = 0, scale = 1, ctx = null, mode = 'collect', notesText = '', sttLanguage = ''
 let refs = new Map()   // uid -> { label, block, node, captureId }
@@ -181,9 +262,7 @@ function setMode(m) {
   document.body.className = m
   $('#mCollect').classList.toggle('on', m === 'collect')
   $('#mUse').classList.toggle('on', m === 'use')
-  $('#modehint').textContent = m === 'collect'
-    ? 'לחיצה = רפרנס · ימני = הקשה · ⇧גלגלת = גלילה · ⌥ = צומת גולמי'
-    : 'האמולטור חי — קליקים, גרירות, גלילה ומקלדת (כולל עברית) עוברים למכשיר'
+  $('#modehint').textContent = m === 'collect' ? t('hint_collect') : t('hint_use')
   $('#ov').style.display = m === 'collect' ? 'block' : 'none'
   if (m === 'use') { $('#screen').focus(); pumpFrames() }
   else capture()
@@ -214,7 +293,7 @@ async function pumpFrames() {
       if (url) URL.revokeObjectURL(url)
       url = next
       markAlive()
-    } catch (e) { markLost('המכשיר לא מגיב — ' + e.message); await sleep(500) }
+    } catch (e) { markLost(t('st_lost', e.message)); await sleep(500) }
   }
   pumping = false
   if (url) URL.revokeObjectURL(url)
@@ -239,9 +318,9 @@ async function capture() {
       $('#ctx').textContent = `${ctx.screen || '?'} · ${ctx.app.match(/\d+\.\d+\.\d+/)?.[0] || ''} · ${ctx.repo.split(' ')[0]}`
       $('#ctx').title = ctx.block
       $('#warn').classList.toggle('show', Boolean(ctx.versionMismatch))
-      $('#warn').textContent = ctx.versionMismatch ? '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD' : ''
+      $('#warn').textContent = ctx.versionMismatch ? t('warn_mismatch') : ''
       for (const c of ed.querySelectorAll('.chip')) c.classList.toggle("stale", refOf(c)?.captureId !== captureId)
-      setStatus(`${nodes.length} אלמנטים · ${d.ms}ms${d.source === 'agent' ? '' : ' · slow path'}`, 'ok')
+      setStatus(t('st_elements', nodes.length, d.ms) + (d.source === 'agent' ? '' : t('st_slow')), 'ok')
     } catch (e) { setStatus(e.message, 'err'); markLost(e.message) }
     finally { $('#busy').classList.remove('show'); capturing = null }
   })()
@@ -444,7 +523,7 @@ async function insertRef(i) {
   // server answers. The user never waits on the network to keep typing.
   const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId, screen: ctx?.screen || '' }
   // <bdi> keeps a Hebrew label from dragging the "@" to its far side inside the LTR chip.
-  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="לחץ להעתקת הרפרנס · הובר מדגיש במסך"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
+  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
   const el = ed.querySelector(`[data-uid="${uid}"]`)
   setRef(el, ref)
   caretAfter(el)
@@ -456,7 +535,7 @@ async function insertRef(i) {
     const better = d.title && (/^[A-Z]\w*$/.test(label) || label === node.cls.split('.').pop()) ? d.title.slice(0, 34) : label
     if (better !== label) el.querySelector('bdi').textContent = better
     setRef(el, { ...ref, label: better, block: d.block, what: d.what, screen: d.screen })
-    setStatus(`@${better} — ${d.what}`, 'ok')
+    setStatus(t('st_resolving', better, d.what), 'ok')
     saveDraft()
   } catch (e) { setStatus(e.message, 'err') }
 }
@@ -466,7 +545,7 @@ ed.addEventListener('mousedown', async e => {
   const r = refOf(chip); if (!r) return
   await navigator.clipboard.writeText(`### @${r.label}\n${r.block}`).catch(() => {})
   chip.classList.add('flash'); setTimeout(() => chip.classList.remove('flash'), 550)
-  setStatus(`הרפרנס "${r.label}" הועתק`, 'ok')
+  setStatus(t('st_chip_copied', r.label), 'ok')
 })
 // Hovering a chip shows which element it is — when it came from the current capture.
 ed.addEventListener('mouseover', e => {
@@ -506,7 +585,7 @@ function onCopyCut(e, cut) {
   e.clipboardData.setData('text/plain', p.plain)
   e.clipboardData.setData(CHIP_MIME, JSON.stringify({ html: p.html, chips: p.chips }))
   if (cut) document.execCommand('delete')
-  setStatus(p.chips.length ? `${cut ? 'נגזר' : 'הועתק'} עם ${p.chips.length} רפרנסים מלאים` : (cut ? 'נגזר' : 'הועתק'), 'ok')
+  setStatus(p.chips.length ? t(cut ? 'st_cut_sel' : 'st_copied_sel', p.chips.length) : t(cut ? 'st_cut_plain' : 'st_copied_plain'), 'ok')
 }
 ed.addEventListener('copy', e => onCopyCut(e, false))
 ed.addEventListener('cut', e => onCopyCut(e, true))
@@ -528,7 +607,7 @@ ed.addEventListener('paste', e => {
       for (const x of box.querySelectorAll('.interim')) x.remove()
       insertHTMLAtCaret(box.innerHTML)
       saveDraft()
-      return setStatus(`הודבק — ${box.querySelectorAll('.chip').length} רפרנסים שוחזרו כתגים`, 'ok')
+      return setStatus(t('st_pasted', box.querySelectorAll('.chip').length), 'ok')
     } catch {}
   }
   document.execCommand('insertText', false, cd.getData('text/plain'))
@@ -581,27 +660,27 @@ let copyFlash = null
 $('#copyAll').onclick = async () => {
   const { text, used } = serialize()
   const b = $('#copyAll')
-  try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus('ההעתקה נחסמה — סמן והעתק ידנית', 'err') }
+  try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus(t('st_copy_blocked'), 'err') }
   pushHistory(text)
-  if (orphans) setStatus(`אזהרה: ${orphans} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד`, 'err')
+  if (orphans) setStatus(t('st_orphans', orphans), 'err')
   clearTimeout(copyFlash)
-  b.classList.add('done'); b.querySelector('span').textContent = `הועתק ✓ ${used.length} רפרנסים`
-  copyFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = 'העתק פרומפט מלא' }, 1600)
-  setStatus(`הועתק — ${used.length} רפרנסים, ${text.length} תווים`, 'ok')
+  b.classList.add('done'); b.querySelector('span').textContent = t('btn_copied', used.length)
+  copyFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = t('copy_all') }, 1600)
+  if (!orphans) setStatus(t('st_copied', used.length, text.length), 'ok')
 }
 $('#save').onclick = async () => {
   const { text, used } = serialize()
-  setStatus('שומר…', 'busy')
+  setStatus(t('st_saving'), 'busy')
   try {
     const crops = used.map(u => u.captureId === captureId ? cropOf(u.node) : '')
     const d = await (await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text, crops, screen: fullShot() }) })).json()
     if (d.error) throw new Error(d.error)
     await navigator.clipboard.writeText(d.text).catch(() => {})
-    setStatus('נשמר והועתק — ' + d.file, 'ok')
+    setStatus(t('st_saved', d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
-$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); setStatus('נוקה') }
+$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); setStatus(t('st_cleared')) }
 
 function cropOf(n, pad = 8) {
   if (!img.naturalWidth || mode !== 'collect') return ''
@@ -644,18 +723,18 @@ function renderHistory() {
   let h = []; try { h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]') } catch {}
   $('#histlist').innerHTML = h.map((x, i) => {
     const task = (x.text.split('\n# ')[0] || '').replace(/^# Task\n/, '')
-    return `<div class="hitem" data-i="${i}"><div class="t">${new Date(x.at).toLocaleString('he-IL')}</div><div class="p">${escapeHTML(task)}</div></div>`
-  }).join('') || '<div class="hitem" style="color:var(--dim2)">אין עדיין פרומפטים שהועתקו.</div>'
+    return `<div class="hitem" data-i="${i}"><div class="t">${new Date(x.at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB')}</div><div class="p">${escapeHTML(task)}</div></div>`
+  }).join('') || `<div class="hitem" style="color:var(--dim2)">${escapeHTML(t('hist_empty'))}</div>`
 }
 $('#histbtn').onclick = () => { renderHistory(); $('#hist').classList.add('show') }
 $('#histclose').onclick = () => $('#hist').classList.remove('show')
 $('#histlist').addEventListener('click', async e => {
   const it = e.target.closest('.hitem[data-i]'); if (!it) return
   const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[Number(it.dataset.i)]; if (!h) return
-  if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus('הפרומפט הועתק מההיסטוריה', 'ok'); return }
+  if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus(t('st_hist_copied'), 'ok'); return }
   ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
   for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
-  $('#hist').classList.remove('show'); saveDraft(); setStatus('שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', 'ok')
+  $('#hist').classList.remove('show'); saveDraft(); setStatus(t('st_hist_restored'), 'ok')
 })
 
 // ------------------------------------------------------------- dictation ----
@@ -672,10 +751,10 @@ async function toggleRec() {
   if (recOn) return stopRec()
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-  } catch (e) { return setStatus('אין גישה למיקרופון: ' + e.message, 'err') }
+  } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
   recOn = true
-  $('#rec').classList.add('on'); $('#reclabel').textContent = 'עצור'
-  setStatus('מקליט… (מקטע נחתך בהפסקה)', 'busy')
+  $('#rec').classList.add('on'); $('#reclabel').textContent = t('rec_stop')
+  setStatus(t('st_rec_hint'), 'busy')
   startMeter()
   startSegment()
 }
@@ -702,9 +781,9 @@ function cutSegment() {
 function stopRec() {
   recOn = false
   if (mediaRec?.state === 'recording') cutSegment()
-  $('#rec').classList.remove('on'); $('#reclabel').textContent = 'הקלטה'
+  $('#rec').classList.remove('on'); $('#reclabel').textContent = t('rec')
   audioCtx?.close().catch(() => {}); audioCtx = null
-  setStatus('ההקלטה הסתיימה', 'ok')
+  setStatus(t('st_rec_done'), 'ok')
 }
 function startMeter() {
   audioCtx = new AudioContext()
@@ -731,14 +810,14 @@ async function sendSegment(blob, s) {
   const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(blob) })
   try {
     const d = await (await fetch('/api/transcribe', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttLanguage, prompt: lastTranscript }) })).json()
+      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttOverride ?? sttLanguage, prompt: lastTranscript }) })).json()
     if (d.error) { setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
     const t = (d.text || '').trim()
     if (!t) { s.marker?.remove(); return }
     lastTranscript = (lastTranscript + ' ' + t).slice(-600)
     placeTranscript(s.marker, t)
-    if (recOn) setStatus('מקליט…', 'busy')
-  } catch (e) { setStatus('תמלול נכשל: ' + e.message, 'err'); s.marker?.remove() }
+    if (recOn) setStatus(t('st_rec'), 'busy')
+  } catch (e) { setStatus(t('st_stt_fail', e.message), 'err'); s.marker?.remove() }
 }
 // Replace the marker through the selection so the insert is undoable, then put the user's
 // caret back where it was.
@@ -761,20 +840,34 @@ $('#rec').onclick = toggleRec
 $('#dirseg').addEventListener('click', e => {
   const b = e.target.closest('[data-dir]'); if (!b) return
   ;[...$('#dirseg').children].forEach(x => x.classList.toggle('on', x === b))
+  ;[...$('#dirseg2').children].forEach(x => x.classList.toggle('on', x.dataset.dir === b.dataset.dir))
   ed.dir = b.dataset.dir
   ed.style.textAlign = b.dataset.dir === 'ltr' ? 'left' : b.dataset.dir === 'rtl' ? 'right' : ''
   try { localStorage.setItem('emucomposer.dir', b.dataset.dir) } catch {}
 })
-$('#keytoggle').onclick = () => { $('#keyrow').classList.toggle('show'); if ($('#keyrow').classList.contains('show')) $('#apikey').focus() }
+// ---------------------------------------------------------------- settings ---
+let sttOverride = null
+try { const v = localStorage.getItem('emucomposer.sttLang'); if (v !== null) sttOverride = v } catch {}
+$('#settingsbtn').onclick = () => { $('#hist').classList.remove('show'); $('#settings').classList.toggle('show') }
+$('#settingsclose').onclick = () => $('#settings').classList.remove('show')
+$('#langseg').addEventListener('click', e => {
+  const b = e.target.closest('[data-lang]'); if (!b) return
+  lang = b.dataset.lang; try { localStorage.setItem('emucomposer.lang', lang) } catch {}
+  applyLang(); setStatus(t('ready'))
+})
+$('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} })
+$('#optNotes2').addEventListener('change', e => { $('#optNotes').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
+$('#optNotes').addEventListener('change', e => { $('#optNotes2').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
+$('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) $(`#dirseg [data-dir="${b.dataset.dir}"]`)?.click() })
 $('#keysave').onclick = async () => {
   const key = $('#apikey').value.trim()
-  if (!key) return setStatus('לא הוזן מפתח', 'err')
+  if (!key) return setStatus(t('st_key_missing'), 'err')
   try {
     const d = await (await fetch('/api/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })).json()
     if (d.error) throw new Error(d.error)
-    $('#apikey').value = ''; $('#keyrow').classList.remove('show'); $('#rec').disabled = false
-    $('#keytoggle').innerHTML = 'מפתח <bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
-    setStatus('המפתח נשמר — תמלול פעיל', 'ok')
+    $('#apikey').value = ''; $('#rec').disabled = false
+    $('#keystate').innerHTML = escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
+    setStatus(t('st_key_saved'), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
 $('#apikey').addEventListener('keydown', e => e.key === 'Enter' && $('#keysave').click())
@@ -795,17 +888,83 @@ async function health() {
     $('#rec').disabled = !h.stt
     sttLanguage = h.language || ''
     if (h.app) document.title = `${h.app} · emu-composer`
-    if (!h.stt) { $('#rec').title = 'צריך מפתח OpenAI — לחץ "מפתח API"'; $('#keyrow').classList.add('show') }
-    else $('#keytoggle').innerHTML = 'מפתח <bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>'
+    $('#rec').title = h.stt ? '' : t('key_needed')
+    $('#keystate').innerHTML = h.stt ? escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>' : escapeHTML(t('key_needed'))
+    if (sttOverride === null && !$('#sttlang').value) $('#sttlang').value = h.language || ''
+    renderDevices(h.devices || [], h.serial || '')
+    if (!activeSerial) activeSerial = h.serial || ''
+    try {
+      const want = localStorage.getItem('emucomposer.device')
+      if (want && want !== h.serial && (h.devices || []).some(d => d.serial === want && d.state === 'device') && !wantedOnce) {
+        wantedOnce = true
+        fetch('/api/device', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial: want }) })
+      }
+    } catch {}
     const p = $('#agentpill')
     p.className = 'pill ' + (h.agent ? 'on' : h.device === 'device' ? 'bad' : 'bad')
-    p.title = h.agent ? 'on-device agent: fast dumps, JPEG frames, Unicode input' : ('agent off — ' + (h.agentReason || 'no device') + ' (click to retry)')
-    if (h.device !== 'device') markLost('אין מכשיר מחובר (adb get-state: ' + h.device + ')')
+    p.title = h.agent ? t('agent_on_tip') : t('agent_off_tip', h.agentReason || 'no device')
+    if (h.device !== 'device') markLost(t('no_device_state', h.device))
   } catch {}
 }
-$('#agentpill').onclick = async () => { setStatus('מפעיל את הסוכן…', 'busy'); const d = await (await fetch('/api/agent/restart', { method: 'POST' })).json(); setStatus(d.ok ? 'הסוכן פעיל' : d.reason, d.ok ? 'ok' : 'err'); health() }
+// ---- devices: several emulators may run; the page decides which one is mirrored.
+let deviceSig = '', wantedOnce = false
+function renderDevices(devices, active) {
+  const sel = $('#device')
+  const usable = devices.filter(d => d.state === 'device')
+  const sig = usable.map(d => d.serial + d.avd).join('|') + '#' + active
+  if (sig === deviceSig) return
+  deviceSig = sig
+  sel.innerHTML = usable.length
+    ? usable.map(d => `<option value="${d.serial}"${d.serial === active ? ' selected' : ''}>${escapeHTML((d.avd || d.model || d.serial) + (d.avd || d.model ? ` · ${d.serial}` : ''))}</option>`).join('')
+    : `<option value="">${escapeHTML(t('device_none'))}</option>`
+  sel.classList.toggle('bad', !usable.length)
+  sel.title = usable.length > 1 ? t('device_many', usable.length) : t('device_title')
+}
+// Server-sent events: device list / active device / agent state arrive the moment they
+// change (adb track-devices behind it), in either mode. Falls back to the health poll.
+let sse = null, activeSerial = ''
+function connectEvents() {
+  try { sse?.close() } catch {}
+  sse = new EventSource('/api/events')
+  sse.onmessage = async e => {
+    const ev = JSON.parse(e.data)
+    if (ev.type === 'device') {
+      renderDevices(ev.devices || [], ev.serial || '')
+      if (ev.serial !== activeSerial) {
+        const was = activeSerial; activeSerial = ev.serial
+        if (!ev.serial) { markLost(t('st_no_device')); return }
+        markAlive(); nodes = []; captureId = 0; drawOverlay()
+        for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+        if (was !== undefined) setStatus(t('st_connected', ev.serial), 'ok')
+        if (mode === 'collect') capture()
+      }
+    } else if (ev.type === 'agent') {
+      const p = $('#agentpill'); p.className = 'pill ' + (ev.ready ? 'on' : 'bad')
+      if (ev.ready && mode === 'collect' && !nodes.length) capture()
+    }
+  }
+  sse.onerror = () => { setTimeout(connectEvents, 3000) }
+}
+connectEvents()
+// The last device chosen by hand is remembered per project and re-selected when it is back.
+$('#device').addEventListener('change', async e => {
+  const serial = e.target.value; if (!serial) return
+  setStatus(t('st_switching', serial), 'busy')
+  try {
+    const d = await (await fetch('/api/device', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial }) })).json()
+    if (d.error) throw new Error(d.error)
+    try { localStorage.setItem('emucomposer.device', serial) } catch {}
+    setStatus(t('st_mirroring', serial), 'ok')
+  } catch (err) { setStatus(err.message, 'err') }
+})
+
+$('#agentpill').onclick = async () => { setStatus(t('st_agent_starting'), 'busy'); const d = await (await fetch('/api/agent/restart', { method: 'POST' })).json(); setStatus(d.ok ? t('st_agent_on') : d.reason, d.ok ? 'ok' : 'err'); health() }
 fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
 try { const d = localStorage.getItem('emucomposer.dir'); if (d) $(`#dirseg [data-dir="${d}"]`)?.click() } catch {}
+try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
+$('#optNotes2').checked = $('#optNotes').checked
+if (sttOverride !== null) $('#sttlang').value = sttOverride
+applyLang()
 loadDraft()
 health(); setInterval(health, 20000)
 setMode('collect')

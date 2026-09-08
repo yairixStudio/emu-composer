@@ -8,7 +8,7 @@
 // input. Slow path when the agent is unavailable: `uiautomator dump` (2.5 s) + screencap.
 // No npm dependencies.
 import http from 'node:http'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -26,17 +26,103 @@ const REPO = cfg.root
 const OUT = path.join(REPO, '.emu-composer')
 const PORT = Number(process.env.EMU_COMPOSER_PORT || cfg.port || 7788)
 const ADB = cfg.adbPath
-const SERIAL = process.env.ANDROID_SERIAL || ''
 const PKG = cfg.package
 const APP = cfg.appName
+const JAR = process.env.EMU_COMPOSER_U2_JAR || path.join(HOME, 'u2.jar')
 
+// ---------------------------------------------------------------- devices ---
+// Several emulators may run at once; the page picks which one the composer mirrors. Every
+// adb call reads the ACTIVE serial at call time, and each device keeps its own agent.
+const state = { serial: process.env.ANDROID_SERIAL || '' }
 const adb = (args, opts = {}) =>
-  execFileP(ADB, SERIAL ? ['-s', SERIAL, ...args] : args, { maxBuffer: 64 << 20, encoding: 'buffer', ...opts })
+  execFileP(ADB, state.serial ? ['-s', state.serial, ...args] : args, { maxBuffer: 64 << 20, encoding: 'buffer', ...opts })
 const adbText = async args => (await adb(args)).stdout.toString('utf8')
 const sh = cmd => execFileP('/bin/sh', ['-c', cmd], { cwd: REPO, maxBuffer: 8 << 20 })
   .then(r => r.stdout).catch(e => e.stdout || '')
 
-const agent = new Agent({ adb: ADB, serial: SERIAL, jar: process.env.EMU_COMPOSER_U2_JAR || path.join(HOME, 'u2.jar'), log })
+const agents = new Map()
+let agent = null
+function agentFor(serial) {
+  if (!agents.has(serial)) agents.set(serial, new Agent({ adb: ADB, serial, jar: JAR, log: (...a) => log(`[${serial}]`, ...a) }))
+  return agents.get(serial)
+}
+
+// AVD names are cached per serial: `emu avd name` costs up to 3 s against an emulator
+// that is dying, and it was asked twice per switch (16 s to move away from a dead one).
+const avdNames = new Map()
+async function listDevices() {
+  const out = await execFileP(ADB, ['devices', '-l'], { encoding: 'utf8', timeout: 3000 }).then(r => r.stdout).catch(() => '')
+  const rows = out.split('\n').slice(1).map(l => l.trim()).filter(l => l && !l.startsWith('*'))
+  const devices = await Promise.all(rows.map(async l => {
+    const [serial, st, ...rest] = l.split(/\s+/)
+    const kv = Object.fromEntries(rest.map(x => x.split(':')).filter(x => x.length === 2))
+    let avd = avdNames.get(serial) || ''
+    if (!avd && /^emulator-\d+$/.test(serial) && st === 'device') {
+      avd = await execFileP(ADB, ['-s', serial, 'emu', 'avd', 'name'], { encoding: 'utf8', timeout: 1500 })
+        .then(r => r.stdout.split('\n')[0].trim()).catch(() => '')
+      if (avd && !/^(OK|KO)/.test(avd)) avdNames.set(serial, avd); else avd = ''
+    }
+    return { serial, state: st, model: kv.model || kv.product || '', avd, active: serial === state.serial }
+  }))
+  return devices
+}
+
+async function pickDefaultSerial() {
+  const devices = (await listDevices()).filter(d => d.state === 'device')
+  if (state.serial && devices.some(d => d.serial === state.serial)) return state.serial
+  const pick = devices.find(d => /^emulator-/.test(d.serial)) || devices[0]
+  return pick ? pick.serial : ''
+}
+
+async function switchDevice(serial, why = '') {
+  if (serial === state.serial && agent) return
+  const old = agent
+  state.serial = serial
+  staticCtx = null; captures.clear()
+  agent = serial ? agentFor(serial) : null
+  log(`device → ${serial || '(none)'}${why ? ` (${why})` : ''}`)
+  if (old && old !== agent) await old.stop().catch(() => {})
+  if (agent) agent.start().catch(() => {})
+  broadcast({ type: 'device', serial: state.serial, devices: await listDevices() })
+}
+
+// ---- live device tracking ---------------------------------------------------------------
+// `adb track-devices` streams the device list on every change, so an emulator that boots,
+// dies or comes back is noticed within a second — no polling, in either mode. When the
+// active device goes away the composer moves to the best remaining one; when the first
+// device appears it is adopted; a device that comes back is preferred if it was the last
+// choice.
+let lastChosen = ''
+const sseClients = new Set()
+function broadcast(ev) {
+  const line = `data: ${JSON.stringify(ev)}\n\n`
+  for (const res of sseClients) { try { res.write(line) } catch {} }
+}
+function trackDevices() {
+  const p = spawn(ADB, ['track-devices'], { stdio: ['ignore', 'pipe', 'ignore'] })
+  let buf = ''
+  let timer = null
+  p.stdout.on('data', d => {
+    buf += d.toString()
+    // frames: 4 hex length + payload; we only need "something changed"
+    clearTimeout(timer); timer = setTimeout(onDevicesChanged, 400)
+    if (buf.length > 65536) buf = ''
+  })
+  p.on('exit', () => setTimeout(trackDevices, 2000))
+}
+async function onDevicesChanged() {
+  const devices = await listDevices()
+  const usable = devices.filter(d => d.state === 'device')
+  const activeOk = usable.some(d => d.serial === state.serial)
+  if (!activeOk) {
+    const back = usable.find(d => d.serial === lastChosen)
+    const pick = back || usable.find(d => /^emulator-/.test(d.serial)) || usable[0]
+    if (pick) await switchDevice(pick.serial, state.serial ? 'previous device went away' : 'device appeared')
+    else if (state.serial) { await switchDevice('', 'no device left') }
+    else broadcast({ type: 'device', serial: '', devices })
+  } else broadcast({ type: 'device', serial: state.serial, devices })
+}
+
 const index = new StringIndex(cfg)
 
 // ---------------------------------------------------------------- capture ---
@@ -107,7 +193,9 @@ async function capture() {
   const focusP = adbText(['shell', 'dumpsys window | grep -m1 mCurrentFocus']).catch(() => '')
   // Give a starting/restarting agent a bounded chance (8 s) before taking the slow path —
   // never wait on it indefinitely: a hung restart once queued every capture for a minute.
-  if (await agent.ensureReady(agent._starting ? 4000 : 1500)) {
+  if (!agent && await pickDefaultSerial()) await switchDevice(await pickDefaultSerial())
+  if (!state.serial) throw userError('no device attached — start an emulator, then pick it in the device menu')
+  if (agent && await agent.ensureReady(agent._starting ? 4000 : 1500)) {
     try {
       const [x, jpg] = await Promise.all([agent.dump(), agent.screenshotJpegB64(85)])
       xml = x; image = { mime: 'image/jpeg', b64: jpg }; source = 'agent'
@@ -117,12 +205,12 @@ async function capture() {
     // The agent holds the only UiAutomation slot: it must be gone during the slow dump, and
     // it comes back on its own 2 s after (scheduleRestart), so one bad moment is not a
     // permanent downgrade.
-    await agent.stop().catch(() => {})
+    await agent?.stop().catch(() => {})
     try {
       const [png, x] = await Promise.all([adb(['exec-out', 'screencap', '-p']).then(r => r.stdout), slowDump()])
       xml = x; image = { mime: 'image/png', b64: png.toString('base64') }; source = 'uiautomator'
     } finally {
-      if (await agent.available()) { agent.stopped = false; agent.scheduleRestart('after slow path', 2000) }
+      if (agent && await agent.available()) { agent.stopped = false; agent.scheduleRestart('after slow path', 2000) }
     }
   }
   const nodes = parseNodes(xml)
@@ -145,7 +233,7 @@ async function frame() {
   if (framing) return null
   framing = true
   try {
-    if (agent.ready) {
+    if (agent?.ready) {
       try { return { mime: 'image/jpeg', bytes: Buffer.from(await agent.screenshotJpegB64(70), 'base64') } }
       catch (e) { log('agent frame failed:', e.message) }   // rpc() already scheduled the restart
     }
@@ -160,7 +248,7 @@ const userError = msg => { const e = new Error(msg); e.userFacing = true; return
 
 async function doInput(cmd) {
   const r = v => String(Math.round(v))
-  if (agent.ready) {
+  if (agent?.ready) {
     switch (cmd.type) {
       case 'tap': return agent.click(cmd.x, cmd.y)
       case 'swipe': return agent.swipe(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.ms || 200)
@@ -444,16 +532,36 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true })
       case '/api/notes':
         return send(res, 200, { notes: agentNotes((await staticContext()).size) })
+      case '/api/events': {
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
+        res.write(`data: ${JSON.stringify({ type: 'device', serial: state.serial, devices: await listDevices(), agent: Boolean(agent?.ready) })}\n\n`)
+        sseClients.add(res)
+        const ping = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+        req.on('close', () => { sseClients.delete(res); clearInterval(ping) })
+        return
+      }
+      case '/api/devices':
+        return send(res, 200, { devices: await listDevices(), active: state.serial })
+      case '/api/device': {
+        const { serial } = await readBody(req)
+        const devices = await listDevices()
+        if (!devices.some(d => d.serial === serial && d.state === 'device')) throw userError(`device ${serial} is not attached`)
+        lastChosen = serial
+        await switchDevice(serial, 'chosen')
+        return send(res, 200, { ok: true, active: state.serial })
+      }
       case '/api/health': {
         const k = await openaiKey()
         return send(res, 200, {
           stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: cfg.stt.language || '', app: APP,
-          agent: agent.ready, agentReason: agent.reason,
+          serial: state.serial, devices: await listDevices(),
+          agent: Boolean(agent?.ready), agentReason: agent?.reason || (state.serial ? '' : 'no device'),
           index: index.stats || null,
-          device: await adbText(['get-state']).then(t => t.trim()).catch(() => 'offline'),
+          device: state.serial ? await adbText(['get-state']).then(t => t.trim()).catch(() => 'offline') : 'none',
         })
       }
       case '/api/agent/restart':
+        if (!agent) throw userError('no device selected')
         return send(res, 200, { ok: await agent.restart('requested'), reason: agent.reason })
       case '/api/key': {
         const { key } = await readBody(req)
@@ -502,15 +610,24 @@ server.on('error', e => {
   log('FATAL', e.message); process.exit(1)
 })
 server.on('listening', async () => {
-  log(`emu-composer → http://localhost:${PORT}  (${APP} · ${PKG} · adb ${ADB}${SERIAL ? ` · serial ${SERIAL}` : ''})`)
+  log(`emu-composer → http://localhost:${PORT}  (${APP} · ${PKG} · adb ${ADB})`)
   const st = await index.build()
   log(`string index (${st.resolver}): ${st.keys} keys from ${st.files} files in ${st.ms} ms`)
   index.watch(() => index.build().then(s => log(`string index rebuilt: ${s.keys} keys`)))
+  const serial = await pickDefaultSerial()
+  if (!serial) { log('no device attached — waiting for one to be picked'); return }
+  state.serial = serial; agent = agentFor(serial)
+  const devices = await listDevices()
+  log(`devices: ${devices.map(d => `${d.serial}${d.avd ? ` (${d.avd})` : ''}${d.serial === serial ? ' ←' : ''}`).join(', ')}`)
   const ok = await agent.start()
   log(ok ? 'fast path: on-device agent' : `slow path: ${agent.reason}`)
 })
+// The page learns about the agent flipping without waiting for its next health poll.
+let lastAgentState = null
+setInterval(() => { const st = Boolean(agent?.ready); if (st !== lastAgentState) { lastAgentState = st; broadcast({ type: 'agent', ready: st, reason: agent?.reason || '' }) } }, 1000)
+trackDevices()
 server.listen(PORT, '127.0.0.1')
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { await agent.release().catch(() => {}); process.exit(0) })
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { for (const a of agents.values()) await a.release().catch(() => {}); process.exit(0) })
 return { server, agent, index, port: PORT }
 }
 

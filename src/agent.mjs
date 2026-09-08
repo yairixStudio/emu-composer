@@ -165,6 +165,16 @@ export class Agent {
     this.ready = false
     const proc = this.proc; this.proc = null
     const pid = this.devicePid; this.devicePid = 0
+    // A device that is GONE (emulator closed) must not cost a chain of 5 s adb timeouts:
+    // one 1.5 s probe, then host-side cleanup only. (Switching away from a dead emulator
+    // took 15 s before this.)
+    const present = await this._adb(['get-state'], 800).then(r => r.stdout.toString().trim() === 'device').catch(() => false)
+    if (!present) {
+      try { proc?.kill('SIGKILL') } catch {}
+      for (const p of this._forwards) await this._adb(['forward', '--remove', `tcp:${p}`], 1500).catch(() => {})
+      this._forwards.clear()
+      return
+    }
     // Graceful first: SIGTERM lets the JVM disconnect its UiAutomation session. Killing
     // clients with -9 over and over left the emulator's AccessibilityManagerService dead
     // (load 17, `IAccessibilityManager` null, 54 s JVM starts) — 2026-09-08. SIGKILL only if

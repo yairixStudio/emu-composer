@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- Several emulators: a device menu above the screen; each device keeps its own agent.
+  `adb track-devices` streams changes to the page over SSE, so an emulator that boots, dies
+  or comes back is picked up within a second in either mode; the last device chosen by
+  hand is preferred when it returns. Switching away from a dead emulator no longer waits on
+  adb timeouts (AVD names cached, one 0.8 s probe).
+- Settings panel (⚙): interface language Hebrew/English, dictation language, OpenAI key,
+  agent notes, text direction. The whole page is translated; the choice persists.
 - Region words come from the display size, not the first window in the dump (everything
   read "bottom bar" when the status-bar window came first).
 - Row-consistent ranking: keys and call sites are ranked by what the element's siblings

@@ -58,6 +58,12 @@ when elements come from several screens.
 | **collect** | inserts a chip for the element under the cursor | right-click taps the device without leaving collect · ⇧wheel scrolls it |
 | **use** | goes to the device — taps, drags, wheel, keyboard | any character, including RTL scripts |
 
+Several emulators running? The menu above the screen picks the one to mirror; each keeps
+its own agent. Devices that boot, die or return are noticed within a second (adb
+`track-devices` behind a server-sent-events feed) in either mode, and the composer moves to
+the best remaining one on its own. The ⚙ panel holds the interface language (Hebrew /
+English), the dictation language, the OpenAI key, agent notes and text direction.
+
 The prompt box is a normal rich-text field: select, cut, paste, undo, RTL/LTR. A chip is one
 reference — click it to copy that reference alone, hover it to see the element, delete it
 and its block leaves the prompt. Drafts survive a reload; every copied prompt goes to a
