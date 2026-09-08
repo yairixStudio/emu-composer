@@ -79,8 +79,11 @@
 
   #editor{flex:1 1 auto;overflow:auto;padding:18px 20px;font-size:14.5px;line-height:1.8;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
   #editor:empty::before{content:attr(data-ph);color:var(--dim2);font-size:13px}
-  .chip{display:inline-block;vertical-align:baseline;background:#f973161f;border:1px solid #f9731670;color:#fdba74;border-radius:2px;padding:0 7px;margin:0 2px;
-        font:600 12px/1.7 var(--mono);cursor:pointer;user-select:none;direction:ltr;unicode-bidi:isolate;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* An INLINE box (not inline-block): its background hugs the glyphs, so it sits on the
+     sentence's baseline at the sentence's size instead of floating above it. */
+  .chip{display:inline;background:#f973161f;border:1px solid #f9731670;color:#fdba74;border-radius:3px;padding:1px 6px;margin:0 1px;
+        font:600 0.9em/1 var(--mono);cursor:pointer;user-select:none;direction:ltr;unicode-bidi:isolate;white-space:nowrap;
+        -webkit-box-decoration-break:clone;box-decoration-break:clone;vertical-align:baseline}
   .chip:hover{background:#f9731636;border-color:var(--accent)}
   .chip.flash{background:var(--ok);border-color:var(--ok);color:#04231a}
   .chip.stale{border-style:dashed;opacity:.8}
@@ -237,7 +240,7 @@ async function capture() {
       $('#ctx').title = ctx.block
       $('#warn').classList.toggle('show', Boolean(ctx.versionMismatch))
       $('#warn').textContent = ctx.versionMismatch ? '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD' : ''
-      for (const c of ed.querySelectorAll('.chip')) c.classList.toggle('stale', refs.get(c.dataset.uid)?.captureId !== captureId)
+      for (const c of ed.querySelectorAll('.chip')) c.classList.toggle("stale", refOf(c)?.captureId !== captureId)
       setStatus(`${nodes.length} אלמנטים · ${d.ms}ms${d.source === 'agent' ? '' : ' · slow path'}`, 'ok')
     } catch (e) { setStatus(e.message, 'err'); markLost(e.message) }
     finally { $('#busy').classList.remove('show'); capturing = null }
@@ -396,6 +399,17 @@ function caretAfter(el) {
 function insertHTMLAtCaret(html) { restoreCaret(); document.execCommand('insertHTML', false, html); rememberCaret() }
 
 // ------------------------------------------------------------- the chips ----
+// The reference lives ON the chip (data-ref), so drafts, history, copy/paste and a reload
+// can never leave a chip in the DOM without its data — the map is a cache, rebuilt from the
+// DOM whenever it misses. (A long prompt once copied as bare text: chips without refs.)
+function refOf(el) {
+  const uid = el.dataset.uid
+  let r = refs.get(uid)
+  if (!r && el.dataset.ref) { try { r = JSON.parse(el.dataset.ref); refs.set(uid, r) } catch {} }
+  return r || null
+}
+function setRef(el, r) { refs.set(el.dataset.uid, r); try { el.dataset.ref = JSON.stringify(r) } catch {} }
+
 // A container with no text of its own (a card, a row) is named after the first text
 // inside it — three cards read "@View @View @View" before this.
 function labelFor(i) {
@@ -411,14 +425,17 @@ async function insertRef(i) {
   const uid = 'r' + (++refN)
   // Insert immediately with a placeholder block; the resolved block replaces it when the
   // server answers. The user never waits on the network to keep typing.
-  refs.set(uid, { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId })
-  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="לחץ להעתקת הרפרנס · הובר מדגיש במסך"><b>@</b>${escapeHTML(label)}</span>&nbsp;`)
-  caretAfter(ed.querySelector(`[data-uid="${uid}"]`))
+  const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId }
+  // <bdi> keeps a Hebrew label from dragging the "@" to its far side inside the LTR chip.
+  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="לחץ להעתקת הרפרנס · הובר מדגיש במסך"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
+  const el = ed.querySelector(`[data-uid="${uid}"]`)
+  setRef(el, ref)
+  caretAfter(el)
   saveDraft()
   try {
     const d = await (await fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ captureId, i }) })).json()
     if (d.error) throw new Error(d.error)
-    const r = refs.get(uid); if (r) { r.block = d.block; r.what = d.what }
+    setRef(el, { ...ref, block: d.block, what: d.what })
     setStatus(`@${label} — ${d.what}`, 'ok')
     saveDraft()
   } catch (e) { setStatus(e.message, 'err') }
@@ -426,7 +443,7 @@ async function insertRef(i) {
 ed.addEventListener('mousedown', async e => {
   const chip = e.target.closest('.chip'); if (!chip) return
   e.preventDefault()
-  const r = refs.get(chip.dataset.uid); if (!r) return
+  const r = refOf(chip); if (!r) return
   await navigator.clipboard.writeText(`### @${r.label}\n${r.block}`).catch(() => {})
   chip.classList.add('flash'); setTimeout(() => chip.classList.remove('flash'), 550)
   setStatus(`הרפרנס "${r.label}" הועתק`, 'ok')
@@ -434,7 +451,7 @@ ed.addEventListener('mousedown', async e => {
 // Hovering a chip shows which element it is — when it came from the current capture.
 ed.addEventListener('mouseover', e => {
   const chip = e.target.closest('.chip'); if (!chip || mode !== 'collect') return
-  const r = refs.get(chip.dataset.uid)
+  const r = refOf(chip)
   if (r && r.captureId === captureId) drawOverlay(-1, r.node)
 })
 ed.addEventListener('mouseout', e => { if (e.target.closest('.chip') && mode === 'collect') drawOverlay() })
@@ -446,12 +463,12 @@ function selectionPayload() {
   const sel = getSelection(); if (!sel.rangeCount || sel.isCollapsed) return null
   const frag = sel.getRangeAt(0).cloneContents()
   const box = document.createElement('div'); box.appendChild(frag)
-  const chips = [...box.querySelectorAll('.chip')].map(c => refs.get(c.dataset.uid) && { uid: c.dataset.uid, ...refs.get(c.dataset.uid) }).filter(Boolean)
+  const chips = [...box.querySelectorAll('.chip')].map(c => { const r = refOf(ed.querySelector(`[data-uid="${c.dataset.uid}"]`) || c); return r && { uid: c.dataset.uid, ...r } }).filter(Boolean)
   let plain = ''
   const walk = n => {
     if (n.nodeType === 3) return n.nodeValue
     if (n.nodeType !== 1) return ''
-    if (n.classList.contains('chip')) { const r = refs.get(n.dataset.uid); return r ? `@${r.label}` : '' }
+    if (n.classList.contains('chip')) { const r = refOf(ed.querySelector(`[data-uid="${n.dataset.uid}"]`) || n); return r ? `@${r.label}` : `@${n.textContent.replace(/^@/, '')}` }
     if (n.classList.contains('interim')) return ''
     if (n.tagName === 'BR') return '\n'
     let out = /^(DIV|P)$/.test(n.tagName) && n.previousSibling ? '\n' : ''
@@ -485,8 +502,8 @@ ed.addEventListener('paste', e => {
       for (const c of box.querySelectorAll('.chip')) {
         const src = chips.find(x => x.uid === c.dataset.uid); if (!src) { c.remove(); continue }
         const uid = 'r' + (++refN)
-        refs.set(uid, { label: src.label, block: src.block, node: src.node, captureId: src.captureId, what: src.what })
         c.dataset.uid = uid; c.classList.toggle('stale', src.captureId !== captureId)
+        setRef(c, { label: src.label, block: src.block, node: src.node, captureId: src.captureId, what: src.what })
       }
       for (const x of box.querySelectorAll('.interim')) x.remove()
       insertHTMLAtCaret(box.innerHTML)
@@ -499,14 +516,16 @@ ed.addEventListener('paste', e => {
 ed.addEventListener('input', () => saveDraft())
 
 // ----------------------------------------------------- assembling the text --
+let orphans = 0
 function serialize() {
-  const used = []
+  const used = []; orphans = 0
   const walk = n => {
     if (n.nodeType === 3) return n.nodeValue
     if (n.nodeType !== 1) return ''
     if (n.classList.contains('interim')) return ''
     if (n.classList.contains('chip')) {
-      const r = refs.get(n.dataset.uid); if (!r) return ''
+      const r = refOf(n)
+      if (!r) { orphans++; return `@${n.textContent.replace(/^@/, '')}` }
       let i = used.findIndex(u => u.uid === n.dataset.uid)
       if (i < 0) { used.push({ uid: n.dataset.uid, ...r }); i = used.length - 1 }
       return `@ui${i + 1}`
@@ -528,7 +547,7 @@ function serialize() {
   }
   if (ctx) L.push(ctx.block, '')
   if ($('#optNotes').checked && notesText) L.push(notesText, '')
-  return { text: L.join('\n').trim() + '\n', used }
+  return { text: L.join('\n').trim() + '\n', used, orphans }
 }
 
 // The button itself confirms the copy — a status line far from the cursor is easy to miss.
@@ -538,6 +557,7 @@ $('#copyAll').onclick = async () => {
   const b = $('#copyAll')
   try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus('ההעתקה נחסמה — סמן והעתק ידנית', 'err') }
   pushHistory(text)
+  if (orphans) setStatus(`אזהרה: ${orphans} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד`, 'err')
   clearTimeout(copyFlash)
   b.classList.add('done'); b.querySelector('span').textContent = `הועתק ✓ ${used.length} רפרנסים`
   copyFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = 'העתק פרומפט מלא' }, 1600)
@@ -576,20 +596,22 @@ function fullShot() {
 
 // --------------------------------------------------------- draft + history --
 function saveDraft() {
-  try { localStorage.setItem('emucomposer.draft', JSON.stringify({ html: ed.innerHTML, refs: [...refs], refN })) } catch {}
+  const payload = JSON.stringify({ html: ed.innerHTML, refs: [...refs], refN })
+  try { localStorage.setItem('emucomposer.draft', payload) }
+  catch { try { localStorage.removeItem('emucomposer.history'); localStorage.setItem('emucomposer.draft', payload) } catch {} }
 }
 function loadDraft() {
   try {
     const d = JSON.parse(localStorage.getItem('emucomposer.draft') || 'null'); if (!d) return
     ed.innerHTML = d.html || ''; refs = new Map(d.refs || []); refN = d.refN || 0
-    for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+    for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
   } catch {}
 }
 function pushHistory(text) {
   try {
     const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')
     h.unshift({ at: Date.now(), text, html: ed.innerHTML, refs: [...refs], refN })
-    localStorage.setItem('emucomposer.history', JSON.stringify(h.slice(0, 40)))
+    for (let keep = 40; keep >= 5; keep = Math.floor(keep / 2)) { try { localStorage.setItem('emucomposer.history', JSON.stringify(h.slice(0, keep))); break } catch {} }
   } catch {}
 }
 function renderHistory() {
@@ -606,7 +628,7 @@ $('#histlist').addEventListener('click', async e => {
   const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[Number(it.dataset.i)]; if (!h) return
   if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus('הפרומפט הועתק מההיסטוריה', 'ok'); return }
   ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
-  for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+  for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
   $('#hist').classList.remove('show'); saveDraft(); setStatus('שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', 'ok')
 })
 
