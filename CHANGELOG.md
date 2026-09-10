@@ -1,6 +1,34 @@
 # Changelog
 
 ## Unreleased
+- **Many projects, one daemon.** The server holds a registry of projects, each with its own
+  config, string index and `.emu-composer/` directory; the active one is picked from a
+  dropdown beside the device menu. `emu-composer` in a second project registers it with the
+  running server and switches, instead of failing on a busy port — the page keeps its draft.
+  The registry lives in `~/.config/emu-composer/projects.json` and survives a restart; a
+  config that has since moved is dropped with a line in the log. A bare `emu-composer` from
+  a directory with no config opens whatever is active.
+- The prompt's `# Screen` block opens with `project:` — name, absolute path, and which
+  agent-rule files the repo carries (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, …), so an
+  agent handed the prompt knows where to work and which conventions apply.
+- **`# Errors`** (opt-in checkbox): error-level logcat plus the crash buffer, filtered to the
+  app by pid, stack frames kept with their header, identical repeats collapsed to one line
+  and a count. Fetched only while the box is ticked. Parsing lives in `src/logcat.mjs` with
+  tests — a silent parse failure would read as "no errors", the most misleading possible
+  answer.
+- **`# Path`** (opt-in checkbox): the screens walked in this session, recorded from captures
+  and from the collect-mode watch. A screen with no header and no selected tab is named
+  after its heading (ranked by reading order and shortness — the biggest text on a screen is
+  usually a banner, not a title), and failing that after its activity, so the path has no
+  holes.
+- **A problem bar** above the screen: no device, the app not installed on this one, the app
+  not in front (with **Launch**), the installed build not matching the repo, the agent off.
+  Silence and a stale screenshot used to look identical. `doctor` prints the same list.
+- Launching the app asks the package manager for the launcher component (`cmd package
+  resolve-activity --brief`) and starts that. `monkey -p …` — the recipe every guide gives —
+  exits non-zero on apps whose launcher activity it cannot match; it is now the fallback.
+- Fixed: registering the boot project before reading the registry overwrote it, so every
+  other project was lost on restart.
 - Collect mode follows the device: while a page is in collect, the server polls the UI tree
   through the agent (0.7 s, no screenshot), hashes it without the status bar, and pushes a
   `screen` event over SSE; the page re-captures on its own. Driving the emulator window

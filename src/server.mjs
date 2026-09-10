@@ -15,21 +15,88 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Agent } from './agent.mjs'
-import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise, firstText, countTexts, rankKeys, siblingHints } from './resolve.mjs'
+import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise, firstText, countTexts, rankKeys, siblingHints, screenTitleOf } from './resolve.mjs'
+import { filterLog, errorBlock } from './logcat.mjs'
 import { HOME } from './config.mjs'
 
 const execFileP = promisify(execFile)
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
 
-export async function start(cfg) {
-const REPO = cfg.root
-const OUT = path.join(REPO, '.emu-composer')
-const PORT = Number(process.env.EMU_COMPOSER_PORT || cfg.port || 7788)
-const ADB = cfg.adbPath
-const PKG = cfg.package
-const APP = cfg.appName
+export async function start(bootCfg) {
+const PORT = Number(process.env.EMU_COMPOSER_PORT || bootCfg.port || 7788)
+// adb is a machine-wide tool: every project on this machine talks to the same server, so the
+// path is taken once from whichever project started the daemon.
+const ADB = bootCfg.adbPath
 const JAR = process.env.EMU_COMPOSER_U2_JAR || path.join(HOME, 'u2.jar')
+
+// --------------------------------------------------------------- projects ---
+// ONE daemon serves every project you have open. Each project keeps its own config, its own
+// string index and its own `.emu-composer/` output directory; `P` is the active one and is
+// switched BY HAND from the page (a dropdown), never guessed from what happens to be in the
+// foreground — you often point at app A while thinking about repo B.
+const REGISTRY = path.join(HOME, 'projects.json')
+const projects = new Map()      // configPath -> { id, cfg, index, rules }
+let P = null                    // the active project record
+const outDir = () => path.join(P.cfg.root, '.emu-composer')
+
+async function addProject(cfg) {
+  const rec = projects.get(cfg.configPath) || { id: cfg.configPath, cfg, index: new StringIndex(cfg) }
+  rec.cfg = cfg
+  rec.rules = await agentRuleFiles(cfg.root)
+  projects.set(cfg.configPath, rec)
+  await saveRegistry()
+  return rec
+}
+
+async function saveRegistry() {
+  const rows = [...projects.values()].map(r => ({ configPath: r.cfg.configPath, package: r.cfg.package, appName: r.cfg.appName, root: r.cfg.root }))
+  await fs.mkdir(HOME, { recursive: true }).catch(() => {})
+  await fs.writeFile(REGISTRY, JSON.stringify(rows, null, 2) + '\n').catch(() => {})
+}
+
+// Registered projects are remembered between runs, so the dropdown is populated the moment
+// the daemon starts — a project whose config has since been deleted or moved is dropped.
+async function loadRegistry(loadConfig) {
+  let rows = []
+  try { rows = JSON.parse(await fs.readFile(REGISTRY, 'utf8')) } catch { return }
+  for (const r of rows) {
+    if (projects.has(r.configPath)) continue
+    try { await addProject(await loadConfig(r.configPath)) }
+    catch (e) { log(`registry: dropping ${r.configPath} (${e.message})`) }
+  }
+}
+
+// Switching project invalidates everything that was read THROUGH a package: the installed
+// version, the screen title, the trail, and every capture whose references were resolved
+// against another repo's sources.
+async function activate(id, why = '') {
+  const rec = projects.get(id)
+  if (!rec || rec === P) return rec
+  const prev = P
+  P = rec
+  staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null
+  prev?.index.unwatch()
+  log(`project → ${rec.cfg.appName} (${rec.cfg.package})${why ? ` (${why})` : ''}`)
+  const st = await rec.index.ensure().then(() => rec.index.stats)
+  if (st) log(`string index (${st.resolver}): ${st.keys} keys from ${st.files} files in ${st.ms} ms`)
+  rec.index.watch(() => rec.index.build().then(s => log(`string index rebuilt: ${s.keys} keys`)))
+  broadcast({ type: 'project', ...projectList() })
+  return rec
+}
+
+const projectList = () => ({
+  active: P?.id || '',
+  projects: [...projects.values()].map(r => ({ id: r.id, name: r.cfg.appName, package: r.cfg.package, root: r.cfg.root })),
+})
+
+// Which agent-rule files this repo carries, so the prompt can point the agent at them.
+async function agentRuleFiles(root) {
+  const names = ['CLAUDE.md', 'AGENTS.md', '.cursorrules', '.cursor/rules', 'GEMINI.md', '.github/copilot-instructions.md']
+  const found = []
+  for (const n of names) { try { await fs.access(path.join(root, n)); found.push(n) } catch {} }
+  return found
+}
 
 // ---------------------------------------------------------------- devices ---
 // Several emulators may run at once; the page picks which one the composer mirrors. Every
@@ -38,7 +105,7 @@ const state = { serial: process.env.ANDROID_SERIAL || '' }
 const adb = (args, opts = {}) =>
   execFileP(ADB, state.serial ? ['-s', state.serial, ...args] : args, { maxBuffer: 64 << 20, encoding: 'buffer', ...opts })
 const adbText = async args => (await adb(args)).stdout.toString('utf8')
-const sh = cmd => execFileP('/bin/sh', ['-c', cmd], { cwd: REPO, maxBuffer: 8 << 20 })
+const sh = cmd => execFileP('/bin/sh', ['-c', cmd], { cwd: P.cfg.root, maxBuffer: 8 << 20 })
   .then(r => r.stdout).catch(e => e.stdout || '')
 
 const agents = new Map()
@@ -79,7 +146,7 @@ async function switchDevice(serial, why = '') {
   if (serial === state.serial && agent) return
   const old = agent
   state.serial = serial
-  staticCtx = null; captures.clear(); lastHash = ''
+  staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null
   agent = serial ? agentFor(serial) : null
   log(`device → ${serial || '(none)'}${why ? ` (${why})` : ''}`)
   if (old && old !== agent) await old.stop().catch(() => {})
@@ -124,7 +191,6 @@ async function onDevicesChanged() {
   } else broadcast({ type: 'device', serial: state.serial, devices })
 }
 
-const index = new StringIndex(cfg)
 
 // ---------------------------------------------------------------- capture ---
 
@@ -216,12 +282,14 @@ async function capture() {
   }
   const nodes = parseNodes(xml)
   const activity = (/mCurrentFocus=Window\{[^}]*?\s(\S+\/\S+)\}/.exec(await focusP) || [])[1] || ''
+  lastActivity = activity
   const id = ++captureSeq
   const ctx = await gatherContext(nodes, activity)
   const cap = { id, nodes, activity, ctx, at: Date.now() }
   captures.set(id, cap)
   for (const k of [...captures.keys()].slice(0, -6)) captures.delete(k)
   const ms = Date.now() - t0
+  noteScreen(ctx.screen || activityName(activity))
   lastHash = screenHash(nodes)
   log(`capture #${id} via ${source}: ${nodes.length} nodes in ${ms} ms`)
   return { id, image, nodes: nodes.map(publicNode), activity, context: ctx, source, ms, hash: lastHash }
@@ -241,7 +309,25 @@ function screenHash(nodes) {
   }
   return h.digest('hex').slice(0, 16)
 }
-let lastHash = '', watching = false
+// The PATH through the app: every distinct screen name since the device/project was picked.
+// It answers "how do I get there" for an agent that has to reproduce the state.
+const trail = []
+const activityName = a => String(a || '').split('/').pop().split('.').pop().replace(/Activity$/, '') || ''
+function noteScreen(title) {
+  if (!title) return
+  const last = trail[trail.length - 1]
+  if (last && last.title === title) { last.at = Date.now(); return }
+  trail.push({ title, at: Date.now() })
+  if (trail.length > 20) trail.shift()
+}
+function trailBlock() {
+  if (trail.length < 2) return ''
+  const names = trail.map(x => x.title)
+  return ['# Path', `walked:   ${names.join('  ›  ')}`,
+    '          (the screens visited in this session, oldest first — how to reach the current one)'].join('\n')
+}
+
+let lastHash = '', watching = false, lastActivity = ''
 const anyWatcher = () => [...sseClients].some(r => r.watch)
 async function watchScreen() {
   if (watching) return
@@ -252,8 +338,14 @@ async function watchScreen() {
       await new Promise(r => setTimeout(r, 700))
       if (!agent?.ready || !anyWatcher()) continue
       try {
-        const h = screenHash(parseNodes(await agent.dump()))
-        if (h !== lastHash) { lastHash = h; log(`screen changed (${h})`); broadcast({ type: 'screen', hash: h }) }
+        const nodes = parseNodes(await agent.dump())
+        const h = screenHash(nodes)
+        if (h !== lastHash) {
+          lastHash = h
+          noteScreen(screenTitleOf(nodes, screenH, P.cfg.package) || activityName(lastActivity))
+          log(`screen changed (${h})`)
+          broadcast({ type: 'screen', hash: h })
+        }
       } catch (e) { log('screen watch:', e.message) }
     }
   } finally { watching = false; log('screen watch off') }
@@ -304,14 +396,14 @@ async function doInput(cmd) {
 
 // Static facts are cached: device props and the installed package do not change between
 // captures, and reading them cost ~0.3 s per capture before.
-let staticCtx = null, staticAt = 0
+let staticCtx = null, staticAt = 0, screenH = 2400
 async function staticContext() {
   if (staticCtx && Date.now() - staticAt < 120000) return staticCtx
   const [props, pkgInfo, gradle] = await Promise.all([
     adbText(['shell', 'getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; ' +
       'getprop persist.sys.locale; getprop ro.product.locale; wm size; wm density']).catch(() => ''),
-    adbText(['shell', 'dumpsys', 'package', PKG]).catch(() => ''),
-    cfg.versionFile ? sh(`sed -n '1,120p' ${JSON.stringify(cfg.versionFile)}`) : Promise.resolve(''),
+    adbText(['shell', 'dumpsys', 'package', P.cfg.package]).catch(() => ''),
+    P.cfg.versionFile ? sh(`sed -n '1,120p' ${JSON.stringify(P.cfg.versionFile)}`) : Promise.resolve(''),
   ])
   const L = props.split('\n').map(l => l.trim())
   staticCtx = {
@@ -325,6 +417,7 @@ async function staticContext() {
     repoCode: (/versionCode\s*=\s*(\d+)/.exec(gradle) || [])[1] || '',
   }
   staticAt = Date.now()
+  screenH = Number((/x(\d+)/.exec(staticCtx.size) || [])[1]) || 2400
   return staticCtx
 }
 
@@ -335,29 +428,22 @@ async function gatherContext(nodes, activity) {
     sh('git rev-parse --short HEAD').then(t => t.trim()),
     sh('git status --porcelain | wc -l').then(t => Number(t.trim())),
   ])
-  const appNodes = nodes.filter(n => n.pkg === PKG)
+  const appNodes = nodes.filter(n => n.pkg === P.cfg.package)
   const focused = appNodes.find(n => n.focused && /EditText/.test(n.cls))
-  // Screen title = the largest static text near the top. Editable text is excluded, or a
-  // search query would be reported as the screen's name (it was: screen "שלום ab").
-  const isLabel = t => /\p{L}{2,}/u.test(t) && !/^[\s\d$€£₪.,:%+-]+$/.test(t)   // "$0", "15:00" are not titles
-  const top = appNodes.filter(n => n.text && isLabel(n.text) && n.y < 400 && n.h >= 40 && n.w < 900 && !/EditText/.test(n.cls)
-      && !(focused && n.text === focused.text))
-    .sort((a, b) => (b.h * b.w) - (a.h * a.w))[0]
-  // The selected tab of a bottom bar names the section the screen belongs to.
   const H = Number((/x(\d+)/.exec(s.size) || [])[1]) || 2400
-  const selTab = appNodes.find(n => n.selected && n.y > H * 0.8 && n.h > 100)
-  const selText = selTab ? appNodes.find(m => m.i > selTab.i && m.depth > selTab.depth && m.text && isLabel(m.text)) : null
-  const labels = (cfg.signInLabels || []).map(l => normalise(l).toLowerCase())
+  const labels = (P.cfg.signInLabels || []).map(l => normalise(l).toLowerCase())
   const signIn = appNodes.some(n => labels.includes(normalise(n.text || n.desc).toLowerCase()))
   // Foreground from the TREE, not only the focus line: the app's own root fills the screen.
-  const foreground = activity.startsWith(PKG) || appNodes.some(n => n.depth <= 2 && n.w >= 1000)
+  const foreground = activity.startsWith(P.cfg.package) || appNodes.some(n => n.depth <= 2 && n.w >= 1000)
+  lastForeground = foreground
   const mismatch = Boolean(s.installedVer && s.repoVer && s.installedVer !== s.repoVer)
   const ctx = {
-    app: `${APP} (${PKG} ${s.installedVer || '?'}${s.installedCode ? `, code ${s.installedCode}` : ''}) — Android, ${s.debuggable ? 'debug' : 'release'} build`,
-    screen: [selText?.text, top?.text].filter((t, k, a) => t && a.indexOf(t) === k).join(' › '),
+    project: `${P.cfg.appName}  ·  ${P.cfg.root}${P.rules?.length ? `  ·  agent rules: ${P.rules.join(', ')}` : ''}`,
+    app: `${P.cfg.appName} (${P.cfg.package} ${s.installedVer || '?'}${s.installedCode ? `, code ${s.installedCode}` : ''}) — Android, ${s.debuggable ? 'debug' : 'release'} build`,
+    screen: screenTitleOf(nodes, H),
     activity,
     foreground,
-    session: !foreground ? `n/a — ${APP} is not the foreground app`
+    session: !foreground ? `n/a — ${P.cfg.appName} is not the foreground app`
       : signIn ? 'signed-out (derived: a "Sign in" affordance is on screen)'
       : `signed-in (derived: no sign-in affordance; the identity itself is not read${s.debuggable ? '' : ' — release build'})`,
     focusedField: focused ? (focused.text ? `text field focused, contains "${focused.text.slice(0, 60)}"` : 'empty text field focused') : '',
@@ -372,6 +458,7 @@ async function gatherContext(nodes, activity) {
 
 function renderScreenBlock(c) {
   const L = ['# Screen',
+    `project:  ${c.project}`,
     `app:      ${c.app}`,
     `screen:   ${c.screen || '?'}${c.activity ? `  ·  ${c.activity}` : ''}`,
     `session:  ${c.session}`]
@@ -384,7 +471,7 @@ function renderScreenBlock(c) {
 // ------------------------------------------------------------- reference ---
 
 const q = s => JSON.stringify(String(s))
-const short = f => { for (const r of cfg.sourceRoots) if (f.startsWith(r + '/')) return f.slice(r.length + 1); return f }
+const short = f => { for (const r of P.cfg.sourceRoots) if (f.startsWith(r + '/')) return f.slice(r.length + 1); return f }
 
 function stateWords(n) {
   const w = []
@@ -397,7 +484,7 @@ function stateWords(n) {
 // likely the key whose call sites pass `contentDescription`; visible text prefers `Text(`.
 let debugHints = null
 async function referenceFor(cap, i) {
-  await index.ensure()
+  await P.index.ensure()
   debugHints = null
   const nodes = cap.nodes, n = nodes[i]
   // The first node is whichever WINDOW the dump lists first (often the status bar), so its
@@ -433,8 +520,8 @@ async function referenceFor(cap, i) {
     : inner ? { text: inner.text || inner.desc, viaDesc: !inner.text } : null
   let resolved = false
   if (primary) {
-    const r = index.lookup(primary.text, hint)
-    const hints = siblingHints(index, nodes, target, hint)
+    const r = P.index.lookup(primary.text, hint)
+    const hints = siblingHints(P.index, nodes, target, hint)
     debugHints = hints
     const keys = rankKeys(r.keys, n, primary.viaDesc, hints)
     // Rendered-file order follows the row too: the tab's own RootScreen line over a screen title.
@@ -464,33 +551,95 @@ async function referenceFor(cap, i) {
     if (primary) L.push(`copy:     ${q(primary.text)} — dynamic; not a literal in the sources (data-driven or formatted at runtime)`)
     else L.push('copy:     none (no text or content-description)')
     // Anchor on the nearest text that DOES resolve, so the agent can still find the screen.
-    const anchor = anchorText(nodes, i, t => index.lookup(t).keys.length > 0)
+    const anchor = anchorText(nodes, i, t => P.index.lookup(t).keys.length > 0)
     if (anchor) {
-      const k = index.lookup(anchor.text, hint).keys[0]
+      const k = P.index.lookup(anchor.text, hint).keys[0]
       const u = (k.usedBy || [])[0]
       L.push(`near:     ${q(anchor.text)} → ${k.key}${u ? ` (rendered ${short(u.file)}:${u.line})` : ''} — use as an anchor`)
     }
   }
   if (n.desc && n.text && n.desc !== n.text && primary && !primary.viaDesc) {
-    const rd = index.lookup(n.desc)
+    const rd = P.index.lookup(n.desc)
     if (rd.keys.length) L.push(`a11y key: ${rd.keys[0].key} (${short(rd.keys[0].file)}:${rd.keys[0].line})`)
   }
   return { title, what, screen: cap.ctx?.screen || '', lines: L, block: L.join('\n'), _hints: debugHints }
 }
 
 function agentNotes(size) {
-  if (Array.isArray(cfg.notes)) return ['# Notes for the agent', ...cfg.notes].join('\n')
-  const res = cfg.strings.resolver
+  if (Array.isArray(P.cfg.notes)) return ['# Notes for the agent', ...P.cfg.notes].join('\n')
+  const res = P.cfg.strings.resolver
   const strings = res === 'lkey'
-    ? `Copy lives as LKey(${(cfg.strings.langs || []).join('/')}) objects and is rendered via l(...): to change wording, edit the LKey, not the composable.`
+    ? `Copy lives as LKey(${(P.cfg.strings.langs || []).join('/')}) objects and is rendered via l(...): to change wording, edit the LKey, not the composable.`
     : res === 'android-xml'
       ? 'Copy lives in res/values*/strings.xml as <string name>: to change wording, edit the resource (every locale), not the code.'
       : 'On-screen copy did not resolve to a string registry; search the sources for the literal.'
   return ['# Notes for the agent',
-    `- Platform: Android only — this prompt was composed against the Android emulator. Code: ${cfg.sourceRoots.join(', ') || '(see repo)'}.`,
+    `- Platform: Android only — this prompt was composed against the Android emulator. Code: ${P.cfg.sourceRoots.join(', ') || '(see repo)'}.`,
     `- ${strings}`,
     `- bounds are display px on a ${size || '?'} screen, [x1,y1]→[x2,y2]. "tap:" names the actually-clickable node when the picked one is only a label inside it.`,
   ].join('\n')
+}
+
+// Bringing the app to the front. `monkey -p` is the recipe everyone writes down and it
+// FAILS on apps whose launcher activity it cannot match (verified here: it exits non-zero
+// while the launcher activity plainly exists). Ask the package manager which component to
+// start, then start it; monkey stays as the fallback.
+async function launchApp() {
+  const brief = await adbText(['shell', 'cmd', 'package', 'resolve-activity', '--brief', P.cfg.package]).catch(() => '')
+  const comp = brief.split('\n').map(l => l.trim()).find(l => l.startsWith(`${P.cfg.package}/`))
+  if (comp) { await adb(['shell', 'am', 'start', '-n', comp], { timeout: 8000 }); return comp }
+  await adb(['shell', 'monkey', '-p', P.cfg.package, '-c', 'android.intent.category.LAUNCHER', '1'], { timeout: 8000 })
+  return `${P.cfg.package} (via monkey)`
+}
+
+// ---------------------------------------------------------------- problems ---
+// What is wrong RIGHT NOW, in words, with the one action that fixes it. Every one of these
+// used to present as the same thing: a still that never changed, or a spinner.
+async function problems() {
+  const out = []
+  const add = (level, code, text, action = '') => out.push({ level, code, text, action })
+  if (!P) { add('error', 'no-project', 'no project registered — run `emu-composer init` in an Android project'); return out }
+  const devices = await listDevices()
+  const usable = devices.filter(d => d.state === 'device')
+  if (!state.serial || !usable.length) {
+    add('error', 'no-device', devices.length
+      ? `no usable device — adb reports ${devices.map(d => `${d.serial} ${d.state}`).join(', ')}`
+      : 'no device attached — start an emulator')
+    return out
+  }
+  const s = await staticContext().catch(() => null)
+  if (!s) { add('error', 'adb', 'the device stopped answering adb'); return out }
+  if (!s.installedVer) {
+    add('error', 'not-installed', `${P.cfg.appName} (${P.cfg.package}) is not installed on ${state.serial} — install a debug build, or switch project`)
+    return out
+  }
+  if (lastForeground === null) {
+    // No capture since the switch: read the focus rather than repeat the last project's answer.
+    const focus = await adbText(['shell', 'dumpsys window | grep -m1 mCurrentFocus']).catch(() => '')
+    lastForeground = focus.includes(P.cfg.package)
+  }
+  if (lastForeground === false) add('warn', 'not-foreground', `${P.cfg.appName} is not the app in front — every reference will come from whatever is`, 'launch')
+  if (s.installedVer && s.repoVer && s.installedVer !== s.repoVer)
+    add('warn', 'version', `the installed build is ${s.installedVer}, the repo declares ${s.repoVer} — the running app may not contain your changes`)
+  if (!agent?.ready) add('info', 'agent', `slow path — ${agent?.reason || 'the on-device agent is off'} (captures take ~2.5 s)`, 'agent')
+  return out
+}
+let lastForeground = null
+
+// ------------------------------------------------------------------ errors ---
+// The device's own account of what went wrong, on request. Half of what anyone writes to an
+// agent is "why does this not work", and the answer is usually already in the log — but it
+// is only fetched when the box is ticked: it is one adb call per capture and it is noise on
+// a prompt about a colour.
+async function recentErrors() {
+  if (!state.serial) return { count: 0, block: '', lines: [] }
+  const pid = await adbText(['shell', 'pidof', P.cfg.package]).then(t => t.trim().split(/\s+/)[0] || '').catch(() => '')
+  const [main, crash] = await Promise.all([
+    adbText(['shell', 'logcat -d -v time -t 400 *:E']).catch(() => ''),
+    adbText(['shell', 'logcat -d -b crash -v time -t 120']).catch(() => ''),
+  ])
+  const { lines, count } = filterLog({ main, crash, pkg: P.cfg.package, pid })
+  return { count, lines, block: errorBlock({ lines, pkg: P.cfg.package, pid }) }
 }
 
 // ------------------------------------------------------- transcription -----
@@ -510,7 +659,7 @@ async function transcribe(audioB64, mime, language, prompt) {
   const ext = /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'mp4' : 'webm'
   const form = new FormData()
   form.append('file', new Blob([bytes], { type: mime }), `seg.${ext}`)
-  form.append('model', process.env.EMU_COMPOSER_STT_MODEL || cfg.stt.model || 'gpt-4o-transcribe')
+  form.append('model', process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe')
   if (language) form.append('language', language)
   // The previous segment's tail primes the model, which is what keeps a sentence that was
   // cut at a pause from restarting with a capital letter or losing its first word.
@@ -570,7 +719,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
         res.clientId = crypto.randomUUID()
         res.watch = url.searchParams.get('watch') === '1'
-        res.write(`data: ${JSON.stringify({ type: 'device', serial: state.serial, devices: await listDevices(), agent: Boolean(agent?.ready), client: res.clientId })}\n\n`)
+        res.write(`data: ${JSON.stringify({ type: 'device', serial: state.serial, devices: await listDevices(), agent: Boolean(agent?.ready), client: res.clientId, ...projectList() })}\n\n`)
         sseClients.add(res)
         if (res.watch) watchScreen()
         const ping = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
@@ -588,10 +737,38 @@ const server = http.createServer(async (req, res) => {
         // rewritten as marks come and go, so a prompt can point the agent at a picture.
         const { name, png } = await readBody(req)
         if (!/^[\w-]{1,80}$/.test(String(name)) || !/^data:image\/png;base64,/.test(String(png))) throw userError('bad mark image')
-        await fs.mkdir(path.join(OUT, 'marks'), { recursive: true })
+        await fs.mkdir(path.join(outDir(), 'marks'), { recursive: true })
         const rel = `.emu-composer/marks/${name}.png`
-        await fs.writeFile(path.join(REPO, rel), Buffer.from(png.split(',')[1], 'base64'))
+        await fs.writeFile(path.join(P.cfg.root, rel), Buffer.from(png.split(',')[1], 'base64'))
         return send(res, 200, { file: rel })
+      }
+      case '/api/projects':
+        return send(res, 200, projectList())
+      case '/api/project': {
+        // Registers (a `run` from another repo) and/or switches. Manual, always.
+        const { id, configPath } = await readBody(req)
+        if (configPath) {
+          const { loadConfig } = await import('./config.mjs')
+          const rec = await addProject(await loadConfig(configPath))
+          await activate(rec.id, 'registered')
+        } else if (id) {
+          if (!projects.has(id)) throw userError('unknown project')
+          await activate(id, 'chosen')
+        }
+        return send(res, 200, projectList())
+      }
+      case '/api/extras': {
+        // The opt-in sections, fetched together so the page makes one call per capture.
+        const wantErrors = url.searchParams.get('errors') === '1'
+        const e = wantErrors ? await recentErrors() : { count: 0, block: '' }
+        return send(res, 200, { errors: e.block, errorCount: e.count, path: trailBlock(), pathSteps: trail.length })
+      }
+      case '/api/problems':
+        return send(res, 200, { problems: await problems() })
+      case '/api/launch': {
+        // The fix for "the app is not in front", from the page.
+        if (!state.serial) throw userError('no device')
+        return send(res, 200, { ok: true, component: await launchApp() })
       }
       case '/api/devices':
         return send(res, 200, { devices: await listDevices(), active: state.serial })
@@ -606,10 +783,11 @@ const server = http.createServer(async (req, res) => {
       case '/api/health': {
         const k = await openaiKey()
         return send(res, 200, {
-          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: cfg.stt.language || '', app: APP,
+          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', app: P.cfg.appName,
+          ...projectList(), problems: await problems(),
           serial: state.serial, devices: await listDevices(),
           agent: Boolean(agent?.ready), agentReason: agent?.reason || (state.serial ? '' : 'no device'),
-          index: index.stats || null,
+          index: P.index.stats || null,
           device: state.serial ? await adbText(['get-state']).then(t => t.trim()).catch(() => 'offline') : 'none',
         })
       }
@@ -631,20 +809,20 @@ const server = http.createServer(async (req, res) => {
       case '/api/save': {
         // Crops + full screenshot + the assembled prompt, for a reference that outlives the tab.
         const { text, crops, screen } = await readBody(req)
-        await fs.mkdir(OUT, { recursive: true })
+        await fs.mkdir(outDir(), { recursive: true })
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
         const files = []
         for (const [n, c] of (crops || []).entries()) {
           if (!c) continue
           const rel = `.emu-composer/${stamp}-ui${n + 1}.png`
-          await fs.writeFile(path.join(REPO, rel), Buffer.from(c.split(',')[1], 'base64'))
+          await fs.writeFile(path.join(P.cfg.root, rel), Buffer.from(c.split(',')[1], 'base64'))
           files.push(rel)
         }
         let shot = ''
-        if (screen) { shot = `.emu-composer/${stamp}-screen.${/jpeg/.test(screen.slice(0, 30)) ? 'jpg' : 'png'}`; await fs.writeFile(path.join(REPO, shot), Buffer.from(screen.split(',')[1], 'base64')) }
+        if (screen) { shot = `.emu-composer/${stamp}-screen.${/jpeg/.test(screen.slice(0, 30)) ? 'jpg' : 'png'}`; await fs.writeFile(path.join(P.cfg.root, shot), Buffer.from(screen.split(',')[1], 'base64')) }
         const full = (text || '') + (files.length || shot ? `\n\n# Files\n${shot ? `screenshot: ${shot}\n` : ''}${files.map((f, n) => `@ui${n + 1} crop: ${f}`).join('\n')}\n` : '')
-        await fs.writeFile(path.join(OUT, `${stamp}.md`), full)
-        await fs.writeFile(path.join(OUT, 'latest.md'), full)
+        await fs.writeFile(path.join(outDir(), `${stamp}.md`), full)
+        await fs.writeFile(path.join(outDir(), 'latest.md'), full)
         return send(res, 200, { file: `.emu-composer/${stamp}.md`, text: full })
       }
     }
@@ -663,10 +841,14 @@ server.on('error', e => {
   log('FATAL', e.message); process.exit(1)
 })
 server.on('listening', async () => {
-  log(`emu-composer → http://localhost:${PORT}  (${APP} · ${PKG} · adb ${ADB})`)
-  const st = await index.build()
-  log(`string index (${st.resolver}): ${st.keys} keys from ${st.files} files in ${st.ms} ms`)
-  index.watch(() => index.build().then(s => log(`string index rebuilt: ${s.keys} keys`)))
+  const { loadConfig } = await import('./config.mjs')
+  // Read the registry BEFORE adding this project: addProject persists the whole map, so
+  // registering first wrote a one-entry file over it and every other project was lost.
+  await loadRegistry(loadConfig)
+  await addProject(bootCfg)
+  await activate(bootCfg.configPath, 'started here')
+  log(`emu-composer → http://localhost:${PORT}  (adb ${ADB})`)
+  log(`projects: ${[...projects.values()].map(r => `${r.cfg.appName}${r.id === P.id ? ' ←' : ''}`).join(', ')}`)
   const serial = await pickDefaultSerial()
   if (!serial) { log('no device attached — waiting for one to be picked'); return }
   state.serial = serial; agent = agentFor(serial)
@@ -681,7 +863,7 @@ setInterval(() => { const st = Boolean(agent?.ready); if (st !== lastAgentState)
 trackDevices()
 server.listen(PORT, '127.0.0.1')
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { for (const a of agents.values()) await a.release().catch(() => {}); process.exit(0) })
-return { server, agent, index, port: PORT }
+return { server, agent, projects, port: PORT }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

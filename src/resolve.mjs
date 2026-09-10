@@ -164,6 +164,11 @@ export class StringIndex {
     return out
   }
 
+  // Watchers are released when the project is switched away from: one daemon serves many
+  // projects, and a recursive watch per project would hold file descriptors for repos
+  // nobody is looking at.
+  unwatch() { for (const w of this._watchers) { try { w.close() } catch {} } this._watchers = [] }
+
   watch(onChange) {
     const dirs = [...this.cfg.sourceRoots, ...(this.cfg.strings.resDirs || [])].map(r => path.join(this.root, r))
     let timer = null
@@ -352,4 +357,32 @@ function descendants(nodes, i, depth, out = []) {
   if (depth < 0) return out
   for (const c of nodes[i].children || []) { out.push(nodes[c]); descendants(nodes, c, depth - 1, out) }
   return out
+}
+
+// The screen's NAME, from the tree alone — no adb, no git — so the trail can be kept from
+// the cheap watch dump as well as from a full capture.
+//   selected bottom tab  ›  the largest static text near the top
+// Editable text is excluded, or a search query becomes the screen's name (it did: "שלום ab"),
+// and so are bare amounts and clock times ("$0", "15:00" are not titles).
+export const isLabel = t => /\p{L}{2,}/u.test(t) && !/^[\s\d$€£₪.,:%+-]+$/.test(t)
+export function screenTitleOf(nodes, H = 2400, pkg = '') {
+  const app = pkg ? nodes.filter(n => n.pkg === pkg) : nodes
+  const focused = app.find(n => n.focused && /EditText/.test(n.cls))
+  const top = app.filter(n => n.text && isLabel(n.text) && n.y < 400 && n.h >= 40 && n.w < 900 && !/EditText/.test(n.cls)
+      && !(focused && n.text === focused.text))
+    .sort((a, b) => (b.h * b.w) - (a.h * a.w))[0]
+  const selTab = app.find(n => n.selected && n.y > H * 0.8 && n.h > 100)
+  const selText = selTab ? app.find(m => m.i > selTab.i && m.depth > selTab.depth && m.text && isLabel(m.text)) : null
+  const strict = [selText?.text, top?.text].filter((t, k, a) => t && a.indexOf(t) === k).join(' › ')
+  if (strict) return strict
+  // No header and no tab — a wizard page, a full-screen cover, an onboarding step. Rather
+  // than call it "?", name it after its biggest line of copy: a screen with no name is a
+  // hole in the path, and a hole is exactly what an agent cannot walk.
+  // Ranked by READING ORDER and shortness, not by area: a heading is a short line near the
+  // top, while the biggest block of text on a screen is usually a paragraph or a banner
+  // ("10 tasks the organizers prepared for attendees · tap to import" is not a screen name).
+  const hero = app.filter(n => n.text && isLabel(n.text) && n.y < H * 0.7 && n.w < 900 && !/EditText/.test(n.cls)
+      && !(focused && n.text === focused.text))
+    .sort((a, b) => (a.text.length > 40) - (b.text.length > 40) || a.y - b.y)[0]
+  return hero ? hero.text.trim().slice(0, 60) : ''
 }

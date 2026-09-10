@@ -125,6 +125,17 @@
   .hitem .t{font:500 10.5px/1 var(--mono);color:var(--dim2);margin-bottom:4px}
   .hitem .p{font-size:12.5px;color:var(--fg);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   #right{position:relative}
+  #problems{display:none;flex-direction:column;gap:1px;background:var(--line)}
+  #problems.on{display:flex}
+  .prob{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12px;background:var(--panel2)}
+  .prob.error{background:#3a1414;color:#ffb4b4}
+  .prob.warn{background:#3a2c12;color:#ffd9a0}
+  .prob.info{background:var(--panel2);color:var(--dim2)}
+  .prob b{font-weight:600}
+  .prob button{font-size:11px;padding:2px 8px;margin-inline-start:auto;white-space:nowrap}
+  .cnt{font:600 10px/1 var(--mono);color:var(--dim2);margin-inline-start:4px}
+  .cnt.has{color:#ffb4b4}
+  #project{max-width:150px}
 </style>
 
 <div id="left">
@@ -134,9 +145,11 @@
       <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
     </div>
     <kbd>⌘E</kbd>
+    <select id="project" data-t-title="project_title"></select>
     <select id="device" data-t-title="device_title"></select>
     <span id="modehint"></span>
   </div>
+  <div id="problems"></div>
   <div class="bar" id="tools">
     <div class="seg" id="toolseg">
       <button data-tool="pick" class="on" data-t="tool_pick">בחירה</button><button data-tool="pen" data-t="tool_pen">עט</button>
@@ -176,6 +189,8 @@
     <button id="save" data-t="save">שמור לקובץ</button>
     <button id="clear" class="ghost" data-t="clear">נקה</button>
     <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> <span data-t="notes">הערות לסוכן</span></label>
+    <label class="opt" data-t-title="errors_title"><input type="checkbox" id="optErrors" style="margin:0"> <span data-t="errors">שגיאות</span><span id="errCount" class="cnt"></span></label>
+    <label class="opt" data-t-title="path_title"><input type="checkbox" id="optPath" style="margin:0"> <span data-t="path">מסלול</span><span id="pathCount" class="cnt"></span></label>
     <span id="warn"></span>
     <span id="ctx"></span>
   </div>
@@ -214,6 +229,11 @@ const I18N = {
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
     device_title: 'איזה מכשיר לשקף', device_none: 'אין מכשיר מחובר', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
+    project_title: 'איזה פרויקט — הרפרנסים נפתרים מול הקוד שלו', project_none: 'אין פרויקט',
+    errors: 'שגיאות', errors_title: 'לצרף לפרומפט את השגיאות האחרונות מהמכשיר (logcat + קריסות)',
+    path: 'מסלול', path_title: 'לצרף לפרומפט את מסלול המסכים שעברת בסשן הזה',
+    st_project: 'עובר ל{0}…', st_project_on: 'הפרויקט הפעיל: {0}',
+    prob_launch: 'הפעל', prob_agent: 'הפעל סוכן', prob_refresh: 'רענן',
     hint_collect: 'לחיצה = רפרנס · ימני = הקשה · ⇧גלגלת = גלילה · ⌥ = צומת גולמי',
     hint_use: 'האמולטור חי — קליקים, גרירות, גלילה ומקלדת (כולל עברית) עוברים למכשיר',
     placeholder: 'כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד.',
@@ -241,6 +261,11 @@ const I18N = {
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
     device_title: 'Which device to mirror', device_none: 'No device attached', device_many: '{0} devices — pick the one to mirror',
+    project_title: 'Which project — references resolve against its sources', project_none: 'No project',
+    errors: 'Errors', errors_title: "Attach the device's recent errors (logcat + crash buffer) to the prompt",
+    path: 'Path', path_title: 'Attach the screens walked in this session to the prompt',
+    st_project: 'switching to {0}…', st_project_on: 'active project: {0}',
+    prob_launch: 'Launch', prob_agent: 'Start agent', prob_refresh: 'Refresh',
     hint_collect: 'click = reference · right-click = tap · ⇧wheel = scroll · ⌥ = raw node',
     hint_use: 'Live — clicks, drags, wheel and keyboard (any script) go to the device',
     placeholder: 'Write here. In collect mode every click on an element inserts a reference at the caret. Right-click on the emulator = tap the device without leaving collect. Click a reference to copy it alone.',
@@ -366,7 +391,8 @@ async function capture() {
       $('#warn').textContent = ctx.versionMismatch ? t('warn_mismatch') : ''
       for (const c of ed.querySelectorAll('.chip')) c.classList.toggle("stale", refOf(c)?.captureId !== captureId)
       setStatus(t('st_elements', nodes.length, d.ms) + (d.source === 'agent' ? '' : t('st_slow')), 'ok')
-    } catch (e) { setStatus(e.message, 'err'); markLost(e.message) }
+      refreshExtras()
+    } catch (e) { setStatus(e.message, 'err'); markLost(e.message); health() }
     finally { $('#busy').classList.remove('show'); capturing = null }
   })()
   return capturing
@@ -896,6 +922,8 @@ function serialize() {
     if (screens.length > 1 || (screens.length === 1 && screens[0] !== ctx.screen)) L.push(`elements: picked on ${screens.length} screen${screens.length > 1 ? 's' : ''} — ${screens.join(' · ')}`)
     L.push('')
   }
+  if ($('#optPath').checked && extras.path) L.push(extras.path, '')
+  if ($('#optErrors').checked && extras.errors) L.push(extras.errors, '')
   if ($('#optNotes').checked && notesText) L.push(notesText, '')
   return { text: L.join('\n').trim() + '\n', used: [...used, ...marks], orphans }
 }
@@ -1145,6 +1173,8 @@ async function health() {
     $('#keystate').innerHTML = h.stt ? escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>' : escapeHTML(t('key_needed'))
     if (sttOverride === null && !$('#sttlang').value) $('#sttlang').value = h.language || ''
     renderDevices(h.devices || [], h.serial || '')
+    renderProjects(h.projects || [], h.active || '')
+    renderProblems(h.problems || [])
     if (!activeSerial) activeSerial = h.serial || ''
     try {
       const want = localStorage.getItem('emucomposer.device')
@@ -1173,6 +1203,89 @@ function renderDevices(devices, active) {
   sel.classList.toggle('bad', !usable.length)
   sel.title = usable.length > 1 ? t('device_many', usable.length) : t('device_title')
 }
+// ---- projects: one daemon serves them all; the switch is BY HAND, never guessed. The
+// active project decides which sources a reference resolves against and which repo the
+// prompt names, so it is a deliberate choice, like the device.
+let projectSig = '', activeProject = ''
+function renderProjects(list, active) {
+  const sel = $('#project')
+  const sig = list.map(p => p.id).join('|') + '#' + active
+  if (sig === projectSig) return
+  projectSig = sig
+  sel.innerHTML = list.length
+    ? list.map(p => `<option value="${escapeHTML(p.id)}"${p.id === active ? ' selected' : ''}>${escapeHTML(p.name)}</option>`).join('')
+    : `<option value="">${escapeHTML(t('project_none'))}</option>`
+  sel.style.display = list.length > 1 ? '' : 'none'
+  sel.title = t('project_title')
+  if (active && active !== activeProject) {
+    const was = activeProject
+    activeProject = active
+    if (was) onProjectSwitched(list.find(p => p.id === active))
+  }
+}
+// Everything resolved against the old repo is stale the moment the project changes.
+function onProjectSwitched(p) {
+  nodes = []; captureId = 0; ctx = null; extras = { errors: '', path: '', errorCount: 0, pathSteps: 0 }
+  for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
+  drawOverlay()
+  fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
+  if (p) setStatus(t('st_project_on', p.name), 'ok')
+  if (mode === 'collect') capture()
+  health()
+}
+$('#project').addEventListener('change', async e => {
+  const id = e.target.value; if (!id) return
+  setStatus(t('st_project', e.target.selectedOptions[0]?.textContent || ''), 'busy')
+  try {
+    const d = await (await fetch('/api/project', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) })).json()
+    if (d.error) throw new Error(d.error)
+    renderProjects(d.projects || [], d.active || '')
+  } catch (err) { setStatus(err.message, 'err') }
+})
+
+// ---- problems: what is wrong, in words, with the button that fixes it. Silence and a
+// stale screenshot look identical; this is what tells them apart.
+let problemSig = ''
+function renderProblems(list) {
+  const box = $('#problems')
+  const sig = (list || []).map(p => p.code + p.text).join('|')
+  if (sig === problemSig) return
+  problemSig = sig
+  box.innerHTML = (list || []).map(p =>
+    `<div class="prob ${p.level}"><b>${p.level === 'error' ? '✘' : p.level === 'warn' ? '!' : 'i'}</b><span>${escapeHTML(p.text)}</span>` +
+    (p.action ? `<button data-act="${p.action}">${escapeHTML(t(p.action === 'launch' ? 'prob_launch' : 'prob_agent'))}</button>` : '') + '</div>').join('')
+  box.classList.toggle('on', Boolean((list || []).length))
+  for (const b of box.querySelectorAll('button')) b.onclick = async () => {
+    b.disabled = true
+    try {
+      if (b.dataset.act === 'launch') { await fetch('/api/launch', { method: 'POST' }); await new Promise(r => setTimeout(r, 1200)); if (mode === 'collect') await capture() }
+      else await fetch('/api/agent/restart', { method: 'POST' })
+    } finally { b.disabled = false; health() }
+  }
+}
+
+// ---- the opt-in prompt sections. Fetched together, once per capture, and only for the
+// boxes that are ticked — the errors call costs an adb round trip.
+let extras = { errors: '', path: '', errorCount: 0, pathSteps: 0 }
+async function refreshExtras() {
+  const wantErr = $('#optErrors').checked, wantPath = $('#optPath').checked
+  if (!wantErr && !wantPath) { extras = { errors: '', path: '', errorCount: 0, pathSteps: 0 }; return paintExtras() }
+  try {
+    extras = await (await fetch(`/api/extras?errors=${wantErr ? 1 : 0}`)).json()
+  } catch { /* keep what we had */ }
+  paintExtras()
+}
+function paintExtras() {
+  const e = $('#errCount'), p = $('#pathCount')
+  e.textContent = $('#optErrors').checked ? String(extras.errorCount || 0) : ''
+  e.classList.toggle('has', Boolean($('#optErrors').checked && extras.errorCount))
+  p.textContent = $('#optPath').checked ? String(extras.pathSteps || 0) : ''
+}
+for (const id of ['#optErrors', '#optPath']) $(id).addEventListener('change', () => {
+  try { localStorage.setItem('emucomposer' + id.replace('#opt', '.'), $(id).checked ? '1' : '0') } catch {}
+  refreshExtras()
+})
+
 // Server-sent events: device list / active device / agent state arrive the moment they
 // change (adb track-devices behind it), in either mode. Falls back to the health poll.
 let sse = null, activeSerial = '', clientId = '', lastHash = ''
@@ -1190,6 +1303,7 @@ function connectEvents() {
     } else if (ev.type === 'device') {
       if (ev.client) clientId = ev.client
       renderDevices(ev.devices || [], ev.serial || '')
+      if (ev.projects) renderProjects(ev.projects, ev.active || '')
       if (ev.serial !== activeSerial) {
         const was = activeSerial; activeSerial = ev.serial
         if (!ev.serial) { markLost(t('st_no_device')); return }
@@ -1198,6 +1312,8 @@ function connectEvents() {
         if (was !== undefined) setStatus(t('st_connected', ev.serial), 'ok')
         if (mode === 'collect') capture()
       }
+    } else if (ev.type === 'project') {
+      renderProjects(ev.projects || [], ev.active || '')
     } else if (ev.type === 'agent') {
       const p = $('#agentpill'); p.className = 'pill ' + (ev.ready ? 'on' : 'bad')
       if (ev.ready && mode === 'collect' && !nodes.length) capture()
@@ -1222,6 +1338,7 @@ $('#agentpill').onclick = async () => { setStatus(t('st_agent_starting'), 'busy'
 fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
 try { const d = localStorage.getItem('emucomposer.dir'); if (d) $(`#dirseg [data-dir="${d}"]`)?.click() } catch {}
 try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
+try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emucomposer.' + id); if (v !== null) $('#opt' + id).checked = v === '1' } } catch {}
 $('#optNotes2').checked = $('#optNotes').checked
 if (sttOverride !== null) $('#sttlang').value = sttOverride
 applyLang()

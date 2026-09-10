@@ -38,9 +38,10 @@ also:     ui/guest/GuestShell.kt:601, ui/UsageGuideScreen.kt:278
 ```
 
 The full prompt is `# Task` (your text, with `@ui1`… inline) → `# Elements` (one block per
-chip) → `# Screen` (app, build, device, repo, session — nothing guessed; derived facts say
-so) → `# Notes for the agent` (three lines of project convention, generated from your
-config). Copy it with `⌘↩`.
+chip) → `# Screen` (**project, path on disk and which agent-rule files the repo carries**,
+then app, build, device, repo, session — nothing guessed; derived facts say so) → optionally
+`# Path` and `# Errors` → `# Notes for the agent` (three lines of project convention,
+generated from your config). Copy it with `⌘↩`.
 
 Text the app builds at runtime resolves to nothing; the block says so and names the nearest
 text that *does* resolve as an anchor. Printf-shaped copy template-matches (`"Error (404)"`
@@ -50,6 +51,39 @@ tappable". Keys that share the same copy are ranked by the row they sit in: when
 sibling tabs resolved to `LShell.*` in `RootScreen.kt`, the fifth is theirs too — never the
 CarPlay or widget variant. Each block names the screen it was picked on, and the prompt says
 when elements come from several screens.
+
+## Every project you have open, one daemon
+
+The server is not tied to the repo it was started from. `npx emu-composer` in a second
+project **registers** that project with the one already running and switches to it: the page
+keeps its draft, its history and its device, while the sources a reference resolves against,
+the string registry, the version file and the agent notes all change together. The project
+is switched **by hand**, from a dropdown beside the device menu — pointing at app A while
+thinking about repo B is normal, so nothing is guessed from what happens to be in front.
+
+Registered projects are remembered in `~/.config/emu-composer/projects.json` and are back in
+the dropdown the next time the daemon starts. `emu-composer` from a directory with no config
+at all opens whatever is active instead of refusing.
+
+## When something is wrong, it says so
+
+A composer that cannot reach the app looks exactly like one waiting for you: a still image.
+A bar above the screen names the problem instead, with the button that fixes it — the app is
+not installed on this device; it is not the app in front (**Launch**); the installed build is
+not the version the repo declares; adb has no device; the agent is off, so captures take
+2.5 s (**Start agent**). `emu-composer doctor` prints the same list.
+
+## Two optional sections in the prompt
+
+Two checkboxes beside the prompt, off by default, because each is noise on a prompt about a
+colour and gold on a prompt about a bug:
+
+- **Errors** — the device's own account of what went wrong: error-level logcat and the crash
+  buffer, filtered to this app by pid, with stack frames kept and identical repeats collapsed
+  to one line and a count. Fetched only while the box is ticked.
+- **Path** — the screens walked in this session (`Places › Wallet › Expense details`), so an
+  agent can reproduce the state rather than guess at it. A screen with no header and no
+  selected tab is named after its heading rather than left out.
 
 ## Two modes, one toggle (`⌘E`)
 
@@ -154,6 +188,9 @@ Two string registries are understood today: standard `res/values*/strings.xml` (
 - [x] On-device agent with a drilled self-healing lifecycle
 - [x] Dictation (OpenAI) with pause segmentation and caret anchoring
 - [x] macOS launcher app and floating bar
+- [x] Many projects in one daemon, switched by hand
+- [x] Optional `# Errors` (logcat + crashes) and `# Path` (screens walked) sections
+- [x] A problem bar that names what is wrong, with the button that fixes it
 - [ ] iOS Simulator (the same idea over `xcrun simctl` + the accessibility tree)
 - [ ] Android Studio plugin for the embedded emulator
 - [ ] Linux launcher (the server and page already run there)

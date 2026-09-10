@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { StringIndex, buildTree, tapTarget, siblingPosition, role, normalise } from '../src/resolve.mjs'
+import { StringIndex, buildTree, tapTarget, siblingPosition, role, normalise, screenTitleOf } from '../src/resolve.mjs'
 
 const FIX = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
 
@@ -85,4 +85,35 @@ test('row consistency: a tab resolves like its siblings, never to CarPlay or a s
   assert.ok(hints.files.some(f => /RootScreen/.test(f)))
   const settings = rankKeys(ix.lookup(firstText(nodes, 5).text).keys, nodes[5], false, hints)
   assert.match(settings[0].usedBy[0].file, /RootScreen/)
+})
+
+test('screen title: selected tab › heading, never a query, an amount or a clock', () => {
+  const nodes = buildTree([
+    { i: 0, depth: 0, cls: 'android.widget.FrameLayout', pkg: 'com.example.app', x: 0, y: 0, w: 1080, h: 2400 },
+    { i: 1, depth: 1, cls: 'android.widget.TextView', pkg: 'com.example.app', text: '15:00', x: 40, y: 60, w: 120, h: 44 },
+    { i: 2, depth: 1, cls: 'android.widget.TextView', pkg: 'com.example.app', text: 'Wallet', x: 40, y: 150, w: 300, h: 60 },
+    { i: 3, depth: 1, cls: 'android.view.View', pkg: 'com.example.app', x: 0, y: 2127, w: 1080, h: 210 },
+    { i: 4, depth: 2, cls: 'android.view.View', pkg: 'com.example.app', x: 441, y: 2127, w: 199, h: 210, selected: true },
+    { i: 5, depth: 3, cls: 'android.widget.TextView', pkg: 'com.example.app', text: 'Money', x: 485, y: 2259, w: 110, h: 30 },
+  ].map(n => ({ text: '', desc: '', rid: '', ...n })))
+  assert.equal(screenTitleOf(nodes, 2400, 'com.example.app'), 'Money › Wallet')
+})
+
+test('screen title ignores what is being typed and other packages', () => {
+  const nodes = buildTree([
+    { i: 0, depth: 0, cls: 'android.widget.FrameLayout', pkg: 'com.example.app', x: 0, y: 0, w: 1080, h: 2400 },
+    { i: 1, depth: 1, cls: 'android.widget.EditText', pkg: 'com.example.app', text: 'hello ab', focused: true, x: 40, y: 120, w: 800, h: 90 },
+    { i: 2, depth: 1, cls: 'android.widget.TextView', pkg: 'com.example.app', text: 'hello ab', x: 40, y: 220, w: 400, h: 50 },
+    { i: 3, depth: 1, cls: 'android.widget.TextView', pkg: 'com.android.systemui', text: 'Notifications', x: 40, y: 100, w: 400, h: 50 },
+  ].map(n => ({ text: '', desc: '', rid: '', ...n })))
+  assert.equal(screenTitleOf(nodes, 2400, 'com.example.app'), '', 'the text mirroring the focused field is not a title')
+})
+
+test('a screen with no header and no tab is named after its heading, not its longest paragraph', () => {
+  const nodes = buildTree([
+    { i: 0, depth: 0, cls: 'android.widget.FrameLayout', pkg: 'com.example.app', x: 0, y: 0, w: 1080, h: 2400 },
+    { i: 1, depth: 1, cls: 'android.widget.TextView', pkg: 'com.example.app', text: 'Welcome to Lumela', x: 100, y: 1088, w: 880, h: 99 },
+    { i: 2, depth: 1, cls: 'android.widget.TextView', pkg: 'com.example.app', text: 'Everything a trip together needs, in one place. A quick tour — half a minute and you are in.', x: 100, y: 1208, w: 880, h: 100 },
+  ].map(n => ({ text: '', desc: '', rid: '', ...n })))
+  assert.equal(screenTitleOf(nodes, 2400, 'com.example.app'), 'Welcome to Lumela')
 })

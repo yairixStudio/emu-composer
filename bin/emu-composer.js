@@ -31,6 +31,18 @@ async function config({ required = true } = {}) {
   return loadConfig(p)
 }
 
+// With a daemon already up, `emu-composer` from anywhere at all (a home directory, another
+// repo, a scratch folder) opens the composer on whatever project is active instead of
+// refusing — the server, not the working directory, is where a project lives now.
+async function openIfDaemonUp() {
+  const port = Number(process.env.EMU_COMPOSER_PORT || 7788)
+  const h = await health(port)
+  if (!h) return false
+  openUrl(`http://localhost:${port}`)
+  say(`no ${CONFIG_NAME} here — opened the running composer (${h.app}) → http://localhost:${port}`)
+  return true
+}
+
 async function migrateLegacyHome() {
   // 0.x lived in ~/.config/emu-picker; carry the key and the jar over once.
   const old = path.join(os.homedir(), '.config', 'emu-picker')
@@ -62,18 +74,38 @@ async function ensureDevice(cfg) {
     await new Promise(r => setTimeout(r, 2000))
   }
   await new Promise(r => setTimeout(r, 3000))
-  // A cold boot lands on the home screen; bring the app under test to the front.
-  try { execFileSync(cfg.adbPath, ['shell', 'monkey', '-p', cfg.package, '-c', 'android.intent.category.LAUNCHER', '1'], { stdio: 'ignore' }) } catch {}
+  // A cold boot lands on the home screen; bring the app under test to the front. Ask the
+  // package manager for the component rather than trusting `monkey -p`, which fails on apps
+  // whose launcher activity it cannot match.
+  try {
+    const brief = execFileSync(cfg.adbPath, ['shell', 'cmd', 'package', 'resolve-activity', '--brief', cfg.package], { encoding: 'utf8' })
+    const comp = brief.split('\n').map(l => l.trim()).find(l => l.startsWith(`${cfg.package}/`))
+    if (comp) execFileSync(cfg.adbPath, ['shell', 'am', 'start', '-n', comp], { stdio: 'ignore' })
+    else execFileSync(cfg.adbPath, ['shell', 'monkey', '-p', cfg.package, '-c', 'android.intent.category.LAUNCHER', '1'], { stdio: 'ignore' })
+  } catch {}
 }
 
 const openUrl = url => execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], () => {})
 
 async function run() {
   await migrateLegacyHome()
+  if (!flag('config') && !process.env.EMU_COMPOSER_CONFIG && !findConfig() && await openIfDaemonUp()) return
   const cfg = await config()
   const port = Number(process.env.EMU_COMPOSER_PORT || cfg.port)
-  // Idempotent: a healthy server is reused, never restarted — an open composer keeps its draft.
-  if (await health(port)) { openUrl(`http://localhost:${port}`); say(`already running → http://localhost:${port}`); return }
+  // ONE daemon, every project. A `run` from a second repo does not start a second server: it
+  // REGISTERS this project with the one already running and switches to it, so the open
+  // composer keeps its draft and its history while the sources it resolves against change.
+  const up = await health(port)
+  if (up) {
+    const known = (up.projects || []).some(p => p.id === cfg.configPath)
+    await fetch(`http://127.0.0.1:${port}/api/project`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ configPath: cfg.configPath }),
+    }).catch(() => {})
+    openUrl(`http://localhost:${port}`)
+    say(`${known ? 'switched to' : 'added'} ${cfg.appName} → http://localhost:${port}`)
+    return
+  }
   await ensureDevice(cfg)
   if (!fsSync.existsSync(path.join(HOME, 'u2.jar'))) say('note: no on-device agent yet — `emu-composer setup-agent` gives 10x faster captures and Unicode input')
   const { start } = await import('../src/server.mjs')
@@ -131,7 +163,12 @@ async function doctor() {
   row(fsSync.existsSync(path.join(HOME, 'u2.jar')), 'on-device agent jar', path.join(HOME, 'u2.jar') + (fsSync.existsSync(path.join(HOME, 'u2.jar')) ? '' : '  → emu-composer setup-agent'))
   row(fsSync.existsSync(path.join(HOME, 'openai-key')) || Boolean(process.env.OPENAI_API_KEY), 'OpenAI key (dictation)', '(optional — set in the page)')
   row(Boolean(cfg), `${CONFIG_NAME}`, cfg ? `${cfg.configPath} · ${cfg.package} · strings: ${cfg.strings.resolver}` : '→ emu-composer init')
-  if (cfg) { const h = await health(cfg.port); row(Boolean(h), `server on :${cfg.port}`, h ? `agent ${h.agent ? 'on' : 'off'} · stt ${h.stt ? 'on' : 'off'}` : '(not running)') }
+  if (cfg) {
+    const h = await health(cfg.port)
+    row(Boolean(h), `server on :${cfg.port}`, h ? `agent ${h.agent ? 'on' : 'off'} · stt ${h.stt ? 'on' : 'off'}` : '(not running)')
+    if (h?.projects?.length) say(`    projects: ${h.projects.map(p => `${p.name}${p.id === h.active ? ' ←' : ''}`).join(', ')}`)
+    for (const p of h?.problems || []) say(`    ${p.level === 'error' ? '✘' : p.level === 'warn' ? '!' : 'i'} ${p.text}`)
+  }
 }
 
 const commands = { run, init, 'setup-agent': () => sh('setup-agent.sh'), 'install-app': installApp, bar, doctor,
