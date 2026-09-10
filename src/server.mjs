@@ -8,6 +8,7 @@
 // input. Slow path when the agent is unavailable: `uiautomator dump` (2.5 s) + screencap.
 // No npm dependencies.
 import http from 'node:http'
+import crypto from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
@@ -78,7 +79,7 @@ async function switchDevice(serial, why = '') {
   if (serial === state.serial && agent) return
   const old = agent
   state.serial = serial
-  staticCtx = null; captures.clear()
+  staticCtx = null; captures.clear(); lastHash = ''
   agent = serial ? agentFor(serial) : null
   log(`device → ${serial || '(none)'}${why ? ` (${why})` : ''}`)
   if (old && old !== agent) await old.stop().catch(() => {})
@@ -221,10 +222,42 @@ async function capture() {
   captures.set(id, cap)
   for (const k of [...captures.keys()].slice(0, -6)) captures.delete(k)
   const ms = Date.now() - t0
+  lastHash = screenHash(nodes)
   log(`capture #${id} via ${source}: ${nodes.length} nodes in ${ms} ms`)
-  return { id, image, nodes: nodes.map(publicNode), activity, context: ctx, source, ms }
+  return { id, image, nodes: nodes.map(publicNode), activity, context: ctx, source, ms, hash: lastHash }
 }
 const publicNode = n => ({ ...n, children: undefined, parent: undefined })
+
+// ---- screen watch --------------------------------------------------------------------
+// Collect mode shows a still capture, so a screen changed from the emulator window itself
+// went unnoticed until the next manual action. While any page is in collect mode the tree
+// is polled through the agent (0.2 s, no screenshot) and hashed — the status bar is left
+// out, or the clock would fire a capture every minute — and a change is pushed over SSE.
+function screenHash(nodes) {
+  const h = crypto.createHash('md5')
+  for (const n of nodes) {
+    if (n.pkg === 'com.android.systemui') continue
+    h.update(`${n.cls}|${n.text}|${n.desc}|${n.rid}|${n.x},${n.y},${n.w},${n.h}|${+n.selected}${+n.checked}${+n.focused}${+n.enabled}${+n.scrollable}\n`)
+  }
+  return h.digest('hex').slice(0, 16)
+}
+let lastHash = '', watching = false
+const anyWatcher = () => [...sseClients].some(r => r.watch)
+async function watchScreen() {
+  if (watching) return
+  watching = true
+  log('screen watch on')
+  try {
+    while (anyWatcher()) {
+      await new Promise(r => setTimeout(r, 700))
+      if (!agent?.ready || !anyWatcher()) continue
+      try {
+        const h = screenHash(parseNodes(await agent.dump()))
+        if (h !== lastHash) { lastHash = h; log(`screen changed (${h})`); broadcast({ type: 'screen', hash: h }) }
+      } catch (e) { log('screen watch:', e.message) }
+    }
+  } finally { watching = false; log('screen watch off') }
+}
 
 // ----------------------------------------------------------------- frames ---
 
@@ -328,6 +361,7 @@ async function gatherContext(nodes, activity) {
       : signIn ? 'signed-out (derived: a "Sign in" affordance is on screen)'
       : `signed-in (derived: no sign-in affordance; the identity itself is not read${s.debuggable ? '' : ' — release build'})`,
     focusedField: focused ? (focused.text ? `text field focused, contains "${focused.text.slice(0, 60)}"` : 'empty text field focused') : '',
+    size: s.size,
     device: `${s.model} · Android ${s.release} (API ${s.sdk}) · ${s.size} @ ${s.density}dpi · locale ${s.locale}`,
     repo: `${branch || '?'} @ ${head || '?'}${dirty ? ` (${dirty} uncommitted)` : ''}${s.repoVer ? ` · declares ${s.repoVer} (${s.repoCode})${mismatch ? '' : ' — matches the installed build'}` : ''}`,
     versionMismatch: mismatch,
@@ -534,11 +568,30 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { notes: agentNotes((await staticContext()).size) })
       case '/api/events': {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
-        res.write(`data: ${JSON.stringify({ type: 'device', serial: state.serial, devices: await listDevices(), agent: Boolean(agent?.ready) })}\n\n`)
+        res.clientId = crypto.randomUUID()
+        res.watch = url.searchParams.get('watch') === '1'
+        res.write(`data: ${JSON.stringify({ type: 'device', serial: state.serial, devices: await listDevices(), agent: Boolean(agent?.ready), client: res.clientId })}\n\n`)
         sseClients.add(res)
+        if (res.watch) watchScreen()
         const ping = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
         req.on('close', () => { sseClients.delete(res); clearInterval(ping) })
         return
+      }
+      case '/api/watch': {
+        const { client, on } = await readBody(req)
+        for (const c of sseClients) if (c.clientId === client) c.watch = Boolean(on)
+        if (on) watchScreen()
+        return send(res, 200, { ok: true })
+      }
+      case '/api/mark-image': {
+        // The screenshot with the marks burned in, drawn by the page; one file per capture,
+        // rewritten as marks come and go, so a prompt can point the agent at a picture.
+        const { name, png } = await readBody(req)
+        if (!/^[\w-]{1,80}$/.test(String(name)) || !/^data:image\/png;base64,/.test(String(png))) throw userError('bad mark image')
+        await fs.mkdir(path.join(OUT, 'marks'), { recursive: true })
+        const rel = `.emu-composer/marks/${name}.png`
+        await fs.writeFile(path.join(REPO, rel), Buffer.from(png.split(',')[1], 'base64'))
+        return send(res, 200, { file: rel })
       }
       case '/api/devices':
         return send(res, 200, { devices: await listDevices(), active: state.serial })

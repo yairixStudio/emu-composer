@@ -48,8 +48,18 @@
   body.collect #screen{border-color:var(--accent);cursor:crosshair}
   body.use #screen{border-color:var(--accent2)}
   body.use #screen:focus{box-shadow:0 0 0 1px var(--accent2)}
-  #shot{display:block;max-height:calc(100vh - 132px);width:auto;user-select:none;-webkit-user-drag:none}
+  #shot{display:block;max-height:calc(100vh - 176px);width:auto;user-select:none;-webkit-user-drag:none}
   #ov{position:absolute;inset:0}
+  #marks{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+  #marks .hl{filter:drop-shadow(0 0 3px #fff)}
+  #tools{display:none;min-height:30px}
+  body.collect #tools{display:flex}
+  #tools .seg button{padding:5px 10px;font-size:11px}
+  #colors{display:flex;gap:5px;align-items:center}
+  .sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;padding:0;background:var(--c);cursor:pointer}
+  .sw.on{border-color:#fff}
+  .chip.mark{background:#ef444418;border-color:#ef444470;color:#fca5a5}
+  .chip.mark:hover{background:#ef444436;border-color:#ef4444}
   .box{position:absolute;border:1px solid transparent;pointer-events:none}
   .box.hot{border-color:var(--accent2);background:#38bdf81c;box-shadow:0 0 0 1px #0009 inset}
   .box.pick{border-color:var(--accent);background:#f9731626}
@@ -127,7 +137,19 @@
     <select id="device" data-t-title="device_title"></select>
     <span id="modehint"></span>
   </div>
-  <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><span id="busy">…</span><div id="lost"></div></div>
+  <div class="bar" id="tools">
+    <div class="seg" id="toolseg">
+      <button data-tool="pick" class="on" data-t="tool_pick">בחירה</button><button data-tool="pen" data-t="tool_pen">עט</button>
+      <button data-tool="rect" data-t="tool_rect">מסגרת</button><button data-tool="arrow" data-t="tool_arrow">חץ</button>
+    </div>
+    <span id="colors">
+      <button class="sw on" data-c="#ef4444" style="--c:#ef4444" title="red"></button>
+      <button class="sw" data-c="#facc15" style="--c:#facc15" title="yellow"></button>
+      <button class="sw" data-c="#3b82f6" style="--c:#3b82f6" title="blue"></button>
+    </span>
+    <button id="undoMark" class="ghost" data-t="undo_mark">בטל סימון</button>
+  </div>
+  <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg><span id="busy">…</span><div id="lost"></div></div>
   <div id="navbar">
     <button data-key="4">‹ BACK</button><button data-key="3">HOME</button>
     <button data-key="187">RECENTS</button><button id="recap">↻ REFRESH</button>
@@ -207,6 +229,10 @@ const I18N = {
     st_switching: 'עובר ל-{0}…', st_mirroring: 'משקף את {0}', st_connected: 'מחובר ל-{0}', st_agent_starting: 'מפעיל את הסוכן…', st_agent_on: 'הסוכן פעיל',
     warn_mismatch: '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD',
     no_device_state: 'אין מכשיר מחובר (adb get-state: {0})', agent_on_tip: 'סוכן על המכשיר: לכידות מהירות, פריימים JPEG, קלט Unicode', agent_off_tip: 'הסוכן כבוי — {0} (לחץ לניסיון חוזר)',
+    tool_pick: 'בחירה', tool_pen: 'עט', tool_rect: 'מסגרת', tool_arrow: 'חץ', undo_mark: 'בטל סימון',
+    hint_draw: 'גרירה על המסך = ציור שנכנס לפרומפט כ-@סימון · Esc = בחירה',
+    mark_label: 'סימון {0} · {1}', shape_pen: 'עט', shape_rect: 'מסגרת', shape_arrow: 'חץ',
+    st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש',
   },
   en: {
     mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt', rec: 'Record', rec_stop: 'Stop', history: 'History',
@@ -230,6 +256,10 @@ const I18N = {
     st_switching: 'switching to {0}…', st_mirroring: 'mirroring {0}', st_connected: 'connected to {0}', st_agent_starting: 'starting the agent…', st_agent_on: 'agent is on',
     warn_mismatch: "⚠︎ the installed build is not the version the repo declares — the running app may not contain HEAD's changes",
     no_device_state: 'no device attached (adb get-state: {0})', agent_on_tip: 'on-device agent: fast dumps, JPEG frames, Unicode input', agent_off_tip: 'agent off — {0} (click to retry)',
+    tool_pick: 'Pick', tool_pen: 'Pen', tool_rect: 'Box', tool_arrow: 'Arrow', undo_mark: 'Undo mark',
+    hint_draw: 'drag on the screen = a drawing that enters the prompt as @mark · Esc = pick',
+    mark_label: 'mark {0} · {1}', shape_pen: 'pen', shape_rect: 'box', shape_arrow: 'arrow',
+    st_mark_added: 'mark {0} added — write what to do with it', st_mark_undone: 'mark {0} removed', st_screen_changed: 'screen changed — re-captured',
   },
 }
 let lang = 'he'
@@ -243,7 +273,8 @@ function applyLang() {
   for (const b of document.querySelectorAll('#langseg [data-lang]')) b.classList.toggle('on', b.dataset.lang === lang)
   for (const c of document.querySelectorAll('.chip')) c.title = t('chip_title')
   if (typeof recOn !== 'undefined' && recOn) $('#reclabel').textContent = t('rec_stop')
-  if (typeof mode !== 'undefined') $('#modehint').textContent = mode === 'collect' ? t('hint_collect') : t('hint_use')
+  if (typeof mode !== 'undefined') modeHint()
+  for (const c of document.querySelectorAll('.chip.mark')) { const r = refOf(c); if (r) c.querySelector('bdi').textContent = markLabel(r) }
 }
 const ed = $('#editor'), img = $('#shot')
 let nodes = [], captureId = 0, scale = 1, ctx = null, mode = 'collect', notesText = '', sttLanguage = ''
@@ -262,11 +293,19 @@ function setMode(m) {
   document.body.className = m
   $('#mCollect').classList.toggle('on', m === 'collect')
   $('#mUse').classList.toggle('on', m === 'use')
-  $('#modehint').textContent = m === 'collect' ? t('hint_collect') : t('hint_use')
+  modeHint()
   $('#ov').style.display = m === 'collect' ? 'block' : 'none'
+  $('#marks').style.display = m === 'collect' ? 'block' : 'none'
+  setWatch(m === 'collect')
   if (m === 'use') { $('#screen').focus(); pumpFrames() }
   else capture()
 }
+// The server polls the UI tree only while some page is in collect mode (see /api/watch).
+function setWatch(on) {
+  if (!clientId) return
+  fetch('/api/watch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client: clientId, on }) }).catch(() => {})
+}
+const modeHint = () => { $('#modehint').textContent = mode !== 'collect' ? t('hint_use') : tool !== 'pick' ? t('hint_draw') : t('hint_collect') }
 $('#mCollect').onclick = () => setMode('collect')
 $('#mUse').onclick = () => setMode('use')
 $('#recap').onclick = () => mode === 'collect' ? capture() : setMode('collect')
@@ -309,11 +348,17 @@ async function capture() {
       const r = await fetch('/api/capture', { method: 'POST' })
       const d = await r.json()
       if (d.error) throw new Error(d.error)
-      nodes = d.nodes; ctx = d.context; captureId = d.id
-      await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = `data:${d.image.mime};base64,${d.image.b64}` })
-      const root = nodes[0]
-      scale = root && root.w ? img.naturalWidth / root.w : 1
-      drawOverlay()
+      nodes = d.nodes; ctx = d.context; captureId = d.id; lastHash = d.hash || ''
+      const src = `data:${d.image.mime};base64,${d.image.b64}`
+      await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = src })
+      // Device px per image px, from the DISPLAY size: the first node is whichever window
+      // the dump lists first — a dialog once made everything 1.28× off.
+      const sz = /(\d+)x(\d+)/.exec(ctx.size || '')
+      const W = sz ? Number(sz[1]) : Math.max(0, ...nodes.map(n => n.x + n.w))
+      scale = W ? img.naturalWidth / W : 1
+      rememberCapture(d.id, src, W)
+      $('#marks').setAttribute('viewBox', `0 0 ${img.naturalWidth / scale} ${img.naturalHeight / scale}`)
+      drawOverlay(); renderMarks()
       markAlive()
       $('#ctx').textContent = `${ctx.screen || '?'} · ${ctx.app.match(/\d+\.\d+\.\d+/)?.[0] || ''} · ${ctx.repo.split(' ')[0]}`
       $('#ctx').title = ctx.block
@@ -351,8 +396,9 @@ const meaningful = n => n.text || n.desc || n.rid || n.clickable || n.selected |
 const parentOf = i => { const n = nodes[i]; for (let j = i - 1; j >= 0; j--) if (nodes[j].depth < n.depth) return j; return -1 }
 const hasInnerText = i => { for (let j = i + 1; j < nodes.length && nodes[j].depth > nodes[i].depth; j++) if (nodes[j].text || nodes[j].desc) return true; return false }
 let rawPick = false
-function hitTest(cx, cy) {
-  const { x, y } = toDisplay(cx, cy)
+const devW = () => img.naturalWidth / (mode === 'collect' ? scale : 1), devH = () => img.naturalHeight / (mode === 'collect' ? scale : 1)
+function hitTest(cx, cy) { const { x, y } = toDisplay(cx, cy); return hitAt(x, y) }
+function hitAt(x, y) {
   const hits = nodes.map((n, i) => ({ n, i })).filter(({ n }) => n.w > 0 && n.h > 0 && x >= n.x && y >= n.y && x <= n.x + n.w && y <= n.y + n.h)
   if (!hits.length) return -1
   hits.sort((a, b) => a.n.w * a.n.h - b.n.w * b.n.h)
@@ -360,8 +406,12 @@ function hitTest(cx, cy) {
   const named = hits.filter(({ n }) => n.text || n.desc || n.rid)
   // Direct text/desc wins when the cursor is on it; otherwise climb from the smallest hit.
   if (named.length && named[0].n.w * named[0].n.h <= hits[0].n.w * hits[0].n.h * 4) return named[0].i
+  // Never climb to something that IS the screen: a photo with no text/id used to resolve
+  // to the scrollable page around it. Past that size the raw node is the better answer.
+  const tooBig = devW() * devH() * 0.45
   let i = hits[0].i
   for (let k = 0; k < 6 && i >= 0; k++) {
+    if (nodes[i].w * nodes[i].h > tooBig) break
     if (meaningful(nodes[i]) || hasInnerText(i)) return i
     i = parentOf(i)
   }
@@ -373,13 +423,13 @@ addEventListener('keyup', e => { if (e.key === 'Alt') rawPick = false })
 // ------------------------------------------------------- collect: picking ---
 let hotIdx = -1
 $('#screen').addEventListener('mousemove', e => {
-  if (mode !== 'collect') return
+  if (mode !== 'collect' || tool !== 'pick') return
   const i = hitTest(e.clientX, e.clientY)
   if (i !== hotIdx) { hotIdx = i; drawOverlay(i) }
 })
 $('#screen').addEventListener('mouseleave', () => { if (mode === 'collect') { hotIdx = -1; drawOverlay() } })
 $('#screen').addEventListener('click', e => {
-  if (mode !== 'collect') return
+  if (mode !== 'collect' || tool !== 'pick') return
   const i = hitTest(e.clientX, e.clientY)
   if (i >= 0) insertRef(i)
 })
@@ -478,7 +528,7 @@ $('#screen').addEventListener('paste', e => {
 let savedRange = null
 function rememberCaret() { const s = getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange() }
 function restoreCaret() {
-  ed.focus()
+  ed.focus({ preventScroll: true })
   const s = getSelection()
   try { if (savedRange && ed.contains(savedRange.startContainer)) { s.removeAllRanges(); s.addRange(savedRange); return } } catch {}
   const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r)
@@ -551,9 +601,192 @@ ed.addEventListener('mousedown', async e => {
 ed.addEventListener('mouseover', e => {
   const chip = e.target.closest('.chip'); if (!chip || mode !== 'collect') return
   const r = refOf(chip)
-  if (r && r.captureId === captureId) drawOverlay(-1, r.node)
+  if (!r || r.captureId !== captureId) return
+  if (r.kind === 'mark') $(`#marks [data-n="${r.n}"]`)?.classList.add('hl'); else drawOverlay(-1, r.node)
 })
-ed.addEventListener('mouseout', e => { if (e.target.closest('.chip') && mode === 'collect') drawOverlay() })
+ed.addEventListener('mouseout', e => {
+  if (!e.target.closest('.chip') || mode !== 'collect') return
+  drawOverlay(); for (const g of $('#marks').querySelectorAll('.hl')) g.classList.remove('hl')
+})
+
+// ------------------------------------------------------------------ marks ----
+// A drawing on the screenshot is a reference too: pen, box or arrow, in device px, kept on
+// a chip like an element. The prompt gets its bounds, the elements it covers (an arrow: what
+// it points from and to) and the path of the screenshot with the numbered marks burned in —
+// written to .emu-composer/marks/ as marks come and go, so the agent can open the picture.
+let tool = 'pick', markColor = '#ef4444', drawing = null, pendingCapture = false
+const COLOR_NAMES = { '#ef4444': 'red', '#facc15': 'yellow', '#3b82f6': 'blue' }
+const capImages = new Map()
+function rememberCapture(id, src, w) {
+  capImages.set(id, { src, w, name: `${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}-${id}` })
+  for (const k of [...capImages.keys()].slice(0, -6)) capImages.delete(k)
+}
+function setTool(tl) {
+  tool = tl
+  for (const b of $('#toolseg').children) b.classList.toggle('on', b.dataset.tool === tl)
+  modeHint()
+  if (tl !== 'pick') { hotIdx = -1; drawOverlay() }
+}
+$('#toolseg').onclick = e => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool) }
+$('#colors').onclick = e => {
+  const b = e.target.closest('[data-c]'); if (!b) return
+  markColor = b.dataset.c
+  for (const x of $('#colors').querySelectorAll('.sw')) x.classList.toggle('on', x === b)
+}
+const markLabel = r => t('mark_label', r.n, t('shape_' + r.shape))
+const allMarks = () => [...ed.querySelectorAll('.chip.mark')].map(c => refOf(c)).filter(r => r && r.kind === 'mark')
+
+$('#screen').addEventListener('mousedown', e => {
+  if (mode !== 'collect' || tool === 'pick' || e.button !== 0 || !nodes.length) return
+  e.preventDefault()
+  const p = toDisplay(e.clientX, e.clientY)
+  drawing = { shape: tool, color: markColor, x1: p.x, y1: p.y, x2: p.x, y2: p.y, pts: [[p.x, p.y]] }
+  renderMarks()
+})
+addEventListener('mousemove', e => {
+  if (!drawing) return
+  const p = toDisplay(e.clientX, e.clientY)
+  drawing.x2 = p.x; drawing.y2 = p.y
+  if (drawing.shape === 'pen') { const l = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(p.x - l[0], p.y - l[1]) > 3 / kFactor()) drawing.pts.push([p.x, p.y]) }
+  renderMarks()
+})
+addEventListener('mouseup', e => {
+  if (!drawing) return
+  const d = drawing; drawing = null
+  const p = toDisplay(e.clientX, e.clientY)
+  d.x2 = p.x; d.y2 = p.y
+  if (d.shape === 'pen') d.pts.push([p.x, p.y])
+  const k = kFactor()
+  if (Math.hypot(d.x2 - d.x1, d.y2 - d.y1) * k < 6 && d.pts.length < 4) { renderMarks(); return }
+  addMark(d)
+  if (pendingCapture) { pendingCapture = false; capture() }
+})
+function markGeometry(d) {
+  const R = Math.round
+  if (d.shape === 'pen') {
+    const xs = d.pts.map(p => p[0]), ys = d.pts.map(p => p[1])
+    return { x1: R(Math.min(...xs)), y1: R(Math.min(...ys)), x2: R(Math.max(...xs)), y2: R(Math.max(...ys)), pts: d.pts.map(p => [R(p[0]), R(p[1])]) }
+  }
+  if (d.shape === 'rect') return { x1: R(Math.min(d.x1, d.x2)), y1: R(Math.min(d.y1, d.y2)), x2: R(Math.max(d.x1, d.x2)), y2: R(Math.max(d.y1, d.y2)) }
+  return { x1: R(d.x1), y1: R(d.y1), x2: R(d.x2), y2: R(d.y2) }
+}
+// Elements a box/stroke covers: nodes with their own text (or a clickable with an id) whose
+// area is mostly inside the mark's bounds — the smallest things named, not their containers.
+function coveredBy(g) {
+  const inside = n => {
+    const ix = Math.max(0, Math.min(g.x2, n.x + n.w) - Math.max(g.x1, n.x)), iy = Math.max(0, Math.min(g.y2, n.y + n.h) - Math.max(g.y1, n.y))
+    return n.w > 0 && n.h > 0 && ix * iy >= n.w * n.h * 0.6
+  }
+  return nodes.map((n, i) => ({ n, i })).filter(({ n }) => (n.text || n.desc || (n.clickable && n.rid)) && n.pkg !== 'com.android.systemui' && inside(n))
+    .sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x)
+}
+const describe = i => { const n = nodes[i]; return `${JSON.stringify(labelFor(i))} (${n.cls.split('.').pop()}) [${n.x},${n.y}]→[${n.x + n.w},${n.y + n.h}]` }
+function markBlock(m) {
+  const L = [`what:     ${m.colorName} ${m.shape === 'rect' ? 'box' : m.shape === 'pen' ? 'freehand stroke' : 'arrow'} drawn by the user on the screenshot`]
+  if (m.screen) L.push(`screen:   ${m.screen}`)
+  if (m.shape === 'arrow') {
+    const a = hitAt(m.x1, m.y1), b = hitAt(m.x2, m.y2)
+    L.push(`from:     [${m.x1},${m.y1}]${a >= 0 ? ` on ${describe(a)}` : ''}`)
+    L.push(`to:       [${m.x2},${m.y2}]${b >= 0 ? ` on ${describe(b)}` : ''}`)
+  } else {
+    L.push(`bounds:   [${m.x1},${m.y1}]→[${m.x2},${m.y2}] (${m.x2 - m.x1}×${m.y2 - m.y1}px)`)
+    const c = coveredBy(m)
+    if (c.length) L.push(`covers:   ${c.slice(0, 8).map(({ i }) => describe(i)).join('; ')}${c.length > 8 ? ` (+${c.length - 8} more)` : ''}`)
+    else { const i = hitAt((m.x1 + m.x2) / 2, (m.y1 + m.y2) / 2); if (i >= 0) L.push(`over:     ${describe(i)}`) }
+  }
+  return L.join('\n')
+}
+function addMark(d) {
+  const n = Math.max(0, ...allMarks().map(m => m.n)) + 1
+  const m = { kind: 'mark', n, shape: d.shape, color: d.color, colorName: COLOR_NAMES[d.color] || d.color, ...markGeometry(d), captureId, screen: ctx?.screen || '' }
+  m.label = markLabel(m); m.block = markBlock(m)
+  const uid = 'r' + (++refN)
+  insertHTMLAtCaret(`<span class="chip mark" contenteditable="false" data-uid="${uid}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(m.label)}</bdi></span>&nbsp;`)
+  const el = ed.querySelector(`[data-uid="${uid}"]`)
+  setRef(el, m); caretAfter(el); saveDraft()
+  syncMarks()
+  setStatus(t('st_mark_added', n), 'ok')
+}
+$('#undoMark').onclick = () => {
+  const chips = [...ed.querySelectorAll('.chip.mark')].map(c => ({ c, r: refOf(c) })).filter(x => x.r).sort((a, b) => b.r.n - a.r.n)
+  if (!chips.length) return
+  chips[0].c.remove(); saveDraft(); syncMarks(); setStatus(t('st_mark_undone', chips[0].r.n))
+}
+// SVG on screen, in device px; sizes scale with the view so a stroke is ~2.5 px whatever the zoom.
+const SVG = (tag, attrs) => { const el = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); return el }
+function markShapes(m, u) {
+  const els = [], sw = 2.5 * u
+  if (m.shape === 'rect') els.push(SVG('rect', { x: m.x1, y: m.y1, width: m.x2 - m.x1, height: m.y2 - m.y1, rx: 4 * u, fill: m.color, 'fill-opacity': .08, stroke: m.color, 'stroke-width': sw }))
+  else if (m.shape === 'pen') els.push(SVG('polyline', { points: m.pts.map(p => p.join(',')).join(' '), fill: 'none', stroke: m.color, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }))
+  else {
+    const a = Math.atan2(m.y2 - m.y1, m.x2 - m.x1), h = 11 * u
+    els.push(SVG('line', { x1: m.x1, y1: m.y1, x2: m.x2, y2: m.y2, stroke: m.color, 'stroke-width': sw, 'stroke-linecap': 'round' }))
+    els.push(SVG('polygon', { points: [[m.x2, m.y2], [m.x2 - h * Math.cos(a - .45), m.y2 - h * Math.sin(a - .45)], [m.x2 - h * Math.cos(a + .45), m.y2 - h * Math.sin(a + .45)]].map(p => p.join(',')).join(' '), fill: m.color }))
+  }
+  if (m.n) {
+    const bx = m.shape === 'arrow' ? m.x1 : m.shape === 'pen' ? m.pts[0][0] : m.x1, by = m.shape === 'arrow' ? m.y1 : m.shape === 'pen' ? m.pts[0][1] : m.y1
+    els.push(SVG('circle', { cx: bx, cy: by, r: 9 * u, fill: m.color, stroke: '#000', 'stroke-opacity': .35, 'stroke-width': u }))
+    const tx = SVG('text', { x: bx, y: by, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: m.color === '#facc15' ? '#000' : '#fff', 'font-size': 11 * u, 'font-weight': 700, 'font-family': 'system-ui,sans-serif' })
+    tx.textContent = m.n; els.push(tx)
+  }
+  return els
+}
+function renderMarks() {
+  const svg = $('#marks'); svg.innerHTML = ''
+  if (!img.naturalWidth) return
+  const u = 1 / kFactor()
+  for (const m of allMarks()) {
+    if (m.captureId !== captureId) continue
+    const g = SVG('g', { 'data-n': m.n }); for (const s of markShapes(m, u)) g.appendChild(s); svg.appendChild(g)
+  }
+  if (drawing) { const g = SVG('g', {}); for (const s of markShapes({ ...drawing, ...markGeometry(drawing), n: 0 }, u)) g.appendChild(s); svg.appendChild(g) }
+}
+// Marks are read back from the editor (the chips ARE the list): a deleted chip drops its
+// drawing and the image file is rewritten for that capture.
+const savedSets = new Map()
+let markSaveTimer = null
+function syncMarks() {
+  renderMarks()
+  const byCap = new Map()
+  for (const m of allMarks()) { if (!byCap.has(m.captureId)) byCap.set(m.captureId, []); byCap.get(m.captureId).push(m) }
+  for (const id of new Set([...byCap.keys(), ...savedSets.keys()])) {
+    const key = (byCap.get(id) || []).map(m => m.n).sort().join(',')
+    if (savedSets.get(id) === key || !capImages.has(id)) continue
+    savedSets.set(id, key)
+    clearTimeout(markSaveTimer); markSaveTimer = setTimeout(() => saveMarkImage(id, byCap.get(id) || []), 400)
+  }
+}
+async function saveMarkImage(id, marks) {
+  const cap = capImages.get(id); if (!cap) return
+  const im = new Image(); await new Promise(ok => { im.onload = ok; im.onerror = ok; im.src = cap.src })
+  const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight
+  const g = c.getContext('2d'); g.drawImage(im, 0, 0)
+  // Marks are in device px; the capture image may be scaled. Sizes chosen for a ~1080-wide screen.
+  const s = im.naturalWidth / cap.w
+  g.lineCap = g.lineJoin = 'round'
+  for (const m of marks) {
+    g.strokeStyle = g.fillStyle = m.color; g.lineWidth = 6 * s
+    if (m.shape === 'rect') { g.globalAlpha = .12; g.fillRect(m.x1 * s, m.y1 * s, (m.x2 - m.x1) * s, (m.y2 - m.y1) * s); g.globalAlpha = 1; g.strokeRect(m.x1 * s, m.y1 * s, (m.x2 - m.x1) * s, (m.y2 - m.y1) * s) }
+    else if (m.shape === 'pen') { g.beginPath(); m.pts.forEach((p, i) => i ? g.lineTo(p[0] * s, p[1] * s) : g.moveTo(p[0] * s, p[1] * s)); g.stroke() }
+    else {
+      const a = Math.atan2(m.y2 - m.y1, m.x2 - m.x1), h = 36 * s
+      g.beginPath(); g.moveTo(m.x1 * s, m.y1 * s); g.lineTo(m.x2 * s, m.y2 * s); g.stroke()
+      g.beginPath(); g.moveTo(m.x2 * s, m.y2 * s); g.lineTo(m.x2 * s - h * Math.cos(a - .45), m.y2 * s - h * Math.sin(a - .45)); g.lineTo(m.x2 * s - h * Math.cos(a + .45), m.y2 * s - h * Math.sin(a + .45)); g.closePath(); g.fill()
+    }
+    const bx = (m.shape === 'pen' ? m.pts[0][0] : m.x1) * s, by = (m.shape === 'pen' ? m.pts[0][1] : m.y1) * s, r = 28 * s
+    g.beginPath(); g.arc(bx, by, r, 0, Math.PI * 2); g.fill()
+    g.lineWidth = 2 * s; g.strokeStyle = '#0006'; g.stroke()
+    g.fillStyle = m.color === '#facc15' ? '#000' : '#fff'; g.font = `bold ${Math.round(32 * s)}px system-ui,sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'
+    g.fillText(String(m.n), bx, by + 1 * s)
+  }
+  try {
+    const d = await (await fetch('/api/mark-image', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: cap.name, png: c.toDataURL('image/png') }) })).json()
+    if (d.error) throw new Error(d.error)
+    for (const el of ed.querySelectorAll('.chip.mark')) { const r = refOf(el); if (r && r.captureId === id) setRef(el, { ...r, file: d.file }) }
+    saveDraft()
+  } catch (e) { setStatus(e.message, 'err') }
+}
 // Copy/cut inside the editor: plain text gets each chip as "@label" plus the full reference
 // blocks appended, so what leaves the editor is complete; a private payload carries the
 // chips themselves, so pasting back INTO the editor re-materializes them as chips.
@@ -602,22 +835,23 @@ ed.addEventListener('paste', e => {
         const src = chips.find(x => x.uid === c.dataset.uid); if (!src) { c.remove(); continue }
         const uid = 'r' + (++refN)
         c.dataset.uid = uid; c.classList.toggle('stale', src.captureId !== captureId)
-        setRef(c, { label: src.label, block: src.block, node: src.node, captureId: src.captureId, what: src.what })
+        const { uid: _, ...r } = src
+        setRef(c, r)
       }
       for (const x of box.querySelectorAll('.interim')) x.remove()
       insertHTMLAtCaret(box.innerHTML)
-      saveDraft()
+      saveDraft(); syncMarks()
       return setStatus(t('st_pasted', box.querySelectorAll('.chip').length), 'ok')
     } catch {}
   }
   document.execCommand('insertText', false, cd.getData('text/plain'))
 })
-ed.addEventListener('input', () => saveDraft())
+ed.addEventListener('input', () => { saveDraft(); syncMarks() })
 
 // ----------------------------------------------------- assembling the text --
 let orphans = 0
 function serialize() {
-  const used = []; orphans = 0
+  const used = [], marks = []; orphans = 0
   const walk = n => {
     if (n.nodeType === 3) return n.nodeValue
     if (n.nodeType !== 1) return ''
@@ -625,6 +859,7 @@ function serialize() {
     if (n.classList.contains('chip')) {
       const r = refOf(n)
       if (!r) { orphans++; return `@${n.textContent.replace(/^@/, '')}` }
+      if (r.kind === 'mark') { if (!marks.some(m => m.n === r.n)) marks.push(r); return `@mark${r.n}` }
       let i = used.findIndex(u => u.uid === n.dataset.uid)
       if (i < 0) { used.push({ uid: n.dataset.uid, ...r }); i = used.length - 1 }
       return `@ui${i + 1}`
@@ -639,10 +874,20 @@ function serialize() {
   for (const c of ed.childNodes) body += walk(c)
   body = body.replace(/ /g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim()
 
-  const L = ['# Task', body || '(no text)', '']
+  // A line of dashes separates items: each becomes its own numbered heading, so an agent
+  // treats five asks as five, not as one paragraph to skim.
+  const items = body.split(/\n\s*-{2,}\s*(?:\n|$)/).map(s => s.trim()).filter(Boolean)
+  const L = items.length > 1
+    ? [`# Task (${items.length} separate items — address each one)`, '', ...items.flatMap((s, i) => [`## ${i + 1}`, s, ''])]
+    : ['# Task', body || '(no text)', '']
   if (used.length) {
     L.push('# Elements', '')
     used.forEach((u, i) => L.push(`### @ui${i + 1} — ${JSON.stringify(u.label)}${u.what ? `  (${u.what})` : ''}`, u.block, ''))
+  }
+  if (marks.length) {
+    const files = [...new Set(marks.map(m => m.file).filter(Boolean))]
+    L.push('# Marks', `Drawn by the user on the screenshot${files.length ? ` — open ${files.join(', ')} to see them; the number in each badge is the mark's number` : ''}.`, '')
+    marks.sort((a, b) => a.n - b.n).forEach(m => L.push(`### @mark${m.n} — ${m.colorName} ${m.shape === 'rect' ? 'box' : m.shape}`, m.block + (m.file ? `\nimage:    ${m.file}` : ''), ''))
   }
   if (ctx) {
     L.push(ctx.block)
@@ -652,7 +897,7 @@ function serialize() {
     L.push('')
   }
   if ($('#optNotes').checked && notesText) L.push(notesText, '')
-  return { text: L.join('\n').trim() + '\n', used, orphans }
+  return { text: L.join('\n').trim() + '\n', used: [...used, ...marks], orphans }
 }
 
 // The button itself confirms the copy — a status line far from the cursor is easy to miss.
@@ -672,7 +917,7 @@ $('#save').onclick = async () => {
   const { text, used } = serialize()
   setStatus(t('st_saving'), 'busy')
   try {
-    const crops = used.map(u => u.captureId === captureId ? cropOf(u.node) : '')
+    const crops = used.map(u => u.node && u.captureId === captureId ? cropOf(u.node) : '')
     const d = await (await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text, crops, screen: fullShot() }) })).json()
     if (d.error) throw new Error(d.error)
@@ -680,7 +925,7 @@ $('#save').onclick = async () => {
     setStatus(t('st_saved', d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
-$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); setStatus(t('st_cleared')) }
+$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); syncMarks(); setStatus(t('st_cleared')) }
 
 function cropOf(n, pad = 8) {
   if (!img.naturalWidth || mode !== 'collect') return ''
@@ -734,7 +979,7 @@ $('#histlist').addEventListener('click', async e => {
   if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus(t('st_hist_copied'), 'ok'); return }
   ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
   for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
-  $('#hist').classList.remove('show'); saveDraft(); setStatus(t('st_hist_restored'), 'ok')
+  $('#hist').classList.remove('show'); saveDraft(); syncMarks(); setStatus(t('st_hist_restored'), 'ok')
 })
 
 // ------------------------------------------------------------- dictation ----
@@ -824,7 +1069,7 @@ async function sendSegment(blob, s) {
 function placeTranscript(marker, text) {
   const s = getSelection()
   const userRange = s.rangeCount && ed.contains(s.anchorNode) ? s.getRangeAt(0).cloneRange() : null
-  ed.focus()
+  ed.focus({ preventScroll: true })
   if (marker && ed.contains(marker)) {
     const r = document.createRange(); r.selectNode(marker); s.removeAllRanges(); s.addRange(r)
   } else restoreCaret()
@@ -878,10 +1123,18 @@ addEventListener('keydown', e => {
   if (meta && e.key === 'Enter') { e.preventDefault(); $('#copyAll').click() }
   else if (meta && e.key.toLowerCase() === 'e') { e.preventDefault(); setMode(mode === 'collect' ? 'use' : 'collect') }
   else if (meta && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); toggleRec() }
-  else if (e.key === 'Escape' && $('#hist').classList.contains('show')) $('#hist').classList.remove('show')
+  else if (e.key === 'Escape') {
+    if ($('#hist').classList.contains('show')) $('#hist').classList.remove('show')
+    else if ($('#settings').classList.contains('show')) $('#settings').classList.remove('show')
+    else if (drawing) { drawing = null; renderMarks() }
+    else if (tool !== 'pick') setTool('pick')
+  }
 })
-addEventListener('resize', () => mode === 'collect' && drawOverlay())
-document.addEventListener('visibilitychange', () => { if (!document.hidden && mode === 'collect' && !nodes.length) capture() })
+addEventListener('resize', () => { if (mode === 'collect') { drawOverlay(); renderMarks() } })
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || mode !== 'collect') return
+  if (!nodes.length || pendingCapture) { pendingCapture = false; capture() }
+})
 async function health() {
   try {
     const h = await (await fetch('/api/health')).json()
@@ -922,13 +1175,20 @@ function renderDevices(devices, active) {
 }
 // Server-sent events: device list / active device / agent state arrive the moment they
 // change (adb track-devices behind it), in either mode. Falls back to the health poll.
-let sse = null, activeSerial = ''
+let sse = null, activeSerial = '', clientId = '', lastHash = ''
 function connectEvents() {
   try { sse?.close() } catch {}
-  sse = new EventSource('/api/events')
+  sse = new EventSource(`/api/events?watch=${mode === 'collect' ? 1 : 0}`)
   sse.onmessage = async e => {
     const ev = JSON.parse(e.data)
-    if (ev.type === 'device') {
+    if (ev.type === 'screen') {
+      // The device's UI tree changed under a still capture (the user drove the emulator
+      // window itself). Re-capture — unless a drawing is in progress or the tab is hidden.
+      if (mode !== 'collect' || ev.hash === lastHash) return
+      if (drawing || document.hidden) { pendingCapture = true; return }
+      await capture(); setStatus(t('st_screen_changed'), 'ok')
+    } else if (ev.type === 'device') {
+      if (ev.client) clientId = ev.client
       renderDevices(ev.devices || [], ev.serial || '')
       if (ev.serial !== activeSerial) {
         const was = activeSerial; activeSerial = ev.serial
@@ -965,7 +1225,7 @@ try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#o
 $('#optNotes2').checked = $('#optNotes').checked
 if (sttOverride !== null) $('#sttlang').value = sttOverride
 applyLang()
-loadDraft()
+loadDraft(); syncMarks()
 health(); setInterval(health, 20000)
 setMode('collect')
 </script>

@@ -58,6 +58,17 @@ when elements come from several screens.
 | **collect** | inserts a chip for the element under the cursor | right-click taps the device without leaving collect · ⇧wheel scrolls it |
 | **use** | goes to the device — taps, drags, wheel, keyboard | any character, including RTL scripts |
 
+Collect mode is not a still: while the page is in collect, the server polls the UI tree
+through the agent and the page re-captures the moment the screen changes — drive the
+emulator window itself and the composer follows.
+
+**Marks.** Pen, box or arrow, in three colours, drawn over the screen in collect mode. A
+drawing is a reference like an element: it enters the prompt as `@mark1` and expands to its
+bounds, the elements it covers (an arrow: what it points from and to) and the path of the
+screenshot with the numbered marks burned in, saved under `.emu-composer/marks/` — so the
+agent can open the picture. A line of dashes (`--`) between paragraphs turns the prompt
+into numbered items (`## 1`, `## 2`…).
+
 Several emulators running? The menu above the screen picks the one to mirror; each keeps
 its own agent. Devices that boot, die or return are noticed within a second (adb
 `track-devices` behind a server-sent-events feed) in either mode, and the composer moves to

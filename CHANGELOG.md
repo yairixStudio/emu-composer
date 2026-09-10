@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+- Collect mode follows the device: while a page is in collect, the server polls the UI tree
+  through the agent (0.7 s, no screenshot), hashes it without the status bar, and pushes a
+  `screen` event over SSE; the page re-captures on its own. Driving the emulator window
+  itself used to leave the composer on a stale still until the next manual action.
+- Marks: pen, box and arrow (three colours) drawn over the screen in collect mode. Each is a
+  `@mark` chip; the prompt gets a `# Marks` section with bounds, the elements the mark
+  covers (an arrow: what it points from and to) and the path of the screenshot with the
+  numbered marks burned in, written to `.emu-composer/marks/` as marks come and go.
+- A line of dashes in the prompt splits it into numbered items (`## 1`, `## 2`…), so an
+  agent treats five asks as five.
+- Coordinates come from the display size, not the first window in the dump: with a dialog
+  open every hit test, bound and crop was 1.28× off. The hit test no longer climbs to a
+  node that covers most of the screen (a photo used to resolve to the page around it).
 - Several emulators: a device menu above the screen; each device keeps its own agent.
   `adb track-devices` streams changes to the page over SSE, so an emulator that boots, dies
   or comes back is picked up within a second in either mode; the last device chosen by
