@@ -368,9 +368,12 @@ export const isLabel = t => /\p{L}{2,}/u.test(t) && !/^[\s\d$€£₪.,:%+-]+$/.
 export function screenTitleOf(nodes, H = 2400, pkg = '') {
   const app = pkg ? nodes.filter(n => n.pkg === pkg) : nodes
   const focused = app.find(n => n.focused && /EditText/.test(n.cls))
+  // Short first, then biggest: a header is a short line, and on a screen that has none the
+  // largest text near the top is a banner ("10 tasks the organizers prepared for attendees ·
+  // tap to import" was being reported as a screen name).
   const top = app.filter(n => n.text && isLabel(n.text) && n.y < 400 && n.h >= 40 && n.w < 900 && !/EditText/.test(n.cls)
       && !(focused && n.text === focused.text))
-    .sort((a, b) => (b.h * b.w) - (a.h * a.w))[0]
+    .sort((a, b) => (a.text.length > 30) - (b.text.length > 30) || (b.h * b.w) - (a.h * a.w))[0]
   const selTab = app.find(n => n.selected && n.y > H * 0.8 && n.h > 100)
   const selText = selTab ? app.find(m => m.i > selTab.i && m.depth > selTab.depth && m.text && isLabel(m.text)) : null
   const strict = [selText?.text, top?.text].filter((t, k, a) => t && a.indexOf(t) === k).join(' › ')
