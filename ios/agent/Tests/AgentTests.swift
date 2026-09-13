@@ -79,6 +79,36 @@ final class AgentServer {
                     let app = try self.app(q["bundle"] ?? "")
                     app.typeText(q["text"] ?? "")
                     result = ("200 OK", json(["ok": true]))
+                case "/swipe":
+                    // A press-and-drag between two points; `ms` sets how long the finger takes,
+                    // which is what turns a drag into a fling.
+                    let app = try self.app(q["bundle"] ?? "")
+                    let x1 = Double(q["x1"] ?? "") ?? 0, y1 = Double(q["y1"] ?? "") ?? 0
+                    let x2 = Double(q["x2"] ?? "") ?? 0, y2 = Double(q["y2"] ?? "") ?? 0
+                    let ms = Double(q["ms"] ?? "") ?? 200
+                    let origin = app.coordinate(withNormalizedOffset: .zero)
+                    let from = origin.withOffset(CGVector(dx: x1, dy: y1)), to = origin.withOffset(CGVector(dx: x2, dy: y2))
+                    let dist = hypot(x2 - x1, y2 - y1)
+                    let velocity = XCUIGestureVelocity(rawValue: max(200, dist / max(0.05, ms / 1000)))
+                    from.press(forDuration: 0.02, thenDragTo: to, withVelocity: velocity, thenHoldForDuration: 0.0)
+                    result = ("200 OK", json(["ok": true]))
+                case "/key":
+                    // Android key codes, mapped to what a simulator can do. BACK becomes the
+                    // interactive-pop gesture from the leading edge, which is what iOS has.
+                    let app = try self.app(q["bundle"] ?? "")
+                    switch q["code"] ?? "" {
+                    case "3": XCUIDevice.shared.press(.home)
+                    case "4":
+                        let origin = app.coordinate(withNormalizedOffset: .zero)
+                        let h = app.frame.height
+                        origin.withOffset(CGVector(dx: 2, dy: h / 2)).press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 260, dy: h / 2)))
+                    case "66": app.typeText("\n")
+                    case "67": app.typeText(XCUIKeyboardKey.delete.rawValue)
+                    case "111": app.typeText(XCUIKeyboardKey.escape.rawValue)
+                    case "187": throw NSError(domain: "emu-agent", code: 3, userInfo: [NSLocalizedDescriptionKey: "the app switcher has no XCUITest gesture"])
+                    default: throw NSError(domain: "emu-agent", code: 3, userInfo: [NSLocalizedDescriptionKey: "key code \(q["code"] ?? "") has no iOS mapping"])
+                    }
+                    result = ("200 OK", json(["ok": true]))
                 default: break
                 }
             } catch {

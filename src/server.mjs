@@ -436,7 +436,9 @@ async function doInput(cmd) {
     switch (cmd.type) {
       case 'tap': return agent.tap(activePkg(), cmd.x / k, cmd.y / k)
       case 'text': return agent.type(activePkg(), String(cmd.s))
-      default: throw userError(`${cmd.type} is not supported on the iOS Simulator yet — taps and typing are`)
+      case 'swipe': return agent.swipe(activePkg(), cmd.x1 / k, cmd.y1 / k, cmd.x2 / k, cmd.y2 / k, cmd.ms || 200)
+      case 'key': return agent.key(activePkg(), Number(cmd.code))
+      default: throw userError(`unknown input type: ${cmd.type}`)
     }
   }
   if (agent?.ready) {

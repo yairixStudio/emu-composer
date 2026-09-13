@@ -138,6 +138,8 @@ export class IosAgent {
   tree(bundle) { return this.get('/tree', { bundle }) }
   tap(bundle, x, y) { return this.get('/tap', { bundle, x, y }) }
   type(bundle, text) { return this.get('/type', { bundle, text }) }
+  swipe(bundle, x1, y1, x2, y2, ms = 200) { return this.get('/swipe', { bundle, x1, y1, x2, y2, ms }, 20000) }
+  key(bundle, code) { return this.get('/key', { bundle, code }, 20000) }
 
   async stop() { this.stopped = true; this.ready = false; if (this.proc) { this.proc.kill('SIGTERM'); this.proc = null } }
   async release() { return this.stop() }
