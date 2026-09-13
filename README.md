@@ -96,6 +96,7 @@ beside the Android project):
   "bundleId": "com.example.app",
   "sourceRoots": ["ios/Sources/App"],
   "strings": { "resolver": "lkey", "langs": ["he","en","es"], "files": "/Localization/" },
+  // or, for Apple's own formats:  { "resolver": "xcstrings" }   — String Catalogs + <lang>.lproj/*.strings
   "versionFile": "ios/project.yml"           // MARKETING_VERSION vs the installed Info.plist
 }
 ```
@@ -104,7 +105,11 @@ Booted simulators appear in the device menu beside the emulators. Picking one sw
 sources a reference resolves against to the Swift side: the `lkey` resolver reads
 `extension LStr { enum Shell { static let tabSchedule = LKey(he: …, en: …) } }` and finds the
 `L(LStr.Shell.tabSchedule)` call site, so a chip on a simulator lands on `TabModel.swift:24`
-the way a chip on an emulator lands on `RootScreen.kt:401`. `# Screen` says `iOS, simulator`,
+the way a chip on an emulator lands on `RootScreen.kt:401`. Apps without a registry use the
+`xcstrings` resolver: it reads String Catalogs (`Localizable.xcstrings`, every language and
+plural branch) and legacy `.lproj/*.strings` tables, where the key is usually the English copy
+itself — so `Text("Welcome back")` is the call site and the Hebrew on screen resolves to it.
+`# Screen` says `iOS, simulator`,
 `# Errors` reads the unified log (`log show`, error and fault levels, this app's process), and
 the version warning compares `MARKETING_VERSION` with the installed build.
 
@@ -117,9 +122,24 @@ bundle id and serves its `XCUIElementSnapshot` over HTTP for as long as
 npx emu-composer setup-ios-agent   # Xcode + XcodeGen (brew install xcodegen); a few minutes
 ```
 
-Taps and typing go through the same runner (`use` mode works); swipes and hardware keys do
-not yet. Frames arrive in points and are scaled to the screenshot's pixels, so bounds in the
-prompt are pixels on both platforms.
+Taps, typing, swipes and keys go through the same runner, so `use` mode works: a swipe is a
+press-and-drag whose speed follows the gesture (a fast one flings), HOME presses the home
+button, BACK is the interactive-pop drag from the leading edge (it pops a pushed screen and
+does nothing on a sheet — iOS has no back button), ENTER/DEL/ESC type the key, and RECENTS
+answers with a plain "no XCUITest gesture" instead of pretending. Frames arrive in points and
+are scaled to the screenshot's pixels, so bounds in the prompt are pixels on both platforms.
+
+## One screen, two platforms, one prompt
+
+The reason the simulator is here at all. Pick elements on the simulator, switch the device
+menu to the emulator, pick the same elements there, write the task once: the prompt comes out
+with `@ios1 @ios2 …` and `@android1 @android2 …` (never a shared `@ui` numbering), an
+`# Elements` section split into `## iOS` and `## Android` — each chip resolved against ITS
+platform's sources, `TabModel.swift:24` beside `RootScreen.kt:401` — a `# Screen (iOS)` and a
+`# Screen (Android)` block, and agent notes that name both code roots and both string
+registries and say to keep the two implementations in step. Chips in the editor show which
+device they came from the moment a second platform appears; a single-platform prompt is
+exactly what it was before.
 
 ## Two modes, one toggle (`⌘E`)
 
@@ -220,14 +240,15 @@ Two string registries are understood today: standard `res/values*/strings.xml` (
 [changelog](CHANGELOG.md).
 
 - [x] Collect / use modes, chips, full prompt, history, drafts
-- [x] android-xml and lkey resolvers with tests
+- [x] android-xml, lkey and xcstrings (String Catalogs / .strings) resolvers with tests
 - [x] On-device agent with a drilled self-healing lifecycle
 - [x] Dictation (OpenAI) with pause segmentation and caret anchoring
 - [x] macOS launcher app and floating bar
 - [x] Many projects in one daemon, switched by hand
 - [x] Optional `# Errors` (logcat + crashes) and `# Path` (screens walked) sections
 - [x] A problem bar that names what is wrong, with the button that fixes it
-- [x] iOS Simulator — collect, tap and type through a UI-test agent; swipes and keys pending
+- [x] iOS Simulator — collect, tap, type, swipe and keys through a UI-test agent
+- [x] One prompt for the same screen on both platforms (@ios*/@android*, two `# Screen` blocks)
 - [ ] Android Studio plugin for the embedded emulator
 - [ ] Linux launcher (the server and page already run there)
 

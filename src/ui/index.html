@@ -101,6 +101,8 @@
   .chip.flash{background:var(--ok);border-color:var(--ok);color:#04231a}
   .chip.stale{border-style:dashed;opacity:.8}
   .chip b{opacity:.6;font-weight:700}
+  #editor.dual .chip[data-platform="ios"] bdi::before{content:"iOS · ";opacity:.65;font-size:.85em}
+  #editor.dual .chip[data-platform="android"] bdi::before{content:"Android · ";opacity:.65;font-size:.85em}
   .interim{color:var(--accent2);opacity:.7;border-bottom:1px dotted var(--accent2)}
 
   #keyrow{display:none;gap:8px;align-items:center;background:#171213;border-bottom:1px solid #3a2a20}
@@ -302,7 +304,14 @@ function applyLang() {
   for (const c of document.querySelectorAll('.chip.mark')) { const r = refOf(c); if (r) c.querySelector('bdi').textContent = markLabel(r) }
 }
 const ed = $('#editor'), img = $('#shot')
-let nodes = [], captureId = 0, scale = 1, ctx = null, mode = 'collect', notesText = '', sttLanguage = ''
+let nodes = [], captureId = 0, scale = 1, ctx = null, mode = 'collect', notesText = '', notesBoth = '', sttLanguage = ''
+// The same screen on two devices makes ONE prompt: the last capture of each platform is kept,
+// chips remember which device they came from, and the prompt names both.
+const screenCtx = {}
+let lastPlatform = ''
+function platformsInEditor() { return new Set([...ed.querySelectorAll('.chip')].map(c => refOf(c)?.platform).filter(Boolean)) }
+function updateDual() { ed.classList.toggle('dual', platformsInEditor().size > 1) }
+function fetchNotes() { return fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || ''; notesBoth = d.both || '' }).catch(() => {}) }
 let refs = new Map()   // uid -> { label, block, node, captureId }
 let refN = 0
 const setStatus = (t, c = '') => { $('#status').textContent = t; $('#status').className = c }
@@ -374,6 +383,7 @@ async function capture() {
       const d = await r.json()
       if (d.error) throw new Error(d.error)
       nodes = d.nodes; ctx = d.context; captureId = d.id; lastHash = d.hash || ''
+      if (ctx?.platform) { screenCtx[ctx.platform] = ctx; if (ctx.platform !== lastPlatform) { lastPlatform = ctx.platform; fetchNotes() } }
       const src = `data:${d.image.mime};base64,${d.image.b64}`
       await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = src })
       // Device px per image px, from the DISPLAY size: the first node is whichever window
@@ -597,12 +607,14 @@ async function insertRef(i) {
   const uid = 'r' + (++refN)
   // Insert immediately with a placeholder block; the resolved block replaces it when the
   // server answers. The user never waits on the network to keep typing.
-  const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId, screen: ctx?.screen || '' }
+  const platform = ctx?.platform || ''
+  const ref = { label, block: `what: ${node.cls.split('.').pop()} — resolving…`, node, captureId, screen: ctx?.screen || '', platform }
   // <bdi> keeps a Hebrew label from dragging the "@" to its far side inside the LTR chip.
-  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
+  insertHTMLAtCaret(`<span class="chip" contenteditable="false" data-uid="${uid}" data-platform="${platform}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(label)}</bdi></span>&nbsp;`)
   const el = ed.querySelector(`[data-uid="${uid}"]`)
   setRef(el, ref)
   caretAfter(el)
+  updateDual()
   saveDraft()
   try {
     const d = await (await fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ captureId, i }) })).json()
@@ -724,12 +736,12 @@ function markBlock(m) {
 }
 function addMark(d) {
   const n = Math.max(0, ...allMarks().map(m => m.n)) + 1
-  const m = { kind: 'mark', n, shape: d.shape, color: d.color, colorName: COLOR_NAMES[d.color] || d.color, ...markGeometry(d), captureId, screen: ctx?.screen || '' }
+  const m = { kind: 'mark', n, shape: d.shape, color: d.color, colorName: COLOR_NAMES[d.color] || d.color, ...markGeometry(d), captureId, screen: ctx?.screen || '', platform: ctx?.platform || '' }
   m.label = markLabel(m); m.block = markBlock(m)
   const uid = 'r' + (++refN)
-  insertHTMLAtCaret(`<span class="chip mark" contenteditable="false" data-uid="${uid}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(m.label)}</bdi></span>&nbsp;`)
+  insertHTMLAtCaret(`<span class="chip mark" contenteditable="false" data-uid="${uid}" data-platform="${m.platform}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(m.label)}</bdi></span>&nbsp;`)
   const el = ed.querySelector(`[data-uid="${uid}"]`)
-  setRef(el, m); caretAfter(el); saveDraft()
+  setRef(el, m); caretAfter(el); updateDual(); saveDraft()
   syncMarks()
   setStatus(t('st_mark_added', n), 'ok')
 }
@@ -876,8 +888,12 @@ ed.addEventListener('input', () => { saveDraft(); syncMarks() })
 
 // ----------------------------------------------------- assembling the text --
 let orphans = 0
+const PF_NAME = { ios: 'iOS', android: 'Android' }
 function serialize() {
   const used = [], marks = []; orphans = 0
+  const dual = platformsInEditor().size > 1
+  // Two platforms: @ios1… and @android1… so the agent never confuses the two trees.
+  const tagOf = u => dual ? `@${u.platform || 'ui'}${used.filter(x => (x.platform || '') === (u.platform || '')).indexOf(u) + 1}` : `@ui${used.indexOf(u) + 1}`
   const walk = n => {
     if (n.nodeType === 3) return n.nodeValue
     if (n.nodeType !== 1) return ''
@@ -888,7 +904,7 @@ function serialize() {
       if (r.kind === 'mark') { if (!marks.some(m => m.n === r.n)) marks.push(r); return `@mark${r.n}` }
       let i = used.findIndex(u => u.uid === n.dataset.uid)
       if (i < 0) { used.push({ uid: n.dataset.uid, ...r }); i = used.length - 1 }
-      return `@ui${i + 1}`
+      return tagOf(used[i])
     }
     let out = ''
     if (/^(DIV|P)$/.test(n.tagName) && n.previousSibling) out += '\n'
@@ -906,25 +922,40 @@ function serialize() {
   const L = items.length > 1
     ? [`# Task (${items.length} separate items — address each one)`, '', ...items.flatMap((s, i) => [`## ${i + 1}`, s, ''])]
     : ['# Task', body || '(no text)', '']
-  if (used.length) {
+  if (dual) L.splice(1, 0, '(two platforms: @ios* elements were picked on the iOS Simulator, @android* on the Android emulator — the same screen on each)')
+  const elementLines = list => list.forEach(u => L.push(`### ${tagOf(u)} — ${JSON.stringify(u.label)}${u.what ? `  (${u.what})` : ''}`, u.block, ''))
+  if (used.length && dual) {
     L.push('# Elements', '')
-    used.forEach((u, i) => L.push(`### @ui${i + 1} — ${JSON.stringify(u.label)}${u.what ? `  (${u.what})` : ''}`, u.block, ''))
+    for (const pf of ['ios', 'android', '']) { const list = used.filter(u => (u.platform || '') === pf); if (list.length) { L.push(`## ${PF_NAME[pf] || 'Unknown device'}`, ''); elementLines(list) } }
+  } else if (used.length) {
+    L.push('# Elements', '')
+    elementLines(used)
   }
   if (marks.length) {
     const files = [...new Set(marks.map(m => m.file).filter(Boolean))]
     L.push('# Marks', `Drawn by the user on the screenshot${files.length ? ` — open ${files.join(', ')} to see them; the number in each badge is the mark's number` : ''}.`, '')
-    marks.sort((a, b) => a.n - b.n).forEach(m => L.push(`### @mark${m.n} — ${m.colorName} ${m.shape === 'rect' ? 'box' : m.shape}`, m.block + (m.file ? `\nimage:    ${m.file}` : ''), ''))
+    marks.sort((a, b) => a.n - b.n).forEach(m => L.push(`### @mark${m.n} — ${m.colorName} ${m.shape === 'rect' ? 'box' : m.shape}${dual && m.platform ? ` (${PF_NAME[m.platform]})` : ''}`, m.block + (m.file ? `\nimage:    ${m.file}` : ''), ''))
   }
-  if (ctx) {
+  // Elements picked across several screens: say so, so the agent does not assume one.
+  const screenLine = (c, list) => {
+    const screens = [...new Set(list.map(u => u.screen).filter(Boolean))]
+    if (screens.length > 1 || (screens.length === 1 && screens[0] !== c.screen)) L.push(`elements: picked on ${screens.length} screen${screens.length > 1 ? 's' : ''} — ${screens.join(' · ')}`)
+  }
+  if (dual) {
+    for (const pf of ['ios', 'android']) {
+      const c = screenCtx[pf]; if (!c) continue
+      L.push(c.block.replace(/^# Screen/, `# Screen (${PF_NAME[pf]})`))
+      screenLine(c, [...used, ...marks].filter(u => u.platform === pf))
+      L.push('')
+    }
+  } else if (ctx) {
     L.push(ctx.block)
-    // Elements picked across several screens: say so, so the agent does not assume one.
-    const screens = [...new Set(used.map(u => u.screen).filter(Boolean))]
-    if (screens.length > 1 || (screens.length === 1 && screens[0] !== ctx.screen)) L.push(`elements: picked on ${screens.length} screen${screens.length > 1 ? 's' : ''} — ${screens.join(' · ')}`)
+    screenLine(ctx, used)
     L.push('')
   }
   if ($('#optPath').checked && extras.path) L.push(extras.path, '')
   if ($('#optErrors').checked && extras.errors) L.push(extras.errors, '')
-  if ($('#optNotes').checked && notesText) L.push(notesText, '')
+  if ($('#optNotes').checked && (dual ? notesBoth || notesText : notesText)) L.push(dual ? notesBoth || notesText : notesText, '')
   return { text: L.join('\n').trim() + '\n', used: [...used, ...marks], orphans }
 }
 
@@ -953,7 +984,7 @@ $('#save').onclick = async () => {
     setStatus(t('st_saved', d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
-$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; saveDraft(); syncMarks(); setStatus(t('st_cleared')) }
+$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; updateDual(); saveDraft(); syncMarks(); setStatus(t('st_cleared')) }
 
 function cropOf(n, pad = 8) {
   if (!img.naturalWidth || mode !== 'collect') return ''
@@ -982,7 +1013,8 @@ function loadDraft() {
   try {
     const d = JSON.parse(localStorage.getItem('emucomposer.draft') || 'null'); if (!d) return
     ed.innerHTML = d.html || ''; refs = new Map(d.refs || []); refN = d.refN || 0
-    for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
+    for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); const r = refOf(c); if (r?.platform && !c.dataset.platform) c.dataset.platform = r.platform }
+    updateDual()
   } catch {}
 }
 function pushHistory(text) {
@@ -1228,7 +1260,7 @@ function onProjectSwitched(p) {
   nodes = []; captureId = 0; ctx = null; extras = { errors: '', path: '', errorCount: 0, pathSteps: 0 }
   for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
   drawOverlay()
-  fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
+  fetchNotes()
   if (p) setStatus(t('st_project_on', p.name), 'ok')
   if (mode === 'collect') capture()
   health()
@@ -1335,7 +1367,7 @@ $('#device').addEventListener('change', async e => {
 })
 
 $('#agentpill').onclick = async () => { setStatus(t('st_agent_starting'), 'busy'); const d = await (await fetch('/api/agent/restart', { method: 'POST' })).json(); setStatus(d.ok ? t('st_agent_on') : d.reason, d.ok ? 'ok' : 'err'); health() }
-fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || '' })
+fetchNotes()
 try { const d = localStorage.getItem('emucomposer.dir'); if (d) $(`#dirseg [data-dir="${d}"]`)?.click() } catch {}
 try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
 try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emucomposer.' + id); if (v !== null) $('#opt' + id).checked = v === '1' } } catch {}

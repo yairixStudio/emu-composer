@@ -372,12 +372,14 @@ function noteScreen(title) {
   if (!title) return
   const last = trail[trail.length - 1]
   if (last && last.title === title) { last.at = Date.now(); return }
-  trail.push({ title, at: Date.now() })
+  trail.push({ title, at: Date.now(), kind: state.kind })
   if (trail.length > 20) trail.shift()
 }
 function trailBlock() {
   if (trail.length < 2) return ''
-  const names = trail.map(x => x.title)
+  // One session may walk both platforms; then each step says which one it was on.
+  const mixed = new Set(trail.map(x => x.kind)).size > 1
+  const names = trail.map(x => mixed ? `${x.title} (${x.kind === 'ios' ? 'iOS' : 'Android'})` : x.title)
   return ['# Path', `walked:   ${names.join('  ›  ')}`,
     '          (the screens visited in this session, oldest first — how to reach the current one)'].join('\n')
 }
@@ -538,6 +540,7 @@ async function gatherContext(nodes, activity) {
     device: s.ios ? `${s.model} · ${s.release} (simulator) · ${s.size} @${s.density}` : `${s.model} · Android ${s.release} (API ${s.sdk}) · ${s.size} @ ${s.density}dpi · locale ${s.locale}`,
     repo: `${branch || '?'} @ ${head || '?'}${dirty ? ` (${dirty} uncommitted)` : ''}${s.repoVer ? ` · declares ${s.repoVer} (${s.repoCode})${mismatch ? '' : ' — matches the installed build'}` : ''}`,
     versionMismatch: mismatch,
+    platform: s.ios ? 'ios' : 'android',
   }
   ctx.block = renderScreenBlock(ctx)
   return ctx
@@ -654,18 +657,34 @@ async function referenceFor(cap, i) {
   return { title, what, screen: cap.ctx?.screen || '', lines: L, block: L.join('\n'), _hints: debugHints }
 }
 
-function agentNotes(size) {
-  if (Array.isArray(P.cfg.notes)) return ['# Notes for the agent', ...P.cfg.notes].join('\n')
-  const st = activeStrings(), res = st.resolver
-  const strings = res === 'lkey'
-    ? `Copy lives as LKey(${(st.langs || []).join('/')}) ${isIos() ? 'constants in enums (extension LStr { enum X { static let … } }) and is rendered via L(...): edit the LKey, not the view' : 'objects and is rendered via l(...): to change wording, edit the LKey, not the composable'}.`
+function stringsNote(ios) {
+  const st = (ios ? P.cfg.ios?.strings : P.cfg.strings) || { resolver: 'none' }, res = st.resolver
+  return res === 'lkey'
+    ? `Copy lives as LKey(${(st.langs || []).join('/')}) ${ios ? 'constants in enums (extension LStr { enum X { static let … } }) and is rendered via L(...): edit the LKey, not the view' : 'objects and is rendered via l(...): to change wording, edit the LKey, not the composable'}.`
     : res === 'android-xml'
       ? 'Copy lives in res/values*/strings.xml as <string name>: to change wording, edit the resource (every locale), not the code.'
-      : 'On-screen copy did not resolve to a string registry; search the sources for the literal.'
+      : res === 'xcstrings'
+        ? 'Copy lives in String Catalogs (.xcstrings) / .lproj .strings tables keyed by the source-language text: to change wording, edit the catalog entry (every language), not the view.'
+        : 'On-screen copy did not resolve to a string registry; search the sources for the literal.'
+}
+function agentNotes(size) {
+  if (Array.isArray(P.cfg.notes)) return ['# Notes for the agent', ...P.cfg.notes].join('\n')
   return ['# Notes for the agent',
     `- Platform: ${isIos() ? 'iOS only — this prompt was composed against the iOS Simulator' : 'Android only — this prompt was composed against the Android emulator'}. Code: ${activeRoots().join(', ') || '(see repo)'}.`,
-    `- ${strings}`,
+    `- ${stringsNote(isIos())}`,
     `- bounds are display px on a ${size || '?'} screen, [x1,y1]→[x2,y2]. "tap:" names the actually-clickable node when the picked one is only a label inside it.`,
+  ].join('\n')
+}
+// The same screen picked on both devices: one prompt, both platforms named, each with its own
+// code roots and string registry. Only offered when the project declares an iOS side.
+function bothNotes() {
+  if (Array.isArray(P.cfg.notes) || !P.cfg.ios) return ''
+  return ['# Notes for the agent',
+    `- Platforms: BOTH — this prompt was composed against the iOS Simulator (@ios* elements) and the Android emulator (@android* elements), the same screen on each. iOS code: ${(P.cfg.ios.sourceRoots || []).join(', ') || '(see repo)'} · Android code: ${(P.cfg.sourceRoots || []).join(', ') || '(see repo)'}.`,
+    `- iOS: ${stringsNote(true)}`,
+    `- Android: ${stringsNote(false)}`,
+    '- Each platform has its own "# Screen" block; bounds are display px on THAT device, [x1,y1]→[x2,y2]. "tap:" names the actually-clickable node when the picked one is only a label inside it.',
+    '- Keep the two implementations in step: what changes on one platform changes on the other unless the task says which one.',
   ].join('\n')
 }
 
@@ -820,7 +839,7 @@ const server = http.createServer(async (req, res) => {
         execFile('open', [`http://localhost:${PORT}`], () => {})
         return send(res, 200, { ok: true })
       case '/api/notes':
-        return send(res, 200, { notes: agentNotes((await staticContext()).size) })
+        return send(res, 200, { notes: agentNotes((await staticContext()).size), both: bothNotes(), platform: isIos() ? 'ios' : 'android' })
       case '/api/events': {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
         res.clientId = crypto.randomUUID()
