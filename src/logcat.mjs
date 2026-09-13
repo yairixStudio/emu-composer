@@ -49,9 +49,17 @@ export function filterLog({ main = '', crash = '', pkg = '', pid = '', max = 25 
   return { lines, count: lines.length }
 }
 
-export function errorBlock({ lines, pkg, pid }) {
+// Identical lines (after their timestamp) collapse to one with a count — shared by the
+// Android path above and the iOS unified-log path.
+export function collapseLines(raw, max = 25) {
+  const seen = new Map()
+  for (const l of raw) { const k = l.replace(/^[\d-]+ [\d:.+-]+ /, ''); seen.set(k, (seen.get(k) || 0) + 1) }
+  return [...seen.entries()].map(([l, n]) => (n > 1 ? `${l}   (x${n})` : l)).slice(-max)
+}
+
+export function errorBlock({ lines, pkg = '', pid = '', source = '' }) {
   if (!lines.length) return ''
   return ['# Errors',
-    `source:   adb logcat, error level and the crash buffer, filtered to ${pkg}${pid ? ` (pid ${pid})` : ' — the app is not running, so these are from an earlier run'}`,
+    `source:   ${source || `adb logcat, error level and the crash buffer, filtered to ${pkg}${pid ? ` (pid ${pid})` : ' — the app is not running, so these are from an earlier run'}`}`,
     '', lines.join('\n').slice(0, 4000)].join('\n')
 }

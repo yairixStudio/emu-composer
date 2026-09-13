@@ -22,6 +22,9 @@ export const DEFAULTS = {
   adb: 'auto',
   avd: '',                     // AVD to boot when no device is attached ('' = first listed)
   stt: { model: 'gpt-4o-transcribe', language: '' },
+  // Optional: the same app on the iOS Simulator. Its own bundle id, sources and string
+  // registry, so a reference picked on a simulator resolves against Swift, not Kotlin.
+  ios: null,   // { bundleId, sourceRoots: [], strings: { resolver, files, langs }, versionFile }
 }
 
 export function findConfig(from = process.cwd()) {
@@ -42,6 +45,10 @@ export async function loadConfig(configPath) {
   cfg.configPath = configPath
   if (!cfg.package) throw new Error(`${CONFIG_NAME}: "package" is required (the app's applicationId)`)
   cfg.appName ||= cfg.package.split('.').pop()
+  if (cfg.ios) {
+    if (!cfg.ios.bundleId) throw new Error(`${CONFIG_NAME}: "ios.bundleId" is required when an "ios" block is present`)
+    cfg.ios = { sourceRoots: [], versionFile: '', ...cfg.ios, strings: { resolver: 'lkey', ...(cfg.ios.strings || {}) } }
+  }
   cfg.adbPath = cfg.adb === 'auto' ? findAdb() : cfg.adb
   return cfg
 }
@@ -104,6 +111,27 @@ export async function detect(root) {
     out.findings.push('no string registry found → on-screen text will not resolve to source')
   }
   out.appName = out.package.split('.').pop() || ''
+
+  // iOS beside it? An XcodeGen project.yml is the common monorepo shape (ios/project.yml);
+  // a bare .xcodeproj is read for its bundle id only.
+  const ymls = await findFiles(root, f => f === 'project.yml', 3)
+  for (const y of ymls) {
+    const src = await fs.readFile(y, 'utf8')
+    const bid = /PRODUCT_BUNDLE_IDENTIFIER:\s*["']?([\w.-]+)/.exec(src)
+    if (!bid) continue
+    const iosRoot = path.dirname(y)
+    const srcDirs = await findDirs(iosRoot, d => /\/Sources$/.test(d), 2)
+    const rootsRel = (srcDirs.length ? srcDirs : [iosRoot]).map(d => path.relative(root, d))
+    const lkey = await grepAny(srcDirs[0] || iosRoot, /=\s*LKey\s*\(/, /\.swift$/)
+    out.ios = {
+      bundleId: bid[1],
+      sourceRoots: rootsRel,
+      strings: lkey ? { resolver: 'lkey', langs: ['he', 'en', 'es'], files: '/Localization/|Strings\\+\\w+\\.swift$' } : { resolver: 'none' },
+      versionFile: path.relative(root, y),
+    }
+    out.findings.push(`iOS: bundle ${bid[1]} in ${out.ios.versionFile}${lkey ? ' · LKey registry' : ''}`)
+    break
+  }
   return out
 }
 
@@ -120,6 +148,7 @@ export function renderConfig(d) {
     avd: '',
     stt: { model: 'gpt-4o-transcribe', language: '' },
   }
+  if (d.ios) cfg.ios = d.ios
   return JSON.stringify(cfg, null, 2) + '\n'
 }
 
@@ -147,8 +176,8 @@ async function findDirs(root, pred, depth, out = []) {
   }
   return out
 }
-async function grepAny(dir, re) {
-  const files = await findFiles(dir, f => f.endsWith('.kt'), 8)
+async function grepAny(dir, re, ext = /\.kt$/) {
+  const files = await findFiles(dir, f => ext.test(f), 8)
   for (const f of files.slice(0, 400)) { try { if (re.test(await fs.readFile(f, 'utf8'))) return true } catch {} }
   return false
 }

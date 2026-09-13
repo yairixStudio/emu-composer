@@ -29,7 +29,7 @@ export class StringIndex {
     const t0 = Date.now()
     this.byValue.clear(); this.byKey.clear(); this.usage.clear(); this.literal.clear()
     let files = []
-    for (const r of this.cfg.sourceRoots) files.push(...await walk(path.join(this.root, r), /\.(kt|java)$/))
+    for (const r of this.cfg.sourceRoots) files.push(...await walk(path.join(this.root, r), /\.(kt|java|swift)$/))
     const s = this.cfg.strings
     if (s.resolver === 'lkey') {
       const re = new RegExp(s.files || '/l10n/|Strings\\.kt$')
@@ -49,7 +49,7 @@ export class StringIndex {
       const rel = path.relative(this.root, f)
       const src = await fs.readFile(f, 'utf8')
       this._indexUsages(rel, src)
-      if (/\.(kt|java)$/.test(rel)) this._indexLiterals(rel, src)
+      if (/\.(kt|java|swift)$/.test(rel)) this._indexLiterals(rel, src)
     }
     this.dirty = false
     this.stats = { files: files.length, keys: this.byKey.size, ms: Date.now() - t0, resolver: s.resolver }
@@ -67,19 +67,26 @@ export class StringIndex {
 
   // `object LShell { val tabSchedule = LKey(he = "לוז", en = "Schedule") … }` — the call may
   // span several lines; scan from the `val` to the matching `)`.
+  // Kotlin: `object LShell { val tabSchedule = LKey(he = "לוז", en = "Schedule") }` → LShell.tabSchedule
+  // Swift:  `extension LStr { enum Shell { static let tabSchedule = LKey(he: "לוז", en: "Schedule") } }`
+  //         → LStr.Shell.tabSchedule (the same registry idea, one nesting level deeper)
   _indexLKey(rel, src, langs) {
     const lines = src.split('\n')
-    let object = ''
+    const swift = /\.swift$/.test(rel)
+    let object = '', ext = ''
     for (let i = 0; i < lines.length; i++) {
-      const om = /^\s*(?:private\s+)?object\s+(\w+)/.exec(lines[i])
-      if (om) { object = om[1]; continue }
-      const vm = /^\s*val\s+(\w+)\s*=\s*LKey\s*\(/.exec(lines[i])
+      const om = swift ? /^\s*(?:public\s+|private\s+)?enum\s+(\w+)/.exec(lines[i]) : /^\s*(?:private\s+)?object\s+(\w+)/.exec(lines[i])
+      const xm = swift ? /^\s*(?:public\s+)?extension\s+(\w+)/.exec(lines[i]) : null
+      if (xm) { ext = xm[1]; object = ''; continue }
+      if (om) { object = ext ? `${ext}.${om[1]}` : om[1]; continue }
+      const vm = swift ? /^\s*(?:public\s+|static\s+)*let\s+(\w+)\s*=\s*LKey\s*\(/.exec(lines[i]) : /^\s*val\s+(\w+)\s*=\s*LKey\s*\(/.exec(lines[i])
       if (!vm || !object) continue
       let buf = lines[i]; let j = i
       while (!balanced(buf) && j < lines.length - 1) buf += '\n' + lines[++j]
       const key = `${object}.${vm[1]}`
       const entry = this.byKey.get(key) || { key, file: rel, line: i + 1, values: {} }
-      for (const m of buf.matchAll(/\b(\w{2,5})\s*=\s*"((?:[^"\\]|\\.)*)"/g)) if (langs.includes(m[1])) this._add(entry, m[1], unescapeKt(m[2]))
+      // `he = "…"` in Kotlin, `he: "…"` in Swift.
+      for (const m of buf.matchAll(/\b(\w{2,5})\s*[=:]\s*"((?:[^"\\]|\\.)*)"/g)) if (langs.includes(m[1])) this._add(entry, m[1], unescapeKt(m[2]))
       i = j
     }
   }
@@ -113,6 +120,8 @@ export class StringIndex {
       } else if (res === 'lkey') {
         if (new RegExp(this.cfg.strings.files || '/l10n/|Strings\\.kt$').test(rel)) continue
         for (const m of line.matchAll(/\b(L[A-Z][A-Za-z]+)\.([a-z][A-Za-z0-9]*)\b/g)) keys.push(`${m[1]}.${m[2]}`)
+        // Swift's two-level form (LStr.Shell.tabSchedule): only a key the registry actually holds.
+        for (const m of line.matchAll(/\b([A-Z]\w*)\.([A-Z]\w*)\.([a-z][A-Za-z0-9]*)\b/g)) { const k = `${m[1]}.${m[2]}.${m[3]}`; if (this.byKey.has(k)) keys.push(k) }
       }
       for (const key of keys) {
         const list = this.usage.get(key) || []

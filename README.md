@@ -85,6 +85,42 @@ colour and gold on a prompt about a bug:
   agent can reproduce the state rather than guess at it. A screen with no header and no
   selected tab is named after its heading rather than left out.
 
+## The iOS Simulator, too
+
+The same page, the same chips, the same prompt — against a booted iOS Simulator. Add an
+`ios` block to `emu-composer.json` (`init` writes one when it finds an XcodeGen `project.yml`
+beside the Android project):
+
+```jsonc
+"ios": {
+  "bundleId": "com.example.app",
+  "sourceRoots": ["ios/Sources/App"],
+  "strings": { "resolver": "lkey", "langs": ["he","en","es"], "files": "/Localization/" },
+  "versionFile": "ios/project.yml"           // MARKETING_VERSION vs the installed Info.plist
+}
+```
+
+Booted simulators appear in the device menu beside the emulators. Picking one switches the
+sources a reference resolves against to the Swift side: the `lkey` resolver reads
+`extension LStr { enum Shell { static let tabSchedule = LKey(he: …, en: …) } }` and finds the
+`L(LStr.Shell.tabSchedule)` call site, so a chip on a simulator lands on `TabModel.swift:24`
+the way a chip on an emulator lands on `RootScreen.kt:401`. `# Screen` says `iOS, simulator`,
+`# Errors` reads the unified log (`log show`, error and fault levels, this app's process), and
+the version warning compares `MARKETING_VERSION` with the installed build.
+
+**The tree needs an agent, like Android's.** `simctl` has screenshots but no accessibility
+tree, so the tree comes from a UI-test bundle (`ios/agent/`) that attaches to any app by
+bundle id and serves its `XCUIElementSnapshot` over HTTP for as long as
+`xcodebuild test-without-building` keeps it alive — the simulator twin of `u2.jar`. Built once:
+
+```
+npx emu-composer setup-ios-agent   # Xcode + XcodeGen (brew install xcodegen); a few minutes
+```
+
+Taps and typing go through the same runner (`use` mode works); swipes and hardware keys do
+not yet. Frames arrive in points and are scaled to the screenshot's pixels, so bounds in the
+prompt are pixels on both platforms.
+
 ## Two modes, one toggle (`⌘E`)
 
 | | a click… | also |
@@ -191,7 +227,7 @@ Two string registries are understood today: standard `res/values*/strings.xml` (
 - [x] Many projects in one daemon, switched by hand
 - [x] Optional `# Errors` (logcat + crashes) and `# Path` (screens walked) sections
 - [x] A problem bar that names what is wrong, with the button that fixes it
-- [ ] iOS Simulator (the same idea over `xcrun simctl` + the accessibility tree)
+- [x] iOS Simulator — collect, tap and type through a UI-test agent; swipes and keys pending
 - [ ] Android Studio plugin for the embedded emulator
 - [ ] Linux launcher (the server and page already run there)
 

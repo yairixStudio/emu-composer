@@ -15,8 +15,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Agent } from './agent.mjs'
+import { IosAgent, listSimulators, screenshotPng, installedApp, deviceProps, launch as simLaunch, iosNodes } from './ios.mjs'
 import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise, firstText, countTexts, rankKeys, siblingHints, screenTitleOf } from './resolve.mjs'
-import { filterLog, errorBlock } from './logcat.mjs'
+import { filterLog, errorBlock, collapseLines } from './logcat.mjs'
 import { HOME } from './config.mjs'
 
 const execFileP = promisify(execFile)
@@ -41,8 +42,9 @@ let P = null                    // the active project record
 const outDir = () => path.join(P.cfg.root, '.emu-composer')
 
 async function addProject(cfg) {
-  const rec = projects.get(cfg.configPath) || { id: cfg.configPath, cfg, index: new StringIndex(cfg) }
+  const rec = projects.get(cfg.configPath) || { id: cfg.configPath, cfg, index: new StringIndex(cfg), indexIos: null }
   rec.cfg = cfg
+  if (cfg.ios && !rec.indexIos) rec.indexIos = new StringIndex({ root: cfg.root, sourceRoots: cfg.ios.sourceRoots, strings: cfg.ios.strings })
   rec.rules = await agentRuleFiles(cfg.root)
   projects.set(cfg.configPath, rec)
   await saveRegistry()
@@ -76,18 +78,21 @@ async function activate(id, why = '') {
   const prev = P
   P = rec
   staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null
-  prev?.index.unwatch()
+  prev?.index.unwatch(); prev?.indexIos?.unwatch()
   log(`project → ${rec.cfg.appName} (${rec.cfg.package})${why ? ` (${why})` : ''}`)
-  const st = await rec.index.ensure().then(() => rec.index.stats)
-  if (st) log(`string index (${st.resolver}): ${st.keys} keys from ${st.files} files in ${st.ms} ms`)
-  rec.index.watch(() => rec.index.build().then(s => log(`string index rebuilt: ${s.keys} keys`)))
+  for (const [ix, what] of [[rec.index, 'android'], [rec.indexIos, 'ios']]) {
+    if (!ix) continue
+    const st = await ix.ensure().then(() => ix.stats)
+    if (st) log(`string index ${what} (${st.resolver}): ${st.keys} keys from ${st.files} files in ${st.ms} ms`)
+    ix.watch(() => ix.build().then(s => log(`string index ${what} rebuilt: ${s.keys} keys`)))
+  }
   broadcast({ type: 'project', ...projectList() })
   return rec
 }
 
 const projectList = () => ({
   active: P?.id || '',
-  projects: [...projects.values()].map(r => ({ id: r.id, name: r.cfg.appName, package: r.cfg.package, root: r.cfg.root })),
+  projects: [...projects.values()].map(r => ({ id: r.id, name: r.cfg.appName, package: r.cfg.package, root: r.cfg.root, ios: Boolean(r.cfg.ios) })),
 })
 
 // Which agent-rule files this repo carries, so the prompt can point the agent at them.
@@ -101,7 +106,17 @@ async function agentRuleFiles(root) {
 // ---------------------------------------------------------------- devices ---
 // Several emulators may run at once; the page picks which one the composer mirrors. Every
 // adb call reads the ACTIVE serial at call time, and each device keeps its own agent.
-const state = { serial: process.env.ANDROID_SERIAL || '' }
+// `kind` is 'android' (an adb serial) or 'ios' (a simulator udid). Everything that talks to
+// a device branches on it once, here; the page and the prompt do not care.
+const state = { serial: process.env.ANDROID_SERIAL || '', kind: 'android' }
+const isIos = () => state.kind === 'ios'
+const IOS_UDID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i
+// The package / bundle, sources and string registry the ACTIVE device resolves against.
+const activePkg = () => (isIos() ? P.cfg.ios?.bundleId : P.cfg.package) || ''
+const activeRoots = () => (isIos() ? P.cfg.ios?.sourceRoots : P.cfg.sourceRoots) || []
+const activeStrings = () => (isIos() ? P.cfg.ios?.strings : P.cfg.strings) || { resolver: 'none' }
+const activeIndex = () => (isIos() ? P.indexIos : P.index)
+const requireIos = () => { if (isIos() && !P.cfg.ios) throw userError(`${P.cfg.appName} has no "ios" block in emu-composer.json — add bundleId, sourceRoots and strings for the simulator`) }
 const adb = (args, opts = {}) =>
   execFileP(ADB, state.serial ? ['-s', state.serial, ...args] : args, { maxBuffer: 64 << 20, encoding: 'buffer', ...opts })
 const adbText = async args => (await adb(args)).stdout.toString('utf8')
@@ -111,7 +126,12 @@ const sh = cmd => execFileP('/bin/sh', ['-c', cmd], { cwd: P.cfg.root, maxBuffer
 const agents = new Map()
 let agent = null
 function agentFor(serial) {
-  if (!agents.has(serial)) agents.set(serial, new Agent({ adb: ADB, serial, jar: JAR, log: (...a) => log(`[${serial}]`, ...a) }))
+  if (!agents.has(serial)) {
+    const alog = (...a) => log(`[${serial.slice(0, 13)}]`, ...a)
+    // One runner per simulator, each on its own port: a udid is stable across boots.
+    const port = 8100 + (Array.from(serial).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 200)
+    agents.set(serial, IOS_UDID.test(serial) ? new IosAgent({ udid: serial, port, log: alog }) : new Agent({ adb: ADB, serial, jar: JAR, log: alog }))
+  }
   return agents.get(serial)
 }
 
@@ -130,8 +150,10 @@ async function listDevices() {
         .then(r => r.stdout.split('\n')[0].trim()).catch(() => '')
       if (avd && !/^(OK|KO)/.test(avd)) avdNames.set(serial, avd); else avd = ''
     }
-    return { serial, state: st, model: kv.model || kv.product || '', avd, active: serial === state.serial }
+    return { serial, kind: 'android', state: st, model: kv.model || kv.product || '', avd, active: serial === state.serial }
   }))
+  // Booted iOS simulators sit in the same list; the page shows them in the same menu.
+  for (const d of await listSimulators()) devices.push({ ...d, active: d.serial === state.serial })
   return devices
 }
 
@@ -146,7 +168,8 @@ async function switchDevice(serial, why = '') {
   if (serial === state.serial && agent) return
   const old = agent
   state.serial = serial
-  staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null
+  state.kind = IOS_UDID.test(serial) ? 'ios' : 'android'
+  staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null; iosScreen = null
   agent = serial ? agentFor(serial) : null
   log(`device → ${serial || '(none)'}${why ? ` (${why})` : ''}`)
   if (old && old !== agent) await old.stop().catch(() => {})
@@ -166,7 +189,13 @@ function broadcast(ev) {
   const line = `data: ${JSON.stringify(ev)}\n\n`
   for (const res of sseClients) { try { res.write(line) } catch {} }
 }
+let simSig = ''
+async function pollSimulators() {
+  const sig = (await listSimulators()).map(d => d.serial).sort().join('|')
+  if (sig !== simSig) { simSig = sig; onDevicesChanged() }
+}
 function trackDevices() {
+  setInterval(() => pollSimulators().catch(() => {}), 3000)
   const p = spawn(ADB, ['track-devices'], { stdio: ['ignore', 'pipe', 'ignore'] })
   let buf = ''
   let timer = null
@@ -253,15 +282,37 @@ function parseNodes(xml) {
 const captures = new Map()
 let captureSeq = 0
 
+// The iOS Simulator: one screenshot through simctl, one tree through the runner. Frames come
+// in POINTS from XCUITest and the screenshot in pixels; the ratio is the scale, remembered so
+// input can go the other way. Foreground = the app's own state, which the runner reports.
+let iosScreen = null   // { w, h, scale } of the active simulator, from its last screenshot
+async function captureIos() {
+  requireIos()
+  const bundle = activePkg()
+  if (!agent || !(await agent.ensureReady(agent._starting ? 30000 : 3000))) throw userError(agent?.reason || 'the iOS agent is not running')
+  const [png, tree] = await Promise.all([screenshotPng(state.serial), agent.tree(bundle)])
+  const w = png.readUInt32BE(16), h = png.readUInt32BE(20)
+  const root = (tree.nodes || [])[0]
+  const scale = root && root.w > 0 ? w / root.w : 3
+  iosScreen = { w, h, scale }
+  const nodes = buildTree(iosNodes(tree, scale, bundle))
+  return { nodes, image: { mime: 'image/png', b64: png.toString('base64') }, source: 'ios-agent', activity: tree.state === 4 ? bundle : (tree.state ? `${bundle} (background)` : '') }
+}
+
 async function capture() {
   const t0 = Date.now()
-  let xml, image, source
+  let xml, image, source, nodes, activity
+  if (!agent && await pickDefaultSerial()) await switchDevice(await pickDefaultSerial())
+  if (!state.serial) throw userError('no device attached — start an emulator or a simulator, then pick it in the device menu')
+  if (isIos()) {
+    const r = await captureIos()
+    nodes = r.nodes; image = r.image; source = r.source; activity = r.activity
+    return finishCapture(t0, nodes, image, source, activity)
+  }
   // `dumpsys window windows` prints no mCurrentFocus on API 34; the unfiltered dump does.
   const focusP = adbText(['shell', 'dumpsys window | grep -m1 mCurrentFocus']).catch(() => '')
   // Give a starting/restarting agent a bounded chance (8 s) before taking the slow path —
   // never wait on it indefinitely: a hung restart once queued every capture for a minute.
-  if (!agent && await pickDefaultSerial()) await switchDevice(await pickDefaultSerial())
-  if (!state.serial) throw userError('no device attached — start an emulator, then pick it in the device menu')
   if (agent && await agent.ensureReady(agent._starting ? 4000 : 1500)) {
     try {
       const [x, jpg] = await Promise.all([agent.dump(), agent.screenshotJpegB64(85)])
@@ -280,8 +331,12 @@ async function capture() {
       if (agent && await agent.available()) { agent.stopped = false; agent.scheduleRestart('after slow path', 2000) }
     }
   }
-  const nodes = parseNodes(xml)
-  const activity = (/mCurrentFocus=Window\{[^}]*?\s(\S+\/\S+)\}/.exec(await focusP) || [])[1] || ''
+  nodes = parseNodes(xml)
+  activity = (/mCurrentFocus=Window\{[^}]*?\s(\S+\/\S+)\}/.exec(await focusP) || [])[1] || ''
+  return finishCapture(t0, nodes, image, source, activity)
+}
+
+async function finishCapture(t0, nodes, image, source, activity) {
   lastActivity = activity
   const id = ++captureSeq
   const ctx = await gatherContext(nodes, activity)
@@ -338,11 +393,11 @@ async function watchScreen() {
       await new Promise(r => setTimeout(r, 700))
       if (!agent?.ready || !anyWatcher()) continue
       try {
-        const nodes = parseNodes(await agent.dump())
+        const nodes = isIos() ? buildTree(iosNodes(await agent.tree(activePkg()), iosScreen?.scale || 3, activePkg())) : parseNodes(await agent.dump())
         const h = screenHash(nodes)
         if (h !== lastHash) {
           lastHash = h
-          noteScreen(screenTitleOf(nodes, screenH, P.cfg.package) || activityName(lastActivity))
+          noteScreen(screenTitleOf(nodes, screenH, activePkg()) || activityName(lastActivity))
           log(`screen changed (${h})`)
           broadcast({ type: 'screen', hash: h })
         }
@@ -358,6 +413,7 @@ async function frame() {
   if (framing) return null
   framing = true
   try {
+    if (isIos()) return { mime: 'image/png', bytes: await screenshotPng(state.serial) }
     if (agent?.ready) {
       try { return { mime: 'image/jpeg', bytes: Buffer.from(await agent.screenshotJpegB64(70), 'base64') } }
       catch (e) { log('agent frame failed:', e.message) }   // rpc() already scheduled the restart
@@ -373,6 +429,16 @@ const userError = msg => { const e = new Error(msg); e.userFacing = true; return
 
 async function doInput(cmd) {
   const r = v => String(Math.round(v))
+  if (isIos()) {
+    requireIos()
+    if (!agent?.ready) throw userError(agent?.reason || 'the iOS agent is not running')
+    const k = iosScreen?.scale || 3
+    switch (cmd.type) {
+      case 'tap': return agent.tap(activePkg(), cmd.x / k, cmd.y / k)
+      case 'text': return agent.type(activePkg(), String(cmd.s))
+      default: throw userError(`${cmd.type} is not supported on the iOS Simulator yet — taps and typing are`)
+    }
+  }
   if (agent?.ready) {
     switch (cmd.type) {
       case 'tap': return agent.click(cmd.x, cmd.y)
@@ -399,6 +465,24 @@ async function doInput(cmd) {
 let staticCtx = null, staticAt = 0, screenH = 2400
 async function staticContext() {
   if (staticCtx && Date.now() - staticAt < 120000) return staticCtx
+  if (isIos()) {
+    requireIos()
+    const [app, props, yml] = await Promise.all([
+      installedApp(state.serial, activePkg()), deviceProps(state.serial),
+      P.cfg.ios.versionFile ? sh(`sed -n '1,200p' ${JSON.stringify(P.cfg.ios.versionFile)}`) : Promise.resolve(''),
+    ])
+    if (!iosScreen) { try { const png = await screenshotPng(state.serial); iosScreen = { w: png.readUInt32BE(16), h: png.readUInt32BE(20), scale: 3 } } catch {} }
+    staticCtx = {
+      model: props.name || 'simulator', release: props.os || 'iOS', sdk: '', locale: '',
+      size: iosScreen ? `${iosScreen.w}x${iosScreen.h}` : '', density: iosScreen ? `${iosScreen.scale}x` : '',
+      installedVer: app.version, installedCode: app.build, debuggable: true, ios: true,
+      repoVer: (/MARKETING_VERSION:\s*["']?([\d.]+)/.exec(yml) || /CFBundleShortVersionString<\/key>\s*<string>([\d.]+)/.exec(yml) || [])[1] || '',
+      repoCode: (/CURRENT_PROJECT_VERSION:\s*["']?(\d+)/.exec(yml) || [])[1] || '',
+    }
+    staticAt = Date.now()
+    screenH = iosScreen?.h || 2400
+    return staticCtx
+  }
   const [props, pkgInfo, gradle] = await Promise.all([
     adbText(['shell', 'getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; ' +
       'getprop persist.sys.locale; getprop ro.product.locale; wm size; wm density']).catch(() => ''),
@@ -428,19 +512,20 @@ async function gatherContext(nodes, activity) {
     sh('git rev-parse --short HEAD').then(t => t.trim()),
     sh('git status --porcelain | wc -l').then(t => Number(t.trim())),
   ])
-  const appNodes = nodes.filter(n => n.pkg === P.cfg.package)
-  const focused = appNodes.find(n => n.focused && /EditText/.test(n.cls))
+  const pkg = activePkg()
+  const appNodes = nodes.filter(n => n.pkg === pkg)
+  const focused = appNodes.find(n => n.focused && /EditText|TextField|TextView|SearchField/.test(n.cls))
   const H = Number((/x(\d+)/.exec(s.size) || [])[1]) || 2400
   const labels = (P.cfg.signInLabels || []).map(l => normalise(l).toLowerCase())
   const signIn = appNodes.some(n => labels.includes(normalise(n.text || n.desc).toLowerCase()))
   // Foreground from the TREE, not only the focus line: the app's own root fills the screen.
-  const foreground = activity.startsWith(P.cfg.package) || appNodes.some(n => n.depth <= 2 && n.w >= 1000)
+  const foreground = s.ios ? activity === pkg : (activity.startsWith(pkg) || appNodes.some(n => n.depth <= 2 && n.w >= 1000))
   lastForeground = foreground
   const mismatch = Boolean(s.installedVer && s.repoVer && s.installedVer !== s.repoVer)
   const ctx = {
     project: `${P.cfg.appName}  ·  ${P.cfg.root}${P.rules?.length ? `  ·  agent rules: ${P.rules.join(', ')}` : ''}`,
-    app: `${P.cfg.appName} (${P.cfg.package} ${s.installedVer || '?'}${s.installedCode ? `, code ${s.installedCode}` : ''}) — Android, ${s.debuggable ? 'debug' : 'release'} build`,
-    screen: screenTitleOf(nodes, H),
+    app: `${P.cfg.appName} (${pkg} ${s.installedVer || '?'}${s.installedCode ? `, ${s.ios ? 'build' : 'code'} ${s.installedCode}` : ''}) — ${s.ios ? 'iOS, simulator' : `Android, ${s.debuggable ? 'debug' : 'release'} build`}`,
+    screen: screenTitleOf(nodes, H, pkg),
     activity,
     foreground,
     session: !foreground ? `n/a — ${P.cfg.appName} is not the foreground app`
@@ -448,7 +533,7 @@ async function gatherContext(nodes, activity) {
       : `signed-in (derived: no sign-in affordance; the identity itself is not read${s.debuggable ? '' : ' — release build'})`,
     focusedField: focused ? (focused.text ? `text field focused, contains "${focused.text.slice(0, 60)}"` : 'empty text field focused') : '',
     size: s.size,
-    device: `${s.model} · Android ${s.release} (API ${s.sdk}) · ${s.size} @ ${s.density}dpi · locale ${s.locale}`,
+    device: s.ios ? `${s.model} · ${s.release} (simulator) · ${s.size} @${s.density}` : `${s.model} · Android ${s.release} (API ${s.sdk}) · ${s.size} @ ${s.density}dpi · locale ${s.locale}`,
     repo: `${branch || '?'} @ ${head || '?'}${dirty ? ` (${dirty} uncommitted)` : ''}${s.repoVer ? ` · declares ${s.repoVer} (${s.repoCode})${mismatch ? '' : ' — matches the installed build'}` : ''}`,
     versionMismatch: mismatch,
   }
@@ -471,7 +556,7 @@ function renderScreenBlock(c) {
 // ------------------------------------------------------------- reference ---
 
 const q = s => JSON.stringify(String(s))
-const short = f => { for (const r of P.cfg.sourceRoots) if (f.startsWith(r + '/')) return f.slice(r.length + 1); return f }
+const short = f => { for (const r of activeRoots()) if (f.startsWith(r + '/')) return f.slice(r.length + 1); return f }
 
 function stateWords(n) {
   const w = []
@@ -484,7 +569,9 @@ function stateWords(n) {
 // likely the key whose call sites pass `contentDescription`; visible text prefers `Text(`.
 let debugHints = null
 async function referenceFor(cap, i) {
-  await P.index.ensure()
+  requireIos()
+  const index = activeIndex()
+  await index.ensure()
   debugHints = null
   const nodes = cap.nodes, n = nodes[i]
   // The first node is whichever WINDOW the dump lists first (often the status bar), so its
@@ -520,8 +607,8 @@ async function referenceFor(cap, i) {
     : inner ? { text: inner.text || inner.desc, viaDesc: !inner.text } : null
   let resolved = false
   if (primary) {
-    const r = P.index.lookup(primary.text, hint)
-    const hints = siblingHints(P.index, nodes, target, hint)
+    const r = index.lookup(primary.text, hint)
+    const hints = siblingHints(index, nodes, target, hint)
     debugHints = hints
     const keys = rankKeys(r.keys, n, primary.viaDesc, hints)
     // Rendered-file order follows the row too: the tab's own RootScreen line over a screen title.
@@ -551,15 +638,15 @@ async function referenceFor(cap, i) {
     if (primary) L.push(`copy:     ${q(primary.text)} — dynamic; not a literal in the sources (data-driven or formatted at runtime)`)
     else L.push('copy:     none (no text or content-description)')
     // Anchor on the nearest text that DOES resolve, so the agent can still find the screen.
-    const anchor = anchorText(nodes, i, t => P.index.lookup(t).keys.length > 0)
+    const anchor = anchorText(nodes, i, t => index.lookup(t).keys.length > 0)
     if (anchor) {
-      const k = P.index.lookup(anchor.text, hint).keys[0]
+      const k = index.lookup(anchor.text, hint).keys[0]
       const u = (k.usedBy || [])[0]
       L.push(`near:     ${q(anchor.text)} → ${k.key}${u ? ` (rendered ${short(u.file)}:${u.line})` : ''} — use as an anchor`)
     }
   }
   if (n.desc && n.text && n.desc !== n.text && primary && !primary.viaDesc) {
-    const rd = P.index.lookup(n.desc)
+    const rd = index.lookup(n.desc)
     if (rd.keys.length) L.push(`a11y key: ${rd.keys[0].key} (${short(rd.keys[0].file)}:${rd.keys[0].line})`)
   }
   return { title, what, screen: cap.ctx?.screen || '', lines: L, block: L.join('\n'), _hints: debugHints }
@@ -567,14 +654,14 @@ async function referenceFor(cap, i) {
 
 function agentNotes(size) {
   if (Array.isArray(P.cfg.notes)) return ['# Notes for the agent', ...P.cfg.notes].join('\n')
-  const res = P.cfg.strings.resolver
+  const st = activeStrings(), res = st.resolver
   const strings = res === 'lkey'
-    ? `Copy lives as LKey(${(P.cfg.strings.langs || []).join('/')}) objects and is rendered via l(...): to change wording, edit the LKey, not the composable.`
+    ? `Copy lives as LKey(${(st.langs || []).join('/')}) ${isIos() ? 'constants in enums (extension LStr { enum X { static let … } }) and is rendered via L(...): edit the LKey, not the view' : 'objects and is rendered via l(...): to change wording, edit the LKey, not the composable'}.`
     : res === 'android-xml'
       ? 'Copy lives in res/values*/strings.xml as <string name>: to change wording, edit the resource (every locale), not the code.'
       : 'On-screen copy did not resolve to a string registry; search the sources for the literal.'
   return ['# Notes for the agent',
-    `- Platform: Android only — this prompt was composed against the Android emulator. Code: ${P.cfg.sourceRoots.join(', ') || '(see repo)'}.`,
+    `- Platform: ${isIos() ? 'iOS only — this prompt was composed against the iOS Simulator' : 'Android only — this prompt was composed against the Android emulator'}. Code: ${activeRoots().join(', ') || '(see repo)'}.`,
     `- ${strings}`,
     `- bounds are display px on a ${size || '?'} screen, [x1,y1]→[x2,y2]. "tap:" names the actually-clickable node when the picked one is only a label inside it.`,
   ].join('\n')
@@ -585,6 +672,7 @@ function agentNotes(size) {
 // while the launcher activity plainly exists). Ask the package manager which component to
 // start, then start it; monkey stays as the fallback.
 async function launchApp() {
+  if (isIos()) { requireIos(); await simLaunch(state.serial, activePkg()); return activePkg() }
   const brief = await adbText(['shell', 'cmd', 'package', 'resolve-activity', '--brief', P.cfg.package]).catch(() => '')
   const comp = brief.split('\n').map(l => l.trim()).find(l => l.startsWith(`${P.cfg.package}/`))
   if (comp) { await adb(['shell', 'am', 'start', '-n', comp], { timeout: 8000 }); return comp }
@@ -609,19 +697,23 @@ async function problems() {
   }
   const s = await staticContext().catch(() => null)
   if (!s) { add('error', 'adb', 'the device stopped answering adb'); return out }
+  if (isIos() && !P.cfg.ios) { add('error', 'no-ios', `${P.cfg.appName} has no "ios" block in emu-composer.json — add bundleId, sourceRoots and strings, or pick an Android device`); return out }
   if (!s.installedVer) {
-    add('error', 'not-installed', `${P.cfg.appName} (${P.cfg.package}) is not installed on ${state.serial} — install a debug build, or switch project`)
+    add('error', 'not-installed', `${P.cfg.appName} (${activePkg()}) is not installed on ${devices.find(d => d.serial === state.serial)?.avd || state.serial} — install a ${isIos() ? 'simulator' : 'debug'} build, or switch project`)
     return out
   }
   if (lastForeground === null) {
     // No capture since the switch: read the focus rather than repeat the last project's answer.
-    const focus = await adbText(['shell', 'dumpsys window | grep -m1 mCurrentFocus']).catch(() => '')
-    lastForeground = focus.includes(P.cfg.package)
+    if (isIos()) { try { lastForeground = agent?.ready ? (await agent.tree(activePkg())).state === 4 : null } catch { lastForeground = null } }
+    else {
+      const focus = await adbText(['shell', 'dumpsys window | grep -m1 mCurrentFocus']).catch(() => '')
+      lastForeground = focus.includes(activePkg())
+    }
   }
   if (lastForeground === false) add('warn', 'not-foreground', `${P.cfg.appName} is not the app in front — every reference will come from whatever is`, 'launch')
   if (s.installedVer && s.repoVer && s.installedVer !== s.repoVer)
     add('warn', 'version', `the installed build is ${s.installedVer}, the repo declares ${s.repoVer} — the running app may not contain your changes`)
-  if (!agent?.ready) add('info', 'agent', `slow path — ${agent?.reason || 'the on-device agent is off'} (captures take ~2.5 s)`, 'agent')
+  if (!agent?.ready) add(isIos() ? 'error' : 'info', 'agent', isIos() ? `the iOS agent is not running — ${agent?.reason || 'starting'}` : `slow path — ${agent?.reason || 'the on-device agent is off'} (captures take ~2.5 s)`, 'agent')
   return out
 }
 let lastForeground = null
@@ -633,6 +725,18 @@ let lastForeground = null
 // a prompt about a colour.
 async function recentErrors() {
   if (!state.serial) return { count: 0, block: '', lines: [] }
+  if (isIos()) {
+    // The unified log, error and fault levels, for this app's process, last five minutes.
+    requireIos()
+    const app = await installedApp(state.serial, activePkg())
+    const proc = app.exe || activePkg().split('.').pop()
+    const out = await execFileP('xcrun', ['simctl', 'spawn', state.serial, 'log', 'show', '--last', '5m', '--style', 'compact',
+      '--predicate', `process == "${proc}" AND (messageType == error OR messageType == fault)`], { maxBuffer: 16 << 20, timeout: 20000 }).then(r => r.stdout).catch(() => '')
+    // XCTest's own accessibility chatter ("Automation type mismatch…") is logged under the
+    // APP's process while the agent snapshots it — it is the agent's noise, not the app's.
+    const lines = collapseLines(out.split('\n').filter(l => l.trim() && !/^Timestamp|^Filtering|^Skipping/.test(l) && !/com\.apple\.dt\.xctest|Automation type mismatch/.test(l)).map(l => l.trimEnd()), 25)
+    return { count: lines.length, lines, block: errorBlock({ lines, source: `unified log (log show --last 5m), error + fault levels, process "${proc}"` }) }
+  }
   const pid = await adbText(['shell', 'pidof', P.cfg.package]).then(t => t.trim().split(/\s+/)[0] || '').catch(() => '')
   const [main, crash] = await Promise.all([
     adbText(['shell', 'logcat -d -v time -t 400 *:E']).catch(() => ''),
@@ -788,7 +892,7 @@ const server = http.createServer(async (req, res) => {
           serial: state.serial, devices: await listDevices(),
           agent: Boolean(agent?.ready), agentReason: agent?.reason || (state.serial ? '' : 'no device'),
           index: P.index.stats || null,
-          device: state.serial ? await adbText(['get-state']).then(t => t.trim()).catch(() => 'offline') : 'none',
+          device: !state.serial ? 'none' : isIos() ? 'device' : await adbText(['get-state']).then(t => t.trim()).catch(() => 'offline'),
         })
       }
       case '/api/agent/restart':
@@ -851,7 +955,8 @@ server.on('listening', async () => {
   log(`projects: ${[...projects.values()].map(r => `${r.cfg.appName}${r.id === P.id ? ' ←' : ''}`).join(', ')}`)
   const serial = await pickDefaultSerial()
   if (!serial) { log('no device attached — waiting for one to be picked'); return }
-  state.serial = serial; agent = agentFor(serial)
+  // Through the same door as a later switch, so `kind` and every cache agree with the agent.
+  state.serial = serial; state.kind = IOS_UDID.test(serial) ? 'ios' : 'android'; agent = agentFor(serial)
   const devices = await listDevices()
   log(`devices: ${devices.map(d => `${d.serial}${d.avd ? ` (${d.avd})` : ''}${d.serial === serial ? ' ←' : ''}`).join(', ')}`)
   const ok = await agent.start()

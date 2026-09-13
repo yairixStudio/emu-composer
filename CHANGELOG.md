@@ -1,6 +1,28 @@
 # Changelog
 
 ## Unreleased
+- **iOS Simulator.** Booted simulators join the device menu; picking one mirrors it and
+  resolves references against the project's `ios` block (bundle id, Swift sources, string
+  registry, version file). Screenshots come from `simctl`; the accessibility tree from a new
+  on-device agent, `ios/agent/` — a UI-test bundle that attaches to any app by bundle id and
+  serves its `XCUIElementSnapshot` over HTTP while `xcodebuild test-without-building` keeps
+  it alive (`emu-composer setup-ios-agent` builds it once; XcodeGen project, the
+  `lib_TestingInterop.dylib` embed for Xcode 26 runners included). Frames are scaled from
+  points to the screenshot's pixels. Taps and typing work through the agent; swipes and
+  hardware keys are refused with a message. `# Screen` reports `iOS, simulator`,
+  `MARKETING_VERSION` vs the installed `Info.plist`, and `# Errors` reads the unified log for
+  the app's process, minus XCTest's own accessibility chatter.
+- The `lkey` resolver reads Swift: `extension LStr { enum X { static let k = LKey(he: …) } }`
+  → `LStr.X.k`, colon labels, multi-line calls, and the two-level call sites
+  (`L(LStr.X.k)`) — verified on a real app: a tab label on the simulator resolved to its
+  Swift definition and its `TabModel.swift` render site. Swift sources are walked for usages
+  and literals.
+- `init` detects an XcodeGen `project.yml` next to the Android project and writes the `ios`
+  block. `doctor` reports the iOS agent build and the booted simulators.
+- Fixed: `emu-composer` booted an arbitrary Android AVD ("first in the list") when adb had no
+  device — even with an iOS simulator already up. A booted simulator now counts as a device.
+- Fixed: a device chosen at startup skipped the switch path, so its kind and caches disagreed
+  with its agent (the iOS agent was asked for a uiautomator dump).
 - **Many projects, one daemon.** The server holds a registry of projects, each with its own
   config, string index and `.emu-composer/` directory; the active one is picked from a
   dropdown beside the device menu. `emu-composer` in a second project registers it with the

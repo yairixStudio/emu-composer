@@ -390,7 +390,7 @@ async function capture() {
       $('#warn').classList.toggle('show', Boolean(ctx.versionMismatch))
       $('#warn').textContent = ctx.versionMismatch ? t('warn_mismatch') : ''
       for (const c of ed.querySelectorAll('.chip')) c.classList.toggle("stale", refOf(c)?.captureId !== captureId)
-      setStatus(t('st_elements', nodes.length, d.ms) + (d.source === 'agent' ? '' : t('st_slow')), 'ok')
+      setStatus(t('st_elements', nodes.length, d.ms) + (/agent/.test(d.source) ? '' : t('st_slow')), 'ok')
       refreshExtras()
     } catch (e) { setStatus(e.message, 'err'); markLost(e.message); health() }
     finally { $('#busy').classList.remove('show'); capturing = null }

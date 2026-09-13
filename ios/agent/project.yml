@@ -1,0 +1,61 @@
+# The iOS on-device agent — the simulator twin of u2.jar. A UI-test bundle that, instead of
+# testing anything, serves the accessibility tree of ANY app on the simulator over HTTP for
+# as long as `xcodebuild test-without-building` keeps it alive. Built once with
+# `emu-composer setup-ios-agent`; XcodeGen keeps the .xcodeproj out of the repo.
+name: EmuAgent
+options:
+  bundleIdPrefix: dev.emucomposer
+  deploymentTarget:
+    iOS: "17.0"
+  generateEmptyDirectories: true
+targets:
+  EmuAgentHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.emucomposer.agent.host
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "5.9"
+  EmuAgentTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: EmuAgentHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.emucomposer.agent.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: EmuAgentHost
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "5.9"
+    # Xcode 26 embeds Testing.framework into the UI-test runner, but an iOS 26 simulator
+    # runtime can lack its companion lib_TestingInterop.dylib, and then the runner SIGABRTs
+    # at launch ("Library not loaded: @rpath/lib_TestingInterop.dylib"). Copy the toolchain's
+    # dylib into both rpath locations the runner resolves. Harmless where it is not needed.
+    postBuildScripts:
+      - name: "Embed lib_TestingInterop.dylib into the runner"
+        runOnlyWhenInstalling: false
+        script: |
+          set -e
+          SRC="$DEVELOPER_DIR/Platforms/iPhoneSimulator.platform/Developer/usr/lib/lib_TestingInterop.dylib"
+          RUNNER="$BUILT_PRODUCTS_DIR/${PRODUCT_NAME}-Runner.app"
+          [ -f "$SRC" ] || exit 0
+          [ -d "$RUNNER" ] || exit 0
+          for d in "Frameworks" "usr/lib"; do
+            mkdir -p "$RUNNER/$d"; cp -f "$SRC" "$RUNNER/$d/lib_TestingInterop.dylib"
+            codesign --force --sign - "$RUNNER/$d/lib_TestingInterop.dylib"
+          done
+schemes:
+  EmuAgent:
+    build:
+      targets:
+        EmuAgentHost: all
+        EmuAgentTests: [test]
+    test:
+      targets: [EmuAgentTests]

@@ -4,6 +4,7 @@
 //   emu-composer                 run: boot an AVD if needed, start (or reuse) the server, open the page
 //   emu-composer init            detect the project and write emu-composer.json
 //   emu-composer setup-agent     fetch the on-device agent (one-time; needs python3)
+//   emu-composer setup-ios-agent build the iOS Simulator agent (one-time; needs Xcode + xcodegen)
 //   emu-composer install-app     "<App> Composer.app" in ~/Applications (Spotlight / Dock)
 //   emu-composer bar             build + launch the floating bar beside the emulator window
 //   emu-composer doctor          check node, adb, device, agent jar, key, config
@@ -58,6 +59,14 @@ async function health(port) {
 async function ensureDevice(cfg) {
   const out = execFileSync(cfg.adbPath, ['devices'], { encoding: 'utf8' })
   if (/\tdevice\n/.test(out)) return
+  // A booted iOS simulator is a device too: do not boot an Android AVD beside it — that is
+  // exactly the machine-wide surprise this once produced ("Mefakeach" booting uninvited).
+  if (process.platform === 'darwin') {
+    try {
+      const sims = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', 'booted', '-j'], { encoding: 'utf8' }))
+      if (Object.values(sims.devices || {}).some(l => l.some(d => d.state === 'Booted'))) return
+    } catch {}
+  }
   const emulator = findEmulator(cfg.adbPath)
   let avd = cfg.avd || flag('avd')
   if (!avd) {
@@ -161,6 +170,16 @@ async function doctor() {
   row(fsSync.existsSync(adb) || adb !== 'adb', `adb`, adb)
   try { const d = execFileSync(adb, ['devices'], { encoding: 'utf8' }); row(/\tdevice\n/.test(d), 'device attached', d.split('\n')[1] || '(none — `emu-composer` boots an AVD)') } catch { row(false, 'adb devices', 'adb not runnable') }
   row(fsSync.existsSync(path.join(HOME, 'u2.jar')), 'on-device agent jar', path.join(HOME, 'u2.jar') + (fsSync.existsSync(path.join(HOME, 'u2.jar')) ? '' : '  → emu-composer setup-agent'))
+  if (process.platform === 'darwin') {
+    const dd = path.join(HOME, 'ios-agent-dd', 'Build', 'Products')
+    const built = fsSync.existsSync(dd) && fsSync.readdirSync(dd).some(f => f.endsWith('.xctestrun'))
+    row(built, 'iOS Simulator agent', built ? dd : '(optional) → emu-composer setup-ios-agent')
+    try {
+      const sims = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', 'booted', '-j'], { encoding: 'utf8' }))
+      const booted = Object.values(sims.devices || {}).flat().filter(d => d.state === 'Booted').map(d => d.name)
+      row(true, 'iOS simulators booted', booted.length ? booted.join(', ') : '(none)')
+    } catch {}
+  }
   row(fsSync.existsSync(path.join(HOME, 'openai-key')) || Boolean(process.env.OPENAI_API_KEY), 'OpenAI key (dictation)', '(optional — set in the page)')
   row(Boolean(cfg), `${CONFIG_NAME}`, cfg ? `${cfg.configPath} · ${cfg.package} · strings: ${cfg.strings.resolver}` : '→ emu-composer init')
   if (cfg) {
@@ -171,7 +190,7 @@ async function doctor() {
   }
 }
 
-const commands = { run, init, 'setup-agent': () => sh('setup-agent.sh'), 'install-app': installApp, bar, doctor,
+const commands = { run, init, 'setup-agent': () => sh('setup-agent.sh'), 'setup-ios-agent': () => sh('setup-ios-agent.sh'), 'install-app': installApp, bar, doctor,
   help: () => say(fsSync.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).map(l => l.replace(/^\/\/ ?/, '')).join('\n')) }
 if (!commands[cmd]) die(`unknown command "${cmd}"\n` + Object.keys(commands).join(' | '))
 commands[cmd]().catch(e => die(e.message))
