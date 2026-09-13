@@ -44,6 +44,18 @@ export class StringIndex {
       }
       // Layout XML also references strings.
       for (const r of s.resDirs || []) for (const f of await walk(path.join(this.root, r), /\/layout[^/]*\/[^/]+\.xml$/)) files.push(f)
+    } else if (s.resolver === 'xcstrings') {
+      // Apple's own formats: String Catalogs (.xcstrings, one JSON per table) and the older
+      // <lang>.lproj/<Table>.strings files. Both key by a string, which is usually the
+      // English copy itself — `Text("Welcome back")` IS the key.
+      for (const r of this.cfg.sourceRoots) {
+        for (const f of await walk(path.join(this.root, r), /\.xcstrings$|\.lproj\/[^/]+\.strings$/)) {
+          const rel = path.relative(this.root, f)
+          const src = await fs.readFile(f, 'utf8')
+          if (rel.endsWith('.xcstrings')) this._indexXcstrings(rel, src)
+          else this._indexDotStrings(rel, src, (/(^|\/)([\w-]+)\.lproj\//.exec(rel) || [])[2] || 'en')
+        }
+      }
     }
     for (const f of files) {
       const rel = path.relative(this.root, f)
@@ -106,6 +118,37 @@ export class StringIndex {
     void lines
   }
 
+  // { "sourceLanguage": "en", "strings": { "Welcome back": { "localizations": { "he": { "stringUnit":
+  // { "value": "ברוך השב" } } } } } } — plural/device variations contribute every branch's value.
+  // An entry with no value for the source language renders its key, so the key is indexed as
+  // that language's value (that is what `Text("Welcome back")` shows in English).
+  _indexXcstrings(rel, src) {
+    let cat; try { cat = JSON.parse(src) } catch { return }
+    const srcLang = cat.sourceLanguage || 'en'
+    const lineOf = key => { const j = JSON.stringify(key); let i = src.indexOf(j + ' :'); if (i < 0) i = src.indexOf(j + ':'); return i < 0 ? 1 : src.slice(0, i).split('\n').length }
+    for (const [key, def] of Object.entries(cat.strings || {})) {
+      const entry = this.byKey.get(key) || { key, file: rel, line: lineOf(key), values: {} }
+      const locs = (def && def.localizations) || {}
+      for (const [lang, loc] of Object.entries(locs)) {
+        if (loc.stringUnit?.value) this._add(entry, lang, loc.stringUnit.value)
+        for (const group of Object.values(loc.variations || {})) for (const v of Object.values(group)) if (v?.stringUnit?.value) this._add(entry, lang, v.stringUnit.value)
+      }
+      if (!locs[srcLang]?.stringUnit?.value) this._add(entry, srcLang, key)
+    }
+  }
+
+  // "key" = "value";  — one per line, /* comments */ between them.
+  _indexDotStrings(rel, src, lang) {
+    const lines = src.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;/.exec(lines[i])
+      if (!m) continue
+      const key = unescapeKt(m[1])
+      const entry = this.byKey.get(key) || { key, file: rel, line: i + 1, values: {} }
+      this._add(entry, lang, unescapeKt(m[2]))
+    }
+  }
+
   // R.string.k · stringResource(R.string.k) · getString(R.string.k) · @string/k · LFoo.bar
   _indexUsages(rel, src) {
     const lines = src.split('\n')
@@ -122,6 +165,10 @@ export class StringIndex {
         for (const m of line.matchAll(/\b(L[A-Z][A-Za-z]+)\.([a-z][A-Za-z0-9]*)\b/g)) keys.push(`${m[1]}.${m[2]}`)
         // Swift's two-level form (LStr.Shell.tabSchedule): only a key the registry actually holds.
         for (const m of line.matchAll(/\b([A-Z]\w*)\.([A-Z]\w*)\.([a-z][A-Za-z0-9]*)\b/g)) { const k = `${m[1]}.${m[2]}.${m[3]}`; if (this.byKey.has(k)) keys.push(k) }
+      } else if (res === 'xcstrings') {
+        // Text("…") · String(localized: "…") · NSLocalizedString("…", …) · LocalizedStringKey("…"):
+        // the key is the literal, so every literal that the catalog holds is a call site.
+        for (const m of line.matchAll(/"((?:[^"\\]|\\.)+)"/g)) { const k = unescapeKt(m[1]); if (this.byKey.has(k)) keys.push(k) }
       }
       for (const key of keys) {
         const list = this.usage.get(key) || []
@@ -141,6 +188,7 @@ export class StringIndex {
       for (const m of line.matchAll(/"((?:[^"\\]|\\.){2,120})"/g)) {
         const v = unescapeKt(m[1])
         if (!/\p{L}/u.test(v) || /^[\w.\-/:]+$/.test(v)) continue // ids, paths, urls
+        if (this.cfg.strings.resolver === 'xcstrings' && this.byKey.has(v)) continue // a catalog key, indexed as a usage
         const list = this.literal.get(v) || []
         if (list.length < 8) list.push({ file: rel, line: i + 1, code: line.trim().slice(0, 160) })
         this.literal.set(v, list)

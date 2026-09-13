@@ -41,3 +41,27 @@ test('iOS tree → composer nodes: points scale to px, roles map, text vs label 
   assert.equal(n[1].y, 2400)
   for (const x of n) assert.equal(x.pkg, 'com.example.app')
 })
+
+test('xcstrings: String Catalog + .lproj/.strings, keys are literals, plural variations, call sites', async () => {
+  const ix = new StringIndex({ root: path.join(FIX, 'xcstrings'), sourceRoots: ['Sources'], strings: { resolver: 'xcstrings' } })
+  const st = await ix.build()
+  assert.equal(st.keys, 5)
+  // the key IS the English copy; Hebrew resolves to it and the call site is Text("Welcome back")
+  const he = ix.lookup('ברוך השב')
+  assert.equal(he.keys[0].key, 'Welcome back'); assert.equal(he.lang, 'he')
+  assert.equal(he.keys[0].values.en, 'Welcome back')
+  assert.match(he.keys[0].file, /Localizable\.xcstrings$/); assert.ok(he.keys[0].line > 1)
+  assert.match(he.keys[0].usedBy[0].code, /Text\("Welcome back"\)/)
+  // a symbolic key, reached through String(localized:)
+  const s = ix.lookup('הגדרות')
+  assert.equal(s.keys[0].key, 'settings.title')
+  assert.match(s.keys[0].usedBy[0].code, /String\(localized: "settings.title"\)/)
+  // a plural variation is a value too
+  assert.equal(ix.lookup('%lld items').keys[0].key, '%lld items')
+  // legacy .strings table, language from the .lproj folder
+  const d = ix.lookup('לומלה')
+  assert.equal(d.keys[0].key, 'CFBundleDisplayName'); assert.equal(d.lang, 'he')
+  // a catalog key is never reported as a hardcoded literal; a real literal still is
+  assert.equal(ix.lookup('Welcome back').literals.length, 0)
+  assert.equal(ix.lookup('Just a caption').literals.length, 1)
+})

@@ -1,0 +1,26 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Welcome back" : {
+      "localizations" : {
+        "he" : { "stringUnit" : { "state" : "translated", "value" : "ברוך השב" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Bienvenido de nuevo" } }
+      }
+    },
+    "settings.title" : {
+      "comment" : "Settings screen title",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "he" : { "stringUnit" : { "state" : "translated", "value" : "הגדרות" } }
+      }
+    },
+    "%lld items" : {
+      "localizations" : {
+        "en" : { "variations" : { "plural" : {
+          "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld item" } },
+          "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld items" } } } } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

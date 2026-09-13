@@ -123,13 +123,15 @@ export async function detect(root) {
     const srcDirs = await findDirs(iosRoot, d => /\/Sources$/.test(d), 2)
     const rootsRel = (srcDirs.length ? srcDirs : [iosRoot]).map(d => path.relative(root, d))
     const lkey = await grepAny(srcDirs[0] || iosRoot, /=\s*LKey\s*\(/, /\.swift$/)
+    const apple = lkey ? [] : await findFiles(srcDirs[0] || iosRoot, f => /\.(xcstrings|strings)$/.test(f), 6)
     out.ios = {
       bundleId: bid[1],
       sourceRoots: rootsRel,
-      strings: lkey ? { resolver: 'lkey', langs: ['he', 'en', 'es'], files: '/Localization/|Strings\\+\\w+\\.swift$' } : { resolver: 'none' },
+      strings: lkey ? { resolver: 'lkey', langs: ['he', 'en', 'es'], files: '/Localization/|Strings\\+\\w+\\.swift$' }
+        : apple.length ? { resolver: 'xcstrings' } : { resolver: 'none' },
       versionFile: path.relative(root, y),
     }
-    out.findings.push(`iOS: bundle ${bid[1]} in ${out.ios.versionFile}${lkey ? ' · LKey registry' : ''}`)
+    out.findings.push(`iOS: bundle ${bid[1]} in ${out.ios.versionFile}${lkey ? ' · LKey registry' : apple.length ? ` · ${apple.length} String Catalog/.strings file${apple.length > 1 ? 's' : ''} → resolver "xcstrings"` : ''}`)
     break
   }
   return out
