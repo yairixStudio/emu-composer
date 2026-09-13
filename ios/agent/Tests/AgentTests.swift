@@ -112,7 +112,7 @@ final class AgentServer {
                 default: break
                 }
             } catch {
-                result = ("500 Internal Server Error", json(["error": "\(error)"]))
+                result = ("500 Internal Server Error", json(["error": (error as NSError).localizedDescription]))
             }
         }
         return result
