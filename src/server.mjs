@@ -565,7 +565,9 @@ async function doInput(cmd) {
           // Android key codes, as the page sends them: HOME, BACK (the left-edge swipe), RECENTS.
           if (cmd.code === 3) return b.button('home')
           if (cmd.code === 4) return b.swipe(1, h / 2, w * 0.7, h / 2, 260, 2)
-          if (cmd.code === 187) return b.swipe(w / 2, h - 2, w / 2, h * 0.6, 700, 3)
+          // The switcher is a double press of HOME, as in Simulator.app — a bottom-edge swipe
+          // that rests went home instead (tried on iOS 18.5).
+          if (cmd.code === 187) { b.button('home'); await new Promise(ok => setTimeout(ok, 100)); return b.button('home') }
       }
     }
     if (cmd.type === 'touch') throw userError('live touch needs simbridge, which is not running for this simulator')

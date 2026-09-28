@@ -46,7 +46,8 @@ export class SimBridge {
     this.udid = udid; this.log = log
     this.screen = null          // { w, h } in pixels
     this.touch = false          // the digitizer answered
-    this.video = null           // { w, h, fps } while encoding
+    this.video = null           // { w, h, fps } as the helper last reported it
+    this.encW = 0               // the width the encoder was last asked for; 0 = stopped
     this.viewers = new Set()
     this.waiters = []           // jpeg requests, answered in order
     this.dead = false
@@ -130,10 +131,13 @@ export class SimBridge {
     this.#retune(true)
     return () => { this.viewers.delete(v); this.#retune(false) }
   }
+  // What the encoder was last TOLD, not what it last reported: a page that connects and leaves
+  // at once has its 'x' overtake the helper's "video started", and a state read from that
+  // report left the next page asking a stopped encoder for key frames — a stream with no frames.
   #retune(joined) {
-    if (!this.viewers.size) { this.#send('x'); this.video = null; return }
-    const w = Math.max(...[...this.viewers].map(v => v.width))
-    if (!this.video || this.video.w !== (Math.min(w, this.screen?.w || w) & ~1)) this.#send(`s ${w} 60`)
+    if (!this.viewers.size) { if (this.encW) this.#send('x'); this.encW = 0; this.video = null; return }
+    const w = Math.min(Math.max(...[...this.viewers].map(v => v.width)), this.screen?.w || Infinity) & ~1
+    if (w !== this.encW) { this.encW = w; this.#send(`s ${w} 60`) }
     else if (joined) this.#send('k')
   }
 

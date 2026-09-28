@@ -134,9 +134,12 @@ to CoreSimulator directly, the way Meta's idb does:
 - **Touch** — it connects to the guest's `dtuhidd` digitizer over XPC and sends start /
   position / end contacts. `use` mode streams the pointer as it moves, so a drag is a real drag
   and a list keeps its momentum; a press that starts on the screen's edge carries that edge, so
-  the system gestures (back from the left, home and the switcher from the bottom) work too.
+  the system gestures (back from the left, home from the bottom) work too.
   Touch to first changed frame measured 29-50 ms; through the XCUITest runner it was hundreds.
-- HOME is the hardware button, BACK the left-edge swipe, RECENTS the bottom-edge swipe.
+- HOME is the hardware button, BACK the left-edge swipe, RECENTS a double HOME press (the
+  switcher, as in Simulator.app).
+- **Jem** keeps a click for anchor-then-tap; once the pointer travels like a drag, the finger
+  goes down where the press began and follows it, over the live picture.
 
 Typing, ENTER/DEL/ESC and the element tree stay with the runner. When `simbridge` cannot start
 (an Xcode whose private interfaces moved), everything falls back to the runner and `simctl`: a

@@ -148,21 +148,30 @@ static BOOL openSession(void) {
   VTCompressionSessionPrepareToEncodeFrames(session);
   return YES;
 }
-static void encodeNow(BOOL forceKey) {
-  if (!streaming || !surface) return;
-  if (!session && !openSession()) return;
+static BOOL encodeOnce(BOOL forceKey) {
+  if (!session && !openSession()) return NO;
   CVPixelBufferRef src = NULL, dst = NULL;
-  if (CVPixelBufferCreateWithIOSurface(NULL, surface, NULL, &src) != kCVReturnSuccess) return;
+  if (CVPixelBufferCreateWithIOSurface(NULL, surface, NULL, &src) != kCVReturnSuccess) { fprintf(stderr, "simbridge: surface → pixel buffer failed\n"); return YES; }
   CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(session);
-  if (!pool || CVPixelBufferPoolCreatePixelBuffer(NULL, pool, &dst) != kCVReturnSuccess) { CVPixelBufferRelease(src); return; }
+  if (!pool || CVPixelBufferPoolCreatePixelBuffer(NULL, pool, &dst) != kCVReturnSuccess) { CVPixelBufferRelease(src); return NO; }
   if (!transfer) VTPixelTransferSessionCreate(NULL, &transfer);
   OSStatus st = VTPixelTransferSessionTransferImage(transfer, src, dst);   // GPU scale + BGRA→YUV
   CVPixelBufferRelease(src);
-  if (st != noErr) { CVPixelBufferRelease(dst); return; }
+  if (st != noErr) { CVPixelBufferRelease(dst); if (transfer) { VTPixelTransferSessionInvalidate(transfer); CFRelease(transfer); transfer = NULL; } fprintf(stderr, "simbridge: transfer %d\n", (int)st); return NO; }
   NSDictionary *props = forceKey ? @{ (id)kVTEncodeFrameOptionKey_ForceKeyFrame: @YES } : nil;
-  VTCompressionSessionEncodeFrame(session, dst, CMTimeMake((int64_t)frameNo++, 600), kCMTimeInvalid, (__bridge CFDictionaryRef)props, NULL, NULL);
+  st = VTCompressionSessionEncodeFrame(session, dst, CMTimeMake((int64_t)frameNo++, 600), kCMTimeInvalid, (__bridge CFDictionaryRef)props, NULL, NULL);
   CVPixelBufferRelease(dst);
+  if (st != noErr) { fprintf(stderr, "simbridge: encode %d\n", (int)st); return NO; }
   lastEncode = now();
+  return YES;
+}
+// A frame the encoder refuses (an invalidated session) is logged and retried once on a fresh
+// session, as a key frame, instead of leaving the stream frozen on the last picture.
+static void encodeNow(BOOL forceKey) {
+  if (!streaming || !surface) return;
+  if (encodeOnce(forceKey)) return;
+  closeSession();
+  encodeOnce(YES);
 }
 // A frame was presented: encode it, at most `fps` times a second (the last one always lands).
 static void onFrame(void) {

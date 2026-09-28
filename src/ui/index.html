@@ -874,6 +874,7 @@ const liveCv = $('#live'), liveG = liveCv.getContext('2d')
 const isIosSerial = s => /^[0-9A-F]{8}-[0-9A-F]{4}-/i.test(s || '')
 function liveShow(on) { liveCv.hidden = !on }
 function liveStop() {
+  try { touchUp() } catch {}   // (before the input section has run, there is no press to end)
   Live.on = false; Live.gen++; try { Live.ac?.abort() } catch {} Live.ac = null
   try { Live.dec?.close() } catch {} Live.dec = null; Live.key = false; liveShow(false)
 }
@@ -1166,7 +1167,7 @@ $('#screen').addEventListener('mousedown', e => {
   down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1, shift: e.shiftKey }
   // Direct touch (the iOS simulator through simbridge): the finger goes down now and follows
   // the pointer. A press that starts on the screen's edge carries that edge, which is how the
-  // system reads its own gestures — back from the left, home and the switcher from the bottom.
+  // system reads its own gestures — back from the left, home from the bottom.
   if (mode === 'use' && Live.on && Live.touch) {
     const W = img.naturalWidth, H = img.naturalHeight
     const edge = down.x < W * 0.025 ? 2 : down.x > W * 0.975 ? 4 : down.y > H * 0.985 ? 3 : down.y < H * 0.012 ? 1 : 0
@@ -1176,16 +1177,35 @@ $('#screen').addEventListener('mousedown', e => {
 })
 let touchMove = null
 addEventListener('mousemove', e => {
+  // Jem keeps a click for anchor-then-tap, so direct touch starts only once the pointer has
+  // travelled like a drag: the finger goes down where the press began and follows from there,
+  // with the live picture over the still until the screen settles again.
+  if (down && !down.stream && mode === 'jem' && Live.on && Live.touch && Math.hypot(e.clientX - down.cx, e.clientY - down.cy) > 10) {
+    down.stream = down.jem = true
+    clearTimeout(recapTimer); recapGen++; screenStale = true
+    document.body.classList.add('burst'); liveShow(true)
+    Live.tapAt = performance.now(); Live.tapType = 'drag'
+    input({ type: 'touch', p: 'down', x: down.x, y: down.y, edge: 0 })
+  }
   if (!down?.stream) return
   const first = !touchMove
-  touchMove = toDisplay(e.clientX, e.clientY)
-  if (first) requestAnimationFrame(() => { if (touchMove && down?.stream) input({ type: 'touch', p: 'move', ...touchMove }); touchMove = null })
+  touchMove = down.last = toDisplay(e.clientX, e.clientY)
+  if (first) requestAnimationFrame(() => { if (touchMove && down?.stream) { input({ type: 'touch', p: 'move', ...touchMove }); down.moves = (down.moves || 0) + 1 } touchMove = null })
 })
+// The finger comes up however the press ends: released over the page, or the mouse leaving the
+// window, the tab hiding, the device or the stream changing mid-drag. A contact left down on
+// the simulator swallows the next gesture.
+function touchUp(p) {
+  if (!down?.stream) return
+  const d = down; down = null; touchMove = null
+  input({ type: 'touch', p: 'up', ...(p || d.last || { x: d.x, y: d.y }) })
+  uilog('touch-drag', { moves: d.moves || 0, ms: Date.now() - d.t, mode })
+  if (d.jem) { uilog('device-input', { type: 'drag', label: d.i >= 0 ? labelFor(d.i) : '' }); recaptureSoon(450) }
+}
+addEventListener('blur', () => touchUp())
+document.addEventListener('visibilitychange', () => { if (document.hidden) touchUp() })
 addEventListener('mouseup', async e => {
-  if (down?.stream) {
-    const p = toDisplay(e.clientX, e.clientY); down = null; touchMove = null
-    return input({ type: 'touch', p: 'up', ...p })
-  }
+  if (down?.stream) return touchUp(toDisplay(e.clientX, e.clientY))
   if (!down || (mode !== 'use' && mode !== 'jem')) return
   const up = toDisplay(e.clientX, e.clientY)
   const moved = Math.hypot(e.clientX - down.cx, e.clientY - down.cy)
