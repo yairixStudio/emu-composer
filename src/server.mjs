@@ -20,6 +20,7 @@ import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, artic
 import { filterLog, errorBlock, collapseLines } from './logcat.mjs'
 import { HOME } from './config.mjs'
 import { DeviceShell } from './devshell.mjs'
+import { discover as discoverGrpc, EmuGrpc } from './emugrpc.mjs'
 import { slog, LOG_DIR } from './sessionlog.mjs'
 
 const execFileP = promisify(execFile)
@@ -186,6 +187,7 @@ async function listDevices() {
   const up = new Set(rows.map(l => l.split(/\s+/)).filter(([, st]) => st === 'device').map(([sr]) => sr))
   for (const sr of [...avdNames.keys()]) if (!up.has(sr)) avdNames.delete(sr)
   for (const [sr, sh] of shells) if (!up.has(sr)) { sh.close(); shells.delete(sr) }
+  for (const [sr, g] of grpcs) if (!up.has(sr)) { g?.close(); grpcs.delete(sr) }
   // Emulators started with -no-window (test runners, CI-style boots) are not for mirroring
   // by default: a restart once landed on one while the visible emulator sat unused.
   const ps = await execFileP('ps', ['-axo', 'command'], { encoding: 'utf8', timeout: 3000, maxBuffer: 8 << 20 }).then(r => r.stdout).catch(() => '')
@@ -504,6 +506,13 @@ const deviceArg = s => `'${String(s).replace(/'/g, `'\\''`).replace(/ /g, '%s')}
 const userError = msg => { const e = new Error(msg); e.userFacing = true; return e }
 
 const shells = new Map()   // serial -> DeviceShell
+// Emulators expose gRPC on the host: taps in ~5 ms and a host-rendered screen stream. Physical
+// devices (and emulators whose endpoint cannot be found) fall back to the shell and screenrecord.
+const grpcs = new Map()    // serial -> EmuGrpc | null
+function grpcFor(serial) {
+  if (!grpcs.has(serial) || !grpcs.get(serial)) { const d = discoverGrpc(serial); grpcs.set(serial, d ? new EmuGrpc(d) : null) }
+  return grpcs.get(serial)
+}
 function shellFor(serial) {
   let sh = shells.get(serial)
   if (!sh) { sh = new DeviceShell(ADB, serial, log); shells.set(serial, sh) }
@@ -529,8 +538,16 @@ async function doInput(cmd) {
   const line = cmd.type === 'tap' ? `input tap ${r(cmd.x)} ${r(cmd.y)}`
     : cmd.type === 'swipe' ? `input swipe ${r(cmd.x1)} ${r(cmd.y1)} ${r(cmd.x2)} ${r(cmd.y2)} ${r(Math.max(40, cmd.ms || 200))}`
     : cmd.type === 'key' ? `input keyevent ${Number(cmd.code) | 0}` : ''
+  // Backgrounded: `input` returns only once the app has consumed the event — 1-4 s on a busy
+  // screen (measured) — while the tap itself shows within ~100 ms. Waiting for it held every
+  // following tap in the queue.
+  const g = (cmd.type === 'tap' || cmd.type === 'swipe') && state.serial ? grpcFor(state.serial) : null
+  if (g) {
+    try { return cmd.type === 'tap' ? await g.tap(cmd.x, cmd.y) : await g.swipe(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.ms || 200) }
+    catch (e) { log('grpc input failed, shell:', e.message); grpcs.delete(state.serial) }
+  }
   if (line && state.serial) {
-    try { return await shellFor(state.serial).run(line) }
+    try { return await shellFor(state.serial).run(`${line} &`) }
     catch (e) { log('input shell failed, falling back:', e.message) }
   }
   if (agent?.ready) {
@@ -1028,6 +1045,49 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, await fs.readFile(path.join(HERE, 'ui', 'index.html')), 'text/html; charset=utf-8')
       case '/api/capture':
         return send(res, 200, await capture())
+      case '/api/stream': {
+        // Live H.264 from the device's own encoder (screenrecord) — the scrcpy approach, and
+        // the fast path for the page: frames arrive only when the screen changes, ~tens of ms
+        // after it does. screenrecord writes one access unit per write, so the stream is cut
+        // at write boundaries (flushed after 2 ms of quiet) and each piece is sent with a
+        // 4-byte length: the page never waits for the NEXT frame to know this one ended.
+        if (isIos() || !state.serial) return send(res, 409, { error: 'the live stream is for Android devices' })
+        const size = (await staticContext()).size || ''
+        const g = grpcFor(state.serial)
+        if (g) {
+          // Host-rendered PNG frames at the size the page draws (it asks for w×h).
+          const dm = /(\d+)x(\d+)/.exec(size), dw = dm ? +dm[1] : 1080, dh = dm ? +dm[2] : 2400
+          const w = Math.max(240, Math.min(dw, Number(url.searchParams.get('w')) || Math.round(dw / 2)))
+          const h = Math.round(w * dh / dw)
+          res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-device-size': size, 'x-stream': 'png' })
+          const st = g.stream(w, h, png => { const head = Buffer.alloc(4); head.writeUInt32BE(png.length); res.write(Buffer.concat([head, png])) },
+            e => { if (e) { log('grpc stream ended:', e.message); grpcs.delete(state.serial) } res.end() })
+          req.on('close', () => st.close())
+          slog('stream', { serial: state.serial, size, via: 'grpc', w, h })
+          return
+        }
+        // Encoded at most 1600 px on the long side and 4 Mb/s: at the full 1080×2400 the
+        // emulator's software encoder competed with the app (taps took 1-2 s). Detail comes
+        // back through the crisp still the page paints once the screen is quiet.
+        const m = /(\d+)x(\d+)/.exec(size), k = m ? Math.min(1, 1600 / Math.max(+m[1], +m[2])) : 1
+        const enc = m && k < 1 ? ['--size', `${Math.round(+m[1] * k / 16) * 16}x${Math.round(+m[2] * k / 16) * 16}`] : []
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-device-size': size, 'x-stream': 'h264' })
+        const p = spawn(ADB, ['-s', state.serial, 'exec-out', 'screenrecord', '--output-format=h264', '--bit-rate=4000000', '--time-limit=180', ...enc, '-'], { stdio: ['ignore', 'pipe', 'ignore'] })
+        let pend = [], timer = null
+        const flush = () => {
+          timer = null; if (!pend.length) return
+          const body = Buffer.concat(pend); pend = []
+          const head = Buffer.alloc(4); head.writeUInt32BE(body.length)
+          res.write(Buffer.concat([head, body]))
+        }
+        // 14 ms of quiet: a large key frame can reach us in several reads a few ms apart, and
+        // cutting inside it made the page's decoder fail and reconnect (seen at 2 and 8 ms).
+        p.stdout.on('data', d => { pend.push(d); clearTimeout(timer); timer = setTimeout(flush, 14) })
+        p.on('exit', () => { flush(); res.end() })
+        req.on('close', () => { try { p.kill() } catch {} })
+        slog('stream', { serial: state.serial, size, via: 'screenrecord' })
+        return
+      }
       case '/api/frame': {
         const f = await frame()
         if (!f) return send(res, 429, { error: 'busy' })

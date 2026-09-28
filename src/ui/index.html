@@ -451,6 +451,8 @@
   #runAgent[hidden]{display:none}
   #runAgent svg{width:11px;height:11px;fill:currentColor;stroke:none}
   .mbody .srow .dd{max-width:220px}
+
+  #live{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;background:#000}
 </style>
 
 <aside id="guide">
@@ -474,7 +476,7 @@
   </div>
   <div id="problems"></div>
   <div id="stage">
-    <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg><span id="busy">…</span><div id="lost"></div></div>
+    <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><canvas id="live" hidden></canvas><div id="ov"></div><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg><span id="busy">…</span><div id="lost"></div></div>
     <div id="dock">
       <div class="grip" data-t-title="dock_grip"><i></i><i></i><i></i></div>
       <div id="tools">
@@ -788,7 +790,9 @@ function setMode(m) {
   $('#ov').style.display = still() ? 'block' : 'none'
   $('#marks').style.display = still() ? 'block' : 'none'
   setWatch(MODES[m].watch)
-  if (!still()) { $('#screen').focus(); pumpFrames() }
+  if (m === 'collect') liveStop()
+  if (!still()) { $('#screen').focus(); liveStart(true) || pumpFrames() }
+  else if (m === 'jem') liveStart(false)
   else { capture(); if (m === 'jem') restoreCaret() }
   // The columns change width, so the overlay has to be laid out again.
   requestAnimationFrame(() => { if (still()) { drawOverlay(); renderMarks() } })
@@ -812,7 +816,7 @@ function markLost(msg) {
 }
 function markAlive() { lostCount = 0; $('#lost').classList.remove('show') }
 async function pumpFrames() {
-  if (pumping) return
+  if (pumping || Live.on) return
   pumping = true
   let url = ''
   while (!still()) {
@@ -830,6 +834,142 @@ async function pumpFrames() {
   }
   pumping = false
   if (url) URL.revokeObjectURL(url)
+}
+
+// ------------------------------------------------------------ live stream ---
+// Android's screen as H.264 from the device's own encoder (/api/stream, length-framed at
+// write boundaries), decoded by WebCodecs straight onto a canvas over the screenshot: frames
+// only when the screen changes, arriving tens of ms after it does — the path the emulator
+// window itself is fast on. The <img> stays the layout and coordinate box (device px), so
+// input mapping, the overlay and marks are unchanged. iOS, or a browser without
+// VideoDecoder, falls back to the frame pump.
+const Live = { on: false, failed: false, gen: 0, ac: null, dec: null, sps: null, pps: null, codec: '', key: false, ts: 0, tapAt: 0, tapType: '' }
+const liveCv = $('#live'), liveG = liveCv.getContext('2d')
+const isIosSerial = s => /^[0-9A-F]{8}-[0-9A-F]{4}-/i.test(s || '')
+function liveShow(on) { liveCv.hidden = !on }
+function liveStop() {
+  Live.on = false; Live.gen++; try { Live.ac?.abort() } catch {} Live.ac = null
+  try { Live.dec?.close() } catch {} Live.dec = null; Live.key = false; liveShow(false)
+}
+// Returns false at once when the stream cannot apply (so the caller pumps frames instead).
+function liveStart(show) {
+  if (!('VideoDecoder' in window) || isIosSerial(activeSerial) || Live.failed) return false
+  if (show) liveShow(true)
+  if (Live.on) return true
+  Live.on = true
+  liveLoop(++Live.gen)
+  return true
+}
+function annexB(buf) {
+  const out = []; let i = 0, start = -1
+  while (i + 3 <= buf.length) {
+    if (buf[i] === 0 && buf[i + 1] === 0 && (buf[i + 2] === 1 || (buf[i + 2] === 0 && buf[i + 3] === 1))) {
+      const sc = buf[i + 2] === 1 ? 3 : 4
+      if (start >= 0) out.push(buf.subarray(start, i))
+      start = i + sc; i += sc
+    } else i++
+  }
+  if (start >= 0) out.push(buf.subarray(start))
+  return out
+}
+const withSC = parts => { let n = 0; for (const p of parts) n += 4 + p.length; const o = new Uint8Array(n); let k = 0; for (const p of parts) { o.set([0, 0, 0, 1], k); o.set(p, k + 4); k += 4 + p.length } return o }
+function liveDecoder() {
+  const dec = new VideoDecoder({
+    output: f => {
+      if (liveCv.width !== f.displayWidth || liveCv.height !== f.displayHeight) { liveCv.width = f.displayWidth; liveCv.height = f.displayHeight }
+      liveG.drawImage(f, 0, 0); f.close()
+      Live.lastFrame = performance.now()
+      // The encoder's first frame after a change is soft, and a still screen sends no
+      // better one. Once the stream has been quiet for 350 ms, paint one crisp still over it.
+      clearTimeout(Live.sharpTimer)
+      Live.sharpTimer = setTimeout(liveSharpen, 350)
+      if (Live.tapAt) { uilog('tap-to-frame', { ms: Math.round(performance.now() - Live.tapAt), type: Live.tapType, via: 'stream' }); Live.tapAt = 0 }
+    },
+    error: e => { uilog('stream-error', { message: String(e.message || e) }); Live.key = false; try { Live.ac?.abort() } catch {} },
+  })
+  dec.configure({ codec: Live.codec, optimizeForLatency: true })
+  return dec
+}
+function liveNal(nal) {
+  const type = nal[0] & 31
+  if (type === 7) {
+    const codec = 'avc1.' + [nal[1], nal[2], nal[3]].map(b => b.toString(16).padStart(2, '0')).join('')
+    Live.sps = nal.slice()
+    if (codec !== Live.codec || !Live.dec || Live.dec.state === 'closed') { Live.codec = codec; try { Live.dec?.close() } catch {} Live.dec = liveDecoder(); Live.key = false }
+  } else if (type === 8) Live.pps = nal.slice()
+  else if ((type === 5 || type === 1) && Live.dec && Live.dec.state === 'configured') {
+    if (type === 1 && !Live.key) return
+    const data = type === 5 ? withSC([Live.sps, Live.pps, nal]) : withSC([nal])
+    if (type === 5) Live.key = true
+    Live.dec.decode(new EncodedVideoChunk({ type: type === 5 ? 'key' : 'delta', timestamp: (Live.ts += 16000), data }))
+  }
+}
+async function liveSharpen() {
+  if (!Live.on || liveCv.hidden) return
+  const asked = performance.now()
+  try {
+    const r = await fetch('/api/frame', { cache: 'no-store' }); if (!r.ok) return
+    const bmp = await createImageBitmap(await r.blob())
+    // A newer video frame beat the still: the still is out of date, drop it.
+    if (Live.lastFrame > asked) { bmp.close(); return }
+    // The still is full resolution, the stream is scaled down: the canvas takes the still's
+    // size (the next video frame sets it back); CSS keeps the box the same either way.
+    if (liveCv.width !== bmp.width || liveCv.height !== bmp.height) { liveCv.width = bmp.width; liveCv.height = bmp.height }
+    liveG.drawImage(bmp, 0, 0); bmp.close()
+  } catch {}
+}
+function blankDeviceImage(size) {
+  const m = /(\d+)x(\d+)/.exec(size || ''); if (!m) return
+  const w = Number(m[1]), h = Number(m[2])
+  if (img.naturalWidth === w && img.naturalHeight === h) return
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  img.src = c.toDataURL('image/png')
+}
+async function liveLoop(gen) {
+  let fails = 0
+  while (Live.on && gen === Live.gen) {
+    const ac = Live.ac = new AbortController()
+    try {
+      // Ask for frames at the size they are drawn (CSS px × device pixel ratio), no bigger.
+      const want = Math.round(Math.max(360, (img.clientWidth || 400) * (devicePixelRatio || 1)) / 8) * 8
+      const r = await fetch('/api/stream?w=' + want, { signal: ac.signal, cache: 'no-store' })
+      if (r.status === 409) { Live.failed = true; Live.on = false; liveShow(false); if (!still()) pumpFrames(); return }
+      if (!r.ok || !r.body) throw new Error('stream ' + r.status)
+      if (!still()) blankDeviceImage(r.headers.get('x-device-size'))
+      markAlive()
+      const png = r.headers.get('x-stream') === 'png'
+      Live.via = png ? 'grpc' : 'stream'
+      let seq = 0, drawn = 0
+      const reader = r.body.getReader()
+      let buf = new Uint8Array(0)
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done || gen !== Live.gen) break
+        const b = new Uint8Array(buf.length + value.length); b.set(buf); b.set(value, buf.length); buf = b
+        while (buf.length >= 4) {
+          const len = ((buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3]) >>> 0
+          if (buf.length < 4 + len) break
+          const payload = buf.slice(4, 4 + len)
+          buf = buf.slice(4 + len)
+          if (png) {
+            // Decoded off the main thread; a frame that finishes after a newer one is dropped.
+            const my = ++seq
+            createImageBitmap(new Blob([payload], { type: 'image/png' })).then(bmp => {
+              if (my < drawn || gen !== Live.gen) { bmp.close(); return }
+              drawn = my
+              if (liveCv.width !== bmp.width || liveCv.height !== bmp.height) { liveCv.width = bmp.width; liveCv.height = bmp.height }
+              liveG.drawImage(bmp, 0, 0); bmp.close()
+              Live.lastFrame = performance.now()
+              if (Live.tapAt) { uilog('tap-to-frame', { ms: Math.round(performance.now() - Live.tapAt), type: Live.tapType, via: 'grpc' }); Live.tapAt = 0 }
+            }).catch(() => {})
+          } else for (const nal of annexB(payload)) if (nal.length) liveNal(nal)
+        }
+        fails = 0
+      }
+    } catch (e) { if (gen !== Live.gen) return; fails++ }
+    if (fails > 4) { Live.failed = true; Live.on = false; liveShow(false); uilog('stream-error', { message: 'gave up' }); if (!still()) pumpFrames(); return }
+    await sleep(fails ? 400 * fails : 50)   // screenrecord ends every 180 s: reconnect
+  }
 }
 
 // ---------------------------------------------------------------- capture ---
@@ -998,6 +1138,7 @@ addEventListener('mouseup', async e => {
     ? { type: 'swipe', x1: down.x, y1: down.y, x2: up.x, y2: up.y, ms: Math.min(800, Math.max(80, ms)) }
     : { type: 'tap', x: down.x, y: down.y }
   const d = down; down = null
+  Live.tapAt = performance.now(); Live.tapType = cmd.type
   // Jem's defining move: the tapped element enters the text as an anchor AND the tap goes to
   // the app — mark it and open where it leads, in one click. Resolved against the capture
   // from before the tap. ⇧-click taps only. While the picture is a live frame after an
@@ -1023,6 +1164,7 @@ let recapTimer = null, recapGen = 0, lastImgSig = '', screenStale = false
 // at once, like the emulator window; the element overlay hides meanwhile because its tree is
 // the old screen's. Then the capture-until-stable brings the overlay back.
 async function liveBurst(gen, ms) {
+  if (Live.on && !Live.failed) { document.body.classList.add('burst'); liveShow(true); return }
   const until = Date.now() + ms
   document.body.classList.add('burst')
   let url = ''
@@ -1056,7 +1198,7 @@ function recaptureSoon(ms) {
       prev = sig
       await sleep(650)
     }
-    if (gen === recapGen) screenStale = false
+    if (gen === recapGen) { screenStale = false; if (mode === 'jem') { liveShow(false); document.body.classList.remove('burst') } }
   }, mode === 'jem' ? Math.max(ms, 900) : ms)
 }
 // Wheel: scrolls the device in use mode, or with Shift held in collect mode (then re-captures).
@@ -2309,7 +2451,10 @@ function connectEvents() {
         markAlive(); nodes = []; captureId = 0; drawOverlay()
         for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
         if (was !== undefined) setStatus(t('st_connected', ev.serial), 'ok')
+        liveStop()
         if (still()) capture()
+        if (mode === 'jem') liveStart(false)
+        else if (mode === 'use') liveStart(true) || pumpFrames()
       }
     } else if (ev.type === 'project') {
       renderProjects(ev.projects || [], ev.active || '')
