@@ -391,6 +391,7 @@ async function captureIos() {
       : Promise.resolve({ state: 0, nodes: [], error: agent?.reason || 'the iOS agent is not running' }),
   ])
   const { w, h } = image
+  if (tree.error) log('ios tree:', tree.error)
   const root = (tree.nodes || [])[0]
   const scale = root && root.w > 0 ? w / root.w : (iosScreen?.scale || 3)
   iosScreen = { w, h, scale }
