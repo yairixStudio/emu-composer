@@ -805,6 +805,55 @@ async function transcribe(audioB64, mime, language, prompt) {
   return JSON.parse(body).text || ''
 }
 
+// ----------------------------------------------------------------- refine ---
+// The AI levels above plain dictation. The page sends the text with every chip replaced by
+// a numbered token ⟦n⟧ and a legend saying what each token is (an element on a screen, a
+// drawn mark); the model returns the text edited at the chosen level. The tokens are the
+// contract: the answer is refused unless every token comes back exactly once, so an edit
+// can move an anchor but never drop, duplicate or invent one.
+const REFINE = {
+  clean: {
+    model: 'gpt-5.4-mini', effort: 'low',
+    rules: `Clean up this dictated text lightly. Add punctuation and sentence breaks, fix transcription mistakes that are obvious from context, remove filler words (um, uh, like, אממ, כאילו, בעצם when it is filler) and words repeated by a stumble. Do NOT reorder, summarize, merge or restructure; keep the author's wording and meaning.`,
+  },
+  full: {
+    model: 'gpt-5.4', effort: 'medium',
+    rules: `Turn this dictated, spoken text into a clear, well-organized request for a coding agent, as its author would have written it with time to think.
+- Understand the whole text first. Merge things said twice into one statement; when the author corrected themself, keep only the correction.
+- Order it logically, put each distinct request in its own paragraph, and when there are several unrelated tasks separate them with a line containing only "--".
+- Make it precise and unambiguous, but add NOTHING the author did not say or clearly mean: no new requirements, no guesses about implementation, no pleasantries.
+- Keep the author's language and first-person voice. Be concise.`,
+  },
+}
+const TOKEN_RE = /⟦\d+⟧/g
+async function refine({ text, level, legend, language }) {
+  const L = REFINE[level]
+  if (!L) throw userError(`unknown AI level: ${level}`)
+  const key = await openaiKey()
+  if (!key) throw userError('no OpenAI key — add one in settings ⚙')
+  const want = (text.match(TOKEN_RE) || []).sort()
+  const cfg = P.cfg.refine?.[level] || {}
+  const system = `${L.rules}
+
+The text is about a mobile app being tested. Tokens like ⟦1⟧ are anchors to things the author pointed at on the screen (the legend below says what each one is). Rules for tokens:
+- Every token must appear in your output exactly once, spelled exactly as given.
+- Keep each token right next to the words that refer to it ("this button ⟦2⟧"); you may move it together with its sentence.
+- Never add a token that is not in the input.
+Write in the same language as the text${language ? ` (${language})` : ''}. Output ONLY the edited text — no preamble, no quotes, no markdown headings.${legend ? `\n\nLegend:\n${legend}` : ''}`
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: cfg.model || L.model, reasoning_effort: cfg.effort || L.effort,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: text }] }),
+    signal: AbortSignal.timeout(60000),
+  })
+  const body = await r.text()
+  if (!r.ok) { let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {} throw userError(`OpenAI ${r.status}: ${msg}`) }
+  const out = (JSON.parse(body).choices?.[0]?.message?.content || '').trim()
+  const got = (out.match(TOKEN_RE) || []).sort()
+  if (!out || got.join() !== want.join()) throw userError(`the AI edit lost or changed an anchor (${want.length} in, ${got.length} out) — the text was left as it was`)
+  return out
+}
+
 // ----------------------------------------------------------------- server ---
 
 const send = (res, code, body, type = 'application/json') => {
@@ -932,6 +981,8 @@ const server = http.createServer(async (req, res) => {
         await fs.writeFile(path.join(HOME, 'openai-key'), k + '\n', { mode: 0o600 })
         return send(res, 200, { ok: true, hint: `…${k.slice(-4)}` })
       }
+      case '/api/refine':
+        return send(res, 200, { text: await refine(await readBody(req)) })
       case '/api/transcribe': {
         const { audio, mime, language, prompt } = await readBody(req)
         return send(res, 200, { text: await transcribe(audio, mime, language, prompt) })
