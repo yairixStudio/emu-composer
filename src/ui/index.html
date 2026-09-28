@@ -53,7 +53,7 @@
   #marks{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
   #marks .hl{filter:drop-shadow(0 0 3px #fff)}
   #tools{display:none;min-height:30px}
-  body.collect #tools{display:flex}
+  body.collect #tools,body.jem #tools{display:flex}
   #tools .seg button{padding:5px 10px;font-size:11px}
   #colors{display:flex;gap:5px;align-items:center}
   .sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;padding:0;background:var(--c);cursor:pointer}
@@ -84,7 +84,15 @@
   #rec{position:absolute;right:14px;bottom:12px;z-index:2;width:38px;height:38px;padding:0;border-radius:50%;
        display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--dim);
        --lv:0;transition:color .12s,background .12s,box-shadow .07s}
-  #rec svg{width:20px;height:20px;display:block}
+  #rec svg,#refine svg{width:20px;height:20px;display:block}
+  /* The AI edit button sits beside the mic; at the dictation level it still edits on demand. */
+  #refine{position:absolute;right:58px;bottom:12px;z-index:2;width:38px;height:38px;padding:0;border-radius:50%;
+          display:flex;align-items:center;justify-content:center;background:none;border:none;color:#c4b5fd}
+  #refine:hover:not(:disabled){background:var(--panel2);color:#ddd6fe}
+  #refine.busy{animation:spin 1.1s linear infinite;color:#a78bfa}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .aiseg button{padding:4px 9px;font-size:11px}
+  .aiseg button.on{background:#a78bfa;color:#1a1033}
   #rec:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
   /* Recording: red, with a ring that swells with the input level — the only sign the mic hears you. */
   #rec.on{color:#fff;background:var(--rec);box-shadow:0 0 0 calc(3px + var(--lv) * 12px) #ef444440}
@@ -156,9 +164,10 @@
   #guide h2{margin:0;font:700 18px/1.2 inherit;color:#c4b5fd}
   #guide p{margin:0;color:var(--dim);font-size:12.5px;line-height:1.55}
   .gstate{display:flex;flex-wrap:wrap;gap:6px}
-  .gstate span{font:600 11px/1 var(--mono);padding:5px 8px;border-radius:3px;border:1px solid var(--line2);color:var(--dim)}
-  .gstate span.hot{color:#1a1033;background:#a78bfa;border-color:#a78bfa}
-  .gstate span.rec{color:#fff;background:var(--rec);border-color:var(--rec)}
+  .gstate button{font:600 11px/1 var(--mono);padding:5px 8px;border-radius:3px;border:1px solid var(--line2);color:var(--dim);background:none}
+  .gstate button:hover{border-color:#a78bfa;color:var(--fg)}
+  .gstate button.hot{color:#1a1033;background:#a78bfa;border-color:#a78bfa}
+  .gstate button.rec{color:#fff;background:var(--rec);border-color:var(--rec)}
   .gsec{display:flex;flex-direction:column;gap:2px}
   .gsec .lbl{margin-bottom:6px}
   .grow{display:flex;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--fg)}
@@ -213,12 +222,15 @@
   <div id="edwrap">
     <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
          data-t-ph="placeholder" data-ph=""></div>
+    <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
     <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
   </div>
   <div class="row" style="border-bottom:none;border-top:1px solid var(--line)">
     <button id="copyAll" class="primary"><span data-t="copy_all">העתק פרומפט מלא</span> <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
     <button id="save" data-t="save">שמור לקובץ</button>
     <button id="clear" class="ghost" data-t="clear">נקה</button>
+    <span class="opt" data-t-title="ai_title"><span data-t="ai_lbl">AI</span>
+      <span class="seg aiseg" id="aiseg"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></span>
     <label class="opt"><input type="checkbox" id="optNotes" checked style="margin:0"> <span data-t="notes">הערות לסוכן</span></label>
     <label class="opt" data-t-title="errors_title"><input type="checkbox" id="optErrors" style="margin:0"> <span data-t="errors">שגיאות</span><span id="errCount" class="cnt"></span></label>
     <label class="opt" data-t-title="path_title"><input type="checkbox" id="optPath" style="margin:0"> <span data-t="path">מסלול</span><span id="pathCount" class="cnt"></span></label>
@@ -243,6 +255,9 @@
       <div class="snote" data-t="key_note">נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.</div>
       <div class="snote" id="keystate"></div>
       <div class="srow"><span data-t="s_notes">הערות לסוכן בפרומפט</span><input type="checkbox" id="optNotes2"></div>
+      <div class="srow"><span data-t="s_ai">מעורבות ה-AI</span>
+        <span class="seg aiseg" id="aiseg2"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
+      <div class="snote" data-t="ai_note"></div>
       <div class="srow"><span data-t="s_dir">כיוון טקסט</span><div class="seg" id="dirseg2"><button data-dir="rtl">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button></div></div>
     </div>
   </div>
@@ -262,7 +277,12 @@ const I18N = {
     sc_draw: 'כלי הבא: עט, מסגרת, חץ, בחירה', sc_back: 'חזרה במכשיר', sc_home: 'מסך הבית במכשיר', sc_copy: 'העתקת הפרומפט המלא', sc_esc: 'חזרה לטקסט ולכלי הבחירה',
     ms_tap: 'הקשה באפליקציה', ms_ref: 'עוגן לאלמנט בטקסט, בלי להקיש', ms_swipe: 'החלקה', ms_scroll: 'גלילה', ms_hover: 'מדגיש את האלמנט שמתחת לסמן', ms_raw: 'בחירת הצומת הגולמי',
     tip_items: 'שורה עם -- בלבד מפרידה בין משימות', tip_speak: 'בזמן הקלטה, הקשה על אלמנט מכניסה עוגן אחרי המשפט שנאמר', tip_chip: 'לחיצה על עוגן בטקסט מעתיקה אותו לבד',
-    tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
+    tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק',
+    ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
+    ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
+    ai_note: 'תמלול: הטקסט כפי שנאמר. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד דברים שנאמרו פעמיים, מסדר, מפסק ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. העוגנים נשמרים תמיד, והעריכה רצה בסוף כל הקלטה ובכפתור ✨ (⌘⇧E). ⌘Z מבטל.',
+    refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה',
+    sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק פרומפט מלא', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
     history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
@@ -302,7 +322,12 @@ const I18N = {
     sc_draw: 'Next tool: pen, box, arrow, pick', sc_back: 'Device back', sc_home: 'Device home', sc_copy: 'Copy the full prompt', sc_esc: 'Back to text and the pick tool',
     ms_tap: 'Tap in the app', ms_ref: 'Anchor the element in the text, no tap', ms_swipe: 'Swipe', ms_scroll: 'Scroll', ms_hover: 'Highlights the element under the cursor', ms_raw: 'Pick the raw node',
     tip_items: 'A line with only -- separates tasks', tip_speak: 'While recording, a tap on an element drops an anchor after the sentence being said', tip_chip: 'Click an anchor in the text to copy it alone',
-    tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
+    tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping',
+    ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
+    ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
+    ai_note: 'Dictate: the text as spoken. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges what was said twice, orders, punctuates and sharpens it into a clear request, adding nothing you did not say. Anchors are always kept; the edit runs at the end of every recording and on ✨ (⌘⇧E). ⌘Z undoes it.',
+    refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit',
+    sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy full prompt', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
     history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
@@ -346,6 +371,7 @@ function applyLang() {
   for (const c of document.querySelectorAll('.chip')) c.title = t('chip_title')
   recTitle()
   if (typeof mode !== 'undefined') { modeHint(); renderGuide() }
+  if (typeof aiLevel !== 'undefined') setAiLevel(aiLevel, false)
   for (const c of document.querySelectorAll('.chip.mark')) { const r = refOf(c); if (r) c.querySelector('bdi').textContent = markLabel(r) }
 }
 const ed = $('#editor'), img = $('#shot')
@@ -1177,6 +1203,7 @@ function stopRec() {
   $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle(); renderGuide()
   audioCtx?.close().catch(() => {}); audioCtx = null
   setStatus(t('st_rec_done'), 'ok')
+  if (aiLevel !== 'transcribe') refineAfterDictation()
 }
 function startMeter() {
   audioCtx = new AudioContext()
@@ -1229,6 +1256,78 @@ function placeTranscript(marker, text) {
   rememberCaret(); saveDraft()
 }
 $('#rec').onclick = toggleRec
+
+// ---------------------------------------------------------------- AI edit ---
+// Three levels of involvement: plain dictation, a light clean-up, or a full edit that reads
+// everything said and turns it into an organized request. Chips travel as ⟦n⟧ tokens with a
+// legend, the server refuses an answer that loses one, and the result replaces the text
+// through execCommand so ⌘Z brings the original back.
+const AI_LEVELS = ['transcribe', 'clean', 'full']
+let aiLevel = 'transcribe'
+try { aiLevel = AI_LEVELS.includes(localStorage.getItem('emucomposer.ai')) ? localStorage.getItem('emucomposer.ai') : 'transcribe' } catch {}
+function setAiLevel(l, save = true) {
+  aiLevel = AI_LEVELS.includes(l) ? l : 'transcribe'
+  for (const b of document.querySelectorAll('.aiseg [data-ai]')) b.classList.toggle('on', b.dataset.ai === aiLevel)
+  for (const c of AI_LEVELS) document.body.classList.toggle('ai-' + c, c === aiLevel)
+  $('#refine').title = t('refine_tip', t('ai_' + (aiLevel === 'transcribe' ? 'full' : aiLevel)))
+  if (save) try { localStorage.setItem('emucomposer.ai', aiLevel) } catch {}
+  renderGuide()
+}
+for (const s of document.querySelectorAll('.aiseg')) s.addEventListener('click', e => { const b = e.target.closest('[data-ai]'); if (b) setAiLevel(b.dataset.ai) })
+$('#refine').onclick = () => refineText()
+
+function tokenizeEditor() {
+  const chips = [], legend = []
+  const walk = n => {
+    if (n.nodeType === 3) return n.nodeValue
+    if (n.nodeType !== 1 || n.classList.contains('interim')) return ''
+    if (n.tagName === 'BR') return '\n'
+    if (n.classList.contains('chip')) {
+      const r = refOf(n); chips.push(n.outerHTML); const k = chips.length
+      legend.push(`⟦${k}⟧ = ` + (!r ? `"${n.textContent}"`
+        : r.kind === 'mark' ? `a ${r.colorName} ${r.shape === 'rect' ? 'box' : r.shape} the author drew on the screen "${r.screen || '?'}"`
+        : `${r.what || 'element'} "${r.label}" on the screen "${r.screen || '?'}"${r.platform ? ` (${r.platform})` : ''}`))
+      return `⟦${k}⟧`
+    }
+    let out = /^(DIV|P)$/.test(n.tagName) && n.previousSibling ? '\n' : ''
+    for (const c of n.childNodes) out += walk(c)
+    return out
+  }
+  let text = ''
+  for (const c of ed.childNodes) text += walk(c)
+  return { text: text.replace(/\u00a0/g, ' ').trim(), chips, legend: legend.join('\n') }
+}
+let refining = false
+async function refineText(level = aiLevel) {
+  if (refining) return
+  if (level === 'transcribe') level = 'full'   // ✨/⌘⇧E at the dictation level means "edit it"
+  const { text, chips, legend } = tokenizeEditor()
+  if (!text.replace(/⟦\d+⟧/g, '').trim()) return setStatus(t('st_refine_empty'), 'err')
+  refining = true; $('#refine').classList.add('busy')
+  setStatus(t('st_refining', t('ai_' + level)), 'busy')
+  try {
+    const d = await (await fetch('/api/refine', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage }) })).json()
+    if (d.error) throw new Error(d.error)
+    const html = d.text.split(/(⟦\d+⟧)/).map(p => { const m = /^⟦(\d+)⟧$/.exec(p); return m ? chips[Number(m[1]) - 1] : escapeHTML(p).replace(/\n/g, '<br>') }).join('')
+    ed.focus()
+    const r = document.createRange(); r.selectNodeContents(ed)
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+    document.execCommand('insertHTML', false, html)
+    for (const c of ed.querySelectorAll('.chip')) refOf(c)
+    rememberCaret(); saveDraft(); syncMarks(); updateDual()
+    setStatus(t('st_refined', t('ai_' + level)), 'ok')
+  } catch (e) { setStatus(e.message, 'err') }
+  finally { refining = false; $('#refine').classList.remove('busy') }
+}
+// At the end of a recording the last segments are still being transcribed; wait until their
+// markers are gone (at most 30 s) before editing.
+async function refineAfterDictation() {
+  const level = aiLevel
+  await sleep(500)
+  for (let w = 0; w < 60 && ed.querySelector('.interim'); w++) await sleep(500)
+  if (!recOn && level !== 'transcribe') refineText(level)
+}
 // The button has no text any more, so its tooltip says what it does — or why it is disabled.
 function recTitle() {
   const b = $('#rec'); if (!b) return
@@ -1284,6 +1383,7 @@ const SHORTCUTS = [
   { keys: '⌘D', t: 'sc_draw', k: 'KeyD', still: true, run: () => setTool(TOOLS[(TOOLS.indexOf(tool) + 1) % TOOLS.length]) },
   { keys: '⌘B', t: 'sc_back', k: 'KeyB', run: () => deviceKey(4) },
   { keys: '⌘⇧H', t: 'sc_home', k: 'KeyH', shift: true, run: () => deviceKey(3) },
+  { keys: '⌘⇧E', t: 'sc_refine', k: 'KeyE', shift: true, run: () => refineText() },
   { keys: '⌘↩', t: 'sc_copy', k: 'Enter', run: () => $('#copyAll').click() },
   { keys: 'Esc', t: 'sc_esc', display: true },
 ]
@@ -1336,13 +1436,20 @@ function renderGuide() {
   const toolName = { pick: t('tool_pick'), pen: t('tool_pen'), rect: t('tool_rect'), arrow: t('tool_arrow') }[tool] || tool
   g.dir = lang === 'he' ? 'rtl' : 'ltr'
   g.innerHTML = `<h2>${escapeHTML(t('jem_title'))}</h2><p>${escapeHTML(t('jem_intro'))}</p>
-    <div class="gstate"><span class="${kbdApp ? 'hot' : ''}">${escapeHTML(t(kbdApp ? 'g_to_app' : 'g_to_text'))}</span>
-      <span class="${tool !== 'pick' ? 'hot' : ''}">${escapeHTML(t('g_tool', toolName))}</span>
-      <span class="${recOn ? 'rec' : ''}">${escapeHTML(t(recOn ? 'g_rec_on' : 'g_rec_off'))}</span></div>
+    <div class="gstate"><button data-g="kbd" class="${kbdApp ? 'hot' : ''}">${escapeHTML(t(kbdApp ? 'g_to_app' : 'g_to_text'))}</button>
+      <button data-g="tool" class="${tool !== 'pick' ? 'hot' : ''}">${escapeHTML(t('g_tool', toolName))}</button>
+      <button data-g="rec" class="${recOn ? 'rec' : ''}">${escapeHTML(t(recOn ? 'g_rec_on' : 'g_rec_off'))}</button>
+      <button data-g="ai" class="${aiLevel !== 'transcribe' ? 'hot' : ''}">${escapeHTML(t('g_ai', t('ai_' + aiLevel)))}</button></div>
     <label class="opt"><input type="checkbox" id="optAnchor" ${anchorTaps ? 'checked' : ''} style="margin:0"> <span>${escapeHTML(t('g_anchor'))}</span></label>
     <div class="gsec"><span class="lbl">${escapeHTML(t('g_kbd'))}</span>${SHORTCUTS.filter(s => s.keys).map(s => row(s.keys, t(s.t), s.t)).join('')}</div>
     <div class="gsec"><span class="lbl">${escapeHTML(t('g_mouse'))}</span>${MOUSE.map(([k, id]) => row(k, t(id))).join('')}</div>
     <div class="gsec"><span class="lbl">${escapeHTML(t('g_tips'))}</span><ul>${['tip_items', 'tip_speak', 'tip_chip', 'tip_draw'].map(k => `<li>${escapeHTML(t(k))}</li>`).join('')}</ul></div>`
+  // Every state chip is also a button: the same action as its shortcut, for the mouse.
+  g.querySelector('.gstate').onclick = e => {
+    const b = e.target.closest('[data-g]'); if (!b) return
+    ;({ kbd: () => setKbdApp(!kbdApp), tool: () => setTool(TOOLS[(TOOLS.indexOf(tool) + 1) % TOOLS.length]), rec: () => toggleRec(),
+       ai: () => setAiLevel(AI_LEVELS[(AI_LEVELS.indexOf(aiLevel) + 1) % AI_LEVELS.length]) })[b.dataset.g]()
+  }
   $('#optAnchor').onchange = e => { anchorTaps = e.target.checked; try { localStorage.setItem('emucomposer.anchorTaps', anchorTaps ? '1' : '0') } catch {} }
 }
 // The row of a shortcut just used lights up for a moment — the guide teaches by echo.
@@ -1535,6 +1642,7 @@ try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emu
 $('#optNotes2').checked = $('#optNotes').checked
 if (sttOverride !== null) $('#sttlang').value = sttOverride
 applyLang()
+setAiLevel(aiLevel, false)
 loadDraft(); syncMarks()
 health(); setInterval(health, 20000)
 setMode('collect')
