@@ -87,13 +87,46 @@ async function activate(id, why = '') {
     ix.watch(() => ix.build().then(s => log(`string index ${what} rebuilt: ${s.keys} keys`)))
   }
   broadcast({ type: 'project', ...projectList() })
+  refreshAvailability().catch(() => {})
   return rec
 }
 
 const projectList = () => ({
   active: P?.id || '',
-  projects: [...projects.values()].map(r => ({ id: r.id, name: r.cfg.appName, package: r.cfg.package, root: r.cfg.root, ios: Boolean(r.cfg.ios) })),
+  projects: [...projects.values()].map(r => ({ id: r.id, name: r.cfg.appName, package: r.cfg.package, root: r.cfg.root, ios: Boolean(r.cfg.ios),
+    devices: availability.get(r.id) || [] })),
 })
+
+// Which open devices can actually show each project: its app is installed there (Android
+// package or iOS bundle). One `pm list packages` per emulator and one app-container lookup
+// per simulator and project, refreshed when devices come and go and every 20 s (installs).
+// The menus mark these with a green dot, so a repo with nothing running reads as such.
+const availability = new Map()   // project id -> [serial, ...]
+let availSig = '', availRunning = false
+async function refreshAvailability() {
+  if (availRunning) return
+  availRunning = true
+  try {
+    const devices = (await listDevices()).filter(d => d.state === 'device')
+    const pkgsBy = new Map()
+    await Promise.all(devices.filter(d => d.kind === 'android').map(async d => {
+      const out = await execFileP(ADB, ['-s', d.serial, 'shell', 'pm list packages'], { encoding: 'utf8', timeout: 5000 }).then(r => r.stdout).catch(() => '')
+      pkgsBy.set(d.serial, new Set(out.split('\n').map(l => l.replace(/^package:/, '').trim()).filter(Boolean)))
+    }))
+    const next = new Map()
+    for (const r of projects.values()) {
+      const on = []
+      for (const d of devices) {
+        if (d.kind === 'android') { if (r.cfg.package && pkgsBy.get(d.serial)?.has(r.cfg.package)) on.push(d.serial) }
+        else if (r.cfg.ios?.bundleId && (await installedApp(d.serial, r.cfg.ios.bundleId)).installed) on.push(d.serial)
+      }
+      next.set(r.id, on)
+    }
+    const sig = JSON.stringify([...next])
+    availability.clear(); for (const [k, v] of next) availability.set(k, v)
+    if (sig !== availSig) { availSig = sig; broadcast({ type: 'project', ...projectList() }) }
+  } finally { availRunning = false }
+}
 
 // Which agent-rule files this repo carries, so the prompt can point the agent at them.
 async function agentRuleFiles(root) {
@@ -201,6 +234,7 @@ async function pollSimulators() {
 }
 function trackDevices() {
   setInterval(() => pollSimulators().catch(() => {}), 3000)
+  setInterval(() => refreshAvailability().catch(() => {}), 20000)
   const p = spawn(ADB, ['track-devices'], { stdio: ['ignore', 'pipe', 'ignore'] })
   let buf = ''
   let timer = null
@@ -213,12 +247,15 @@ function trackDevices() {
   p.on('exit', () => setTimeout(trackDevices, 2000))
 }
 async function onDevicesChanged() {
+  await refreshAvailability().catch(() => {})
   const devices = await listDevices()
   const usable = devices.filter(d => d.state === 'device')
   const activeOk = usable.some(d => d.serial === state.serial)
   if (!activeOk) {
     const back = usable.find(d => d.serial === lastChosen)
-    const pick = back || usable.find(d => /^emulator-/.test(d.serial)) || usable[0]
+    const has = new Set(availability.get(P?.id) || [])
+    const pick = back || usable.find(d => has.has(d.serial) && /^emulator-/.test(d.serial)) || usable.find(d => has.has(d.serial))
+      || usable.find(d => /^emulator-/.test(d.serial)) || usable[0]
     if (pick) await switchDevice(pick.serial, state.serial ? 'previous device went away' : 'device appeared')
     else if (state.serial) { await switchDevice('', 'no device left') }
     else broadcast({ type: 'device', serial: '', devices })

@@ -287,8 +287,8 @@ const I18N = {
     history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
-    device_title: 'איזה מכשיר לשקף', device_none: 'אין מכשיר מחובר', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
-    project_title: 'איזה פרויקט — הרפרנסים נפתרים מול הקוד שלו', project_none: 'אין פרויקט',
+    device_title: 'איזה מכשיר לשקף. 🟢 = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
+    project_title: 'איזה פרויקט — הרפרנסים נפתרים מול הקוד שלו. 🟢 = האפליקציה שלו מותקנת במכשיר פתוח', project_none: 'אין פרויקט',
     errors: 'שגיאות', errors_title: 'לצרף לפרומפט את השגיאות האחרונות מהמכשיר (logcat + קריסות)',
     path: 'מסלול', path_title: 'לצרף לפרומפט את מסלול המסכים שעברת בסשן הזה',
     st_project: 'עובר ל{0}…', st_project_on: 'הפרויקט הפעיל: {0}',
@@ -332,8 +332,8 @@ const I18N = {
     history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
-    device_title: 'Which device to mirror', device_none: 'No device attached', device_many: '{0} devices — pick the one to mirror',
-    project_title: 'Which project — references resolve against its sources', project_none: 'No project',
+    device_title: 'Which device to mirror. 🟢 = the active project\'s app is installed on it', device_none: 'No device attached', device_many: '{0} devices — pick the one to mirror',
+    project_title: 'Which project — references resolve against its sources. 🟢 = its app is installed on an open device', project_none: 'No project',
     errors: 'Errors', errors_title: "Attach the device's recent errors (logcat + crash buffer) to the prompt",
     path: 'Path', path_title: 'Attach the screens walked in this session to the prompt',
     st_project: 'switching to {0}…', st_project_on: 'active project: {0}',
@@ -1490,15 +1490,19 @@ async function health() {
   } catch {}
 }
 // ---- devices: several emulators may run; the page decides which one is mirrored.
-let deviceSig = '', wantedOnce = false
+let deviceSig = '', wantedOnce = false, lastDevices = [], lastActiveDevice = ''
+// 🟢 = the active project's app is installed on this device; ⚪ = it is not.
+const dot = on => on ? '🟢 ' : '⚪ '
 function renderDevices(devices, active) {
+  lastDevices = devices; lastActiveDevice = active
   const sel = $('#device')
   const usable = devices.filter(d => d.state === 'device')
-  const sig = usable.map(d => d.serial + d.avd).join('|') + '#' + active
+  const has = new Set(projectsCache.find(p => p.id === activeProject)?.devices || [])
+  const sig = usable.map(d => d.serial + d.avd + has.has(d.serial)).join('|') + '#' + active
   if (sig === deviceSig) return
   deviceSig = sig
   sel.innerHTML = usable.length
-    ? usable.map(d => `<option value="${d.serial}"${d.serial === active ? ' selected' : ''}>${escapeHTML((d.avd || d.model || d.serial) + (d.avd || d.model ? ` · ${d.serial}` : ''))}</option>`).join('')
+    ? usable.map(d => `<option value="${d.serial}"${d.serial === active ? ' selected' : ''}>${escapeHTML(dot(has.has(d.serial)) + (d.avd || d.model || d.serial) + (d.avd || d.model ? ` · ${d.serial}` : ''))}</option>`).join('')
     : `<option value="">${escapeHTML(t('device_none'))}</option>`
   sel.classList.toggle('bad', !usable.length)
   sel.title = usable.length > 1 ? t('device_many', usable.length) : t('device_title')
@@ -1506,14 +1510,16 @@ function renderDevices(devices, active) {
 // ---- projects: one daemon serves them all; the switch is BY HAND, never guessed. The
 // active project decides which sources a reference resolves against and which repo the
 // prompt names, so it is a deliberate choice, like the device.
-let projectSig = '', activeProject = ''
+let projectSig = '', activeProject = '', projectsCache = []
+// 🟢 = the project's app is installed on at least one open emulator/simulator right now.
 function renderProjects(list, active) {
   const sel = $('#project')
-  const sig = list.map(p => p.id).join('|') + '#' + active
+  projectsCache = list
+  const sig = list.map(p => p.id + (p.devices || []).join(',')).join('|') + '#' + active
   if (sig === projectSig) return
   projectSig = sig
   sel.innerHTML = list.length
-    ? list.map(p => `<option value="${escapeHTML(p.id)}"${p.id === active ? ' selected' : ''}>${escapeHTML(p.name)}</option>`).join('')
+    ? list.map(p => `<option value="${escapeHTML(p.id)}"${p.id === active ? ' selected' : ''}>${escapeHTML(dot((p.devices || []).length) + p.name)}</option>`).join('')
     : `<option value="">${escapeHTML(t('project_none'))}</option>`
   sel.style.display = list.length > 1 ? '' : 'none'
   sel.title = t('project_title')
@@ -1522,6 +1528,8 @@ function renderProjects(list, active) {
     activeProject = active
     if (was) onProjectSwitched(list.find(p => p.id === active))
   }
+  // The device dots belong to the active project, so they are redrawn with it.
+  deviceSig = ''; if (lastDevices.length) renderDevices(lastDevices, lastActiveDevice)
 }
 // Everything resolved against the old repo is stale the moment the project changes.
 function onProjectSwitched(p) {
