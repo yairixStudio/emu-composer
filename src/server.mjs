@@ -851,6 +851,53 @@ async function transcribe(audioB64, mime, language, prompt) {
   return JSON.parse(body).text || ''
 }
 
+// ------------------------------------------------------------------- run ---
+// "Run in an agent": the finished prompt goes straight to a coding-agent CLI, in a new
+// Terminal window, in the active project's root. The prompt is written to a file under
+// .emu-composer/prompts/ and a .command script opens it — `open` runs a .command in
+// Terminal with no AppleScript/automation permission to grant.
+const AGENTS = [
+  { id: 'claude', name: 'Claude Code', args: f => `"$(cat ${f})"` },
+  { id: 'codex', name: 'Codex', args: f => `"$(cat ${f})"` },
+  { id: 'gemini', name: 'Gemini CLI', args: f => `-i "$(cat ${f})"` },
+  { id: 'cursor-agent', name: 'Cursor Agent', args: f => `"$(cat ${f})"` },
+]
+let agentCache = null, agentCacheAt = 0
+async function findAgents() {
+  if (agentCache && Date.now() - agentCacheAt < 60000) return agentCache
+  // A login shell: the daemon may have started without the user's PATH (~/.local/bin, npm).
+  const found = await Promise.all(AGENTS.map(async a => {
+    const bin = await execFileP('/bin/zsh', ['-lc', `command -v ${a.id}`], { encoding: 'utf8', timeout: 5000 }).then(r => r.stdout.trim()).catch(() => '')
+    return bin ? { id: a.id, name: a.name, bin } : null
+  }))
+  agentCache = found.filter(Boolean); agentCacheAt = Date.now()
+  return agentCache
+}
+const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
+async function runInAgent({ agent: id, text, dryRun }) {
+  const a = (await findAgents()).find(x => x.id === id)
+  if (!a) throw userError(`${id} was not found on this Mac`)
+  if (!String(text || '').trim()) throw userError('the prompt is empty')
+  const root = P.cfg.root
+  const dir = path.join(root, '.emu-composer', 'prompts')
+  await fs.mkdir(dir, { recursive: true })
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  const file = path.join(dir, `${stamp}-${a.id}.md`), cmd = path.join(dir, `${stamp}-${a.id}.command`)
+  await fs.writeFile(file, text)
+  const spec = AGENTS.find(x => x.id === a.id)
+  const script = `#!/bin/zsh -l
+# emu-composer: run the composed prompt in ${a.name}, in ${root}
+cd ${shq(root)} || exit 1
+clear
+printf '\\033[2m%s\\033[0m\\n' ${shq(`${a.name} · ${root} · prompt: ${path.relative(root, file)}`)}
+exec ${shq(a.bin)} ${spec.args(shq(file))}
+`
+  await fs.writeFile(cmd, script, { mode: 0o755 })
+  if (!dryRun) await execFileP('open', ['-a', 'Terminal', cmd])
+  log(`run → ${a.name} in ${root}${dryRun ? ' (dry run)' : ''}`)
+  return { ok: true, agent: a.name, file: path.relative(root, file), script: dryRun ? script : undefined }
+}
+
 // ----------------------------------------------------------------- refine ---
 // The AI levels above plain dictation. The page sends the text with every chip replaced by
 // a numbered token ⟦n⟧ and a legend saying what each token is (an element on a screen, a
@@ -1032,6 +1079,10 @@ const server = http.createServer(async (req, res) => {
         await fs.writeFile(path.join(HOME, 'openai-key'), k + '\n', { mode: 0o600 })
         return send(res, 200, { ok: true, hint: `…${k.slice(-4)}` })
       }
+      case '/api/agents':
+        return send(res, 200, { agents: await findAgents() })
+      case '/api/run':
+        return send(res, 200, await runInAgent(await readBody(req)))
       case '/api/refine':
         return send(res, 200, { text: await refine(await readBody(req)) })
       case '/api/transcribe': {
