@@ -164,7 +164,11 @@ function agentFor(serial) {
   if (!agents.has(serial)) {
     const alog = (...a) => log(`[${serial.slice(0, 13)}]`, ...a)
     // One runner per simulator, each on its own port: a udid is stable across boots.
-    const port = 8100 + (Array.from(serial).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 200)
+    // The hash is only a starting point: two simulators collided on 8245 (a 200-slot space),
+    // so the second runner fought the first for the port. Step past any port in use.
+    let port = 8100 + (Array.from(serial).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 200)
+    const used = new Set([...agents.values()].map(a => a.port).filter(Boolean))
+    while (used.has(port)) port++
     agents.set(serial, IOS_UDID.test(serial) ? new IosAgent({ udid: serial, port, log: alog }) : new Agent({ adb: ADB, serial, jar: JAR, log: alog }))
   }
   return agents.get(serial)
@@ -346,14 +350,22 @@ let iosScreen = null   // { w, h, scale } of the active simulator, from its last
 async function captureIos() {
   requireIos()
   const bundle = activePkg()
-  if (!agent || !(await agent.ensureReady(agent._starting ? 30000 : 3000))) throw userError(agent?.reason || 'the iOS agent is not running')
-  const [png, tree] = await Promise.all([screenshotPng(state.serial), agent.tree(bundle)])
+  // The screenshot comes from simctl and needs no agent, so the screen is ALWAYS shown: with
+  // the app closed (the agent answers "not running") or the agent down, the page gets the
+  // picture and an empty tree, and the problem bar says what is missing. It used to throw,
+  // and the page stayed blank.
+  const ready = agent && await agent.ensureReady(agent._starting ? 30000 : 3000)
+  const [png, tree] = await Promise.all([
+    screenshotPng(state.serial),
+    ready ? agent.tree(bundle).catch(e => ({ state: /not running/.test(e.message) ? 1 : 0, nodes: [], error: e.message }))
+      : Promise.resolve({ state: 0, nodes: [], error: agent?.reason || 'the iOS agent is not running' }),
+  ])
   const w = png.readUInt32BE(16), h = png.readUInt32BE(20)
   const root = (tree.nodes || [])[0]
-  const scale = root && root.w > 0 ? w / root.w : 3
+  const scale = root && root.w > 0 ? w / root.w : (iosScreen?.scale || 3)
   iosScreen = { w, h, scale }
   const nodes = buildTree(iosNodes(tree, scale, bundle))
-  return { nodes, image: { mime: 'image/png', b64: png.toString('base64') }, source: 'ios-agent', activity: tree.state === 4 ? bundle : (tree.state ? `${bundle} (background)` : '') }
+  return { nodes, image: { mime: 'image/png', b64: png.toString('base64') }, source: tree.error ? 'simctl' : 'ios-agent', activity: tree.state === 4 ? bundle : (tree.state ? `${bundle} (background)` : '') }
 }
 
 async function capture() {
@@ -444,6 +456,7 @@ function trailBlock() {
 
 let lastHash = '', watching = false, lastActivity = ''
 const anyWatcher = () => [...sseClients].some(r => r.watch)
+let lastWatchErr = ''
 async function watchScreen() {
   if (watching) return
   watching = true
@@ -461,7 +474,7 @@ async function watchScreen() {
           log(`screen changed (${h})`)
           broadcast({ type: 'screen', hash: h })
         }
-      } catch (e) { log('screen watch:', e.message) }
+      } catch (e) { if (e.message !== lastWatchErr) { lastWatchErr = e.message; log('screen watch:', e.message) } }
     }
   } finally { watching = false; log('screen watch off') }
 }
@@ -473,7 +486,10 @@ async function frame() {
   if (framing) return null
   framing = true
   try {
-    if (isIos()) return { mime: 'image/png', bytes: await screenshotPng(state.serial) }
+    if (isIos()) {
+      if (agent?.ready && agent.shot) { try { return { mime: 'image/jpeg', bytes: await agent.shot(0.55, 1) } } catch (e) { log('ios shot failed, simctl:', e.message) } }
+      return { mime: 'image/png', bytes: await screenshotPng(state.serial) }
+    }
     if (agent?.ready) {
       try { return { mime: 'image/jpeg', bytes: Buffer.from(await agent.screenshotJpegB64(70), 'base64') } }
       catch (e) { log('agent frame failed:', e.message) }   // rpc() already scheduled the restart
@@ -851,14 +867,14 @@ async function openaiKey() {
   return ''
 }
 
-async function transcribe(audioB64, mime, language, prompt) {
+async function transcribe(audioB64, mime, language, prompt, model) {
   const key = await openaiKey()
   if (!key) throw userError('no OpenAI key — add one with the "מפתח API" button')
   const bytes = Buffer.from(audioB64, 'base64')
   const ext = /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'mp4' : 'webm'
   const form = new FormData()
   form.append('file', new Blob([bytes], { type: mime }), `seg.${ext}`)
-  form.append('model', process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe')
+  form.append('model', model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe')
   if (language) form.append('language', language)
   // The previous segment's tail primes the model, which is what keeps a sentence that was
   // cut at a pause from restarting with a capital letter or losing its first word.
@@ -880,10 +896,10 @@ async function transcribe(audioB64, mime, language, prompt) {
 // .emu-composer/prompts/ and a .command script opens it — `open` runs a .command in
 // Terminal with no AppleScript/automation permission to grant.
 const AGENTS = [
-  { id: 'claude', name: 'Claude Code', args: f => `"$(cat ${f})"` },
-  { id: 'codex', name: 'Codex', args: f => `"$(cat ${f})"` },
-  { id: 'gemini', name: 'Gemini CLI', args: f => `-i "$(cat ${f})"` },
-  { id: 'cursor-agent', name: 'Cursor Agent', args: f => `"$(cat ${f})"` },
+  { id: 'claude', name: 'Claude Code', args: f => `"$(cat ${f})"`, model: m => `--model ${m}`, models: ['opus', 'sonnet', 'haiku'] },
+  { id: 'codex', name: 'Codex', args: f => `"$(cat ${f})"`, model: m => `-m ${m}`, models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'] },
+  { id: 'gemini', name: 'Gemini CLI', args: f => `-i "$(cat ${f})"`, model: m => `-m ${m}`, models: ['gemini-2.5-pro', 'gemini-2.5-flash'] },
+  { id: 'cursor-agent', name: 'Cursor Agent', args: f => `"$(cat ${f})"`, model: m => `--model ${m}`, models: [] },
 ]
 let agentCache = null, agentCacheAt = 0
 async function findAgents() {
@@ -891,13 +907,13 @@ async function findAgents() {
   // A login shell: the daemon may have started without the user's PATH (~/.local/bin, npm).
   const found = await Promise.all(AGENTS.map(async a => {
     const bin = await execFileP('/bin/zsh', ['-lc', `command -v ${a.id}`], { encoding: 'utf8', timeout: 5000 }).then(r => r.stdout.trim()).catch(() => '')
-    return bin ? { id: a.id, name: a.name, bin } : null
+    return bin ? { id: a.id, name: a.name, bin, models: a.models } : null
   }))
   agentCache = found.filter(Boolean); agentCacheAt = Date.now()
   return agentCache
 }
 const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
-async function runInAgent({ agent: id, text, dryRun }) {
+async function runInAgent({ agent: id, text, dryRun, model = '' }) {
   const a = (await findAgents()).find(x => x.id === id)
   if (!a) throw userError(`${id} was not found on this Mac`)
   if (!String(text || '').trim()) throw userError('the prompt is empty')
@@ -913,13 +929,28 @@ async function runInAgent({ agent: id, text, dryRun }) {
 cd ${shq(root)} || exit 1
 clear
 printf '\\033[2m%s\\033[0m\\n' ${shq(`${a.name} · ${root} · prompt: ${path.relative(root, file)}`)}
-exec ${shq(a.bin)} ${spec.args(shq(file))}
+exec ${shq(a.bin)}${model && /^[\w.:\-\/]+$/.test(model) ? ' ' + spec.model(shq(model)) : ''} ${spec.args(shq(file))}
 `
   await fs.writeFile(cmd, script, { mode: 0o755 })
   if (!dryRun) await execFileP('open', ['-a', 'Terminal', cmd])
   log(`run → ${a.name} in ${root}${dryRun ? ' (dry run)' : ''}`)
-  slog('run', { agent: a.id, root, file: path.relative(root, file), chars: text.length, dryRun: Boolean(dryRun) })
+  slog('run', { agent: a.id, model, root, file: path.relative(root, file), chars: text.length, dryRun: Boolean(dryRun) })
   return { ok: true, agent: a.name, file: path.relative(root, file), script: dryRun ? script : undefined }
+}
+
+// Which OpenAI models the stored key can use, split by purpose (cached 10 min).
+let modelCache = null, modelAt = 0
+async function listModels() {
+  if (modelCache && Date.now() - modelAt < 600000) return modelCache
+  const key = await openaiKey()
+  if (!key) return { stt: [], chat: [] }
+  const r = await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) })
+  if (!r.ok) throw userError(`OpenAI ${r.status} listing models`)
+  const ids = (await r.json()).data.map(m => m.id).sort()
+  const stt = ids.filter(i => /transcribe|whisper/.test(i) && !/diarize|realtime/.test(i))
+  const chat = ids.filter(i => /^(gpt-[45]|o[34])/.test(i) && !/audio|realtime|tts|transcribe|search|image|embedding|codex|instruct|\d{4}-\d\d-\d\d/.test(i))
+  modelCache = { stt, chat }; modelAt = Date.now()
+  return modelCache
 }
 
 // ----------------------------------------------------------------- refine ---
@@ -943,7 +974,7 @@ const REFINE = {
   },
 }
 const TOKEN_RE = /⟦\d+⟧/g
-async function refine({ text, level, legend, language, images = [] }) {
+async function refine({ text, level, legend, language, images = [], model: pick = '' }) {
   const L = REFINE[level]
   if (!L) throw userError(`unknown AI level: ${level}`)
   const key = await openaiKey()
@@ -961,7 +992,7 @@ ${level !== 'full' ? '' : `Some tokens are MARKS the author drew on the screen (
 `}Write in the same language as the text${language ? ` (${language})` : ''}. Output ONLY the edited text — no preamble, no quotes, no markdown headings.${legend ? `\n\nLegend:\n${legend}` : ''}`
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model: cfg.model || L.model, reasoning_effort: cfg.effort || L.effort,
+    body: JSON.stringify({ model: pick || cfg.model || L.model, reasoning_effort: cfg.effort || L.effort,
       messages: [{ role: 'system', content: system }, { role: 'user', content: images.length
         ? [{ type: 'text', text }, ...images.slice(0, 4).flatMap(im => [
             { type: 'text', text: `Screenshot of "${im.screen || '?'}" with marks ${(im.marks || []).join(', ')}:` },
@@ -972,7 +1003,7 @@ ${level !== 'full' ? '' : `Some tokens are MARKS the author drew on the screen (
   const body = await r.text()
   if (!r.ok) { let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {} throw userError(`OpenAI ${r.status}: ${msg}`) }
   const out = (JSON.parse(body).choices?.[0]?.message?.content || '').trim()
-  slog('refine', { level, model: cfg.model || L.model, ms: Date.now() - t0, anchors: want.length, images: images.length, in: text, out })
+  slog('refine', { level, model: pick || cfg.model || L.model, ms: Date.now() - t0, anchors: want.length, images: images.length, in: text, out })
   const got = (out.match(TOKEN_RE) || []).sort()
   if (!out || got.join() !== want.join()) throw userError(`the AI edit lost or changed an anchor (${want.length} in, ${got.length} out) — the text was left as it was`)
   return out
@@ -1121,6 +1152,8 @@ const server = http.createServer(async (req, res) => {
         await fs.writeFile(path.join(HOME, 'openai-key'), k + '\n', { mode: 0o600 })
         return send(res, 200, { ok: true, hint: `…${k.slice(-4)}` })
       }
+      case '/api/models':
+        return send(res, 200, await listModels())
       case '/api/agents':
         return send(res, 200, { agents: await findAgents() })
       case '/api/run':
@@ -1128,8 +1161,8 @@ const server = http.createServer(async (req, res) => {
       case '/api/refine':
         return send(res, 200, { text: await refine(await readBody(req)) })
       case '/api/transcribe': {
-        const { audio, mime, language, prompt } = await readBody(req)
-        return send(res, 200, { text: await transcribe(audio, mime, language, prompt) })
+        const { audio, mime, language, prompt, model } = await readBody(req)
+        return send(res, 200, { text: await transcribe(audio, mime, language, prompt, model) })
       }
       case '/api/save': {
         // Crops + full screenshot + the assembled prompt, for a reference that outlives the tab.

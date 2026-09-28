@@ -47,7 +47,8 @@ final class AgentServer {
                 let text = String(decoding: buf, as: UTF8.self)
                 if text.contains("\r\n\r\n") || done || err != nil {
                     let (status, body) = self.route(text)
-                    let head = "HTTP/1.1 \(status)\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+                    let jpeg = body.count > 2 && body[body.startIndex] == 0xFF && body[body.startIndex + 1] == 0xD8
+                    let head = "HTTP/1.1 \(status)\r\nContent-Type: \(jpeg ? "image/jpeg" : "application/json; charset=utf-8")\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
                     c.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in c.cancel() })
                 } else { receive() }
             }
@@ -68,6 +69,18 @@ final class AgentServer {
                 switch url.path {
                 case "/health":
                     result = ("200 OK", json(["ok": true, "pid": ProcessInfo.processInfo.processIdentifier]))
+                case "/shot":
+                    // The live picture, taken in-process: simctl spawns a process per shot
+                    // (~400 ms, ~2 fps); this one is a JPEG from the running runner.
+                    // q = JPEG quality, s = downscale factor for display-only frames.
+                    let quality = CGFloat(Double(q["q"] ?? "") ?? 0.6), sc = CGFloat(Double(q["s"] ?? "") ?? 1)
+                    var img = XCUIScreen.main.screenshot().image
+                    if sc < 0.99 {
+                        let size = CGSize(width: img.size.width * sc, height: img.size.height * sc)
+                        let fmt = UIGraphicsImageRendererFormat(); fmt.scale = img.scale
+                        img = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in img.draw(in: CGRect(origin: .zero, size: size)) }
+                    }
+                    result = ("200 OK", img.jpegData(compressionQuality: quality) ?? Data())
                 case "/tree":
                     result = ("200 OK", try tree(bundle: q["bundle"] ?? ""))
                 case "/tap":

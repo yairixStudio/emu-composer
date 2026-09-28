@@ -417,14 +417,51 @@
   [data-theme="light"] #runAgent:hover:not(:disabled){background:#7c3aed12}
   [data-theme="light"] .side{box-shadow:-10px 0 30px #0002}
   [data-theme="light"] kbd{background:#f5f6f8}
+
+  /* ================= editor actions follow the text; the side panel is the prompt list ================= */
+  #edwrap{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  #edscroll{flex:1 1 auto;min-height:0;overflow:auto;display:flex;flex-direction:column;cursor:text}
+  #editor{flex:0 0 auto;overflow:visible;min-height:3.2em;padding:22px 26px 6px}
+  #edact{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;gap:2px;padding:4px 20px 14px;margin-top:0;
+         background:linear-gradient(to top,var(--bg) 70%,transparent);cursor:default}
+  #edact button{position:static;width:34px;height:34px;border-radius:50%;padding:0;background:none;border:none;color:var(--dim);display:inline-flex;align-items:center;justify-content:center}
+  #edact button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  #edact #refine svg{stroke:#a78bfa}
+  #edact button:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
+  #edact #rec.on{background:var(--rec);color:#fff}
+  #edbusy{z-index:3}
+  body.collect #guide, body.use #guide, body.jem #guide{padding:0;gap:0}
+  .ghead{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 10px 16px;font:600 12.5px/1 inherit;color:var(--dim)}
+  #histlist{display:flex;flex-direction:column;gap:2px;padding:0 8px 16px;overflow:auto}
+  #histlist .hitem{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;padding:10px 10px;border:none;border-radius:9px;
+       background:none;text-align:start;cursor:pointer;white-space:normal}
+  #histlist .hitem:hover{background:var(--panel2)}
+  #histlist .hitem .p{font:450 12.5px/1.45 inherit;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  #histlist .hitem .t{font:500 10.5px/1 inherit;color:var(--dim2)}
+  .hempty{padding:14px 16px;color:var(--dim2);font-size:12px;line-height:1.6}
+  #guideOpen{position:fixed;inset-inline-start:0;top:50%;transform:translateY(-50%);z-index:30;display:none;width:18px;height:56px;padding:0;
+             border-radius:0 10px 10px 0;border:1px solid var(--line2);border-inline-start:none;background:var(--panel);color:var(--dim);
+             align-items:center;justify-content:center}
+  #guideOpen svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  #guideOpen:hover{width:22px;color:var(--fg)}
+  body.guide-off #guideOpen{display:flex}
+  @media (max-width: 860px){ #guideOpen{display:none!important} }
+
+  #runAgent{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:var(--r);background:transparent;border-color:var(--line2);color:var(--fg)}
+  #runAgent[hidden]{display:none}
+  #runAgent svg{width:11px;height:11px;fill:currentColor;stroke:none}
+  .mbody .srow .dd{max-width:220px}
 </style>
 
-<aside id="guide"></aside>
+<aside id="guide">
+  <div class="ghead"><span data-t="history_lbl">שיחות קודמות</span><button id="newPrompt" class="ghost ic" data-t-title="new_prompt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+  <div id="histlist"></div>
+</aside>
+<button id="guideOpen" data-t-title="guide_open"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
 <div class="split" data-side="guide" data-t-title="split_tip"></div>
 
 <div id="left">
   <div class="bar" id="topbar">
-    <button id="guideBtn" class="ghost ic" data-t-title="guide_toggle"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9 4.5v15"/></svg></button>
     <div class="seg modes" data-t-title="modes_title">
       <button id="mCollect" class="on" data-t="mode_collect">איסוף</button>
       <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
@@ -463,36 +500,29 @@
   <div class="row" id="rhead">
     <span id="status" data-t="ready">מוכן</span>
     <span id="ctx"></span>
-    <button id="save" class="ghost ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
-    <button id="clear" class="ghost ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
-    <button id="histbtn" class="ghost ic" data-t-title="history"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></button>
     <button id="settingsbtn" class="ghost ic" data-t-title="settings_title"><svg viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </div>
 
   <div id="edwrap">
-    <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
-         data-t-ph="placeholder" data-ph=""></div>
+    <div id="edscroll">
+      <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
+           data-t-ph="placeholder" data-ph=""></div>
+      <div id="edact">
+        <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
+        <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
+        <button id="save" class="ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
+        <button id="clear" class="ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
+      </div>
+    </div>
     <div id="edbusy"><i></i><span></span></div>
-    <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
-    <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
   </div>
   <div id="foot">
-    <span class="aiwrap" data-t-title="ai_title">
-      <svg class="aiic" viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/></svg>
-      <span class="seg aiseg" id="aiseg"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span>
-    </span>
     <span class="grow"></span>
-    <span class="runwrap" id="runwrap" hidden>
-      <select id="agent" data-t-title="agent_title"></select><button id="runAgent" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></svg><span data-t="run">הרץ</span></button>
-    </span>
+    <button id="runAgent" data-t-title="run_tip" hidden><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></svg><span id="runLabel">הרץ</span></button>
     <button id="copyAll" class="primary" data-t-title="copy_tip"><span data-t="copy_all">העתק</span></button>
     <span id="warn" hidden></span>
   </div>
 
-  <div id="hist" class="side">
-    <div class="row"><span class="lbl" data-t="history_lbl">History</span><button id="histclose" class="ghost" data-t="close">סגור</button></div>
-    <div id="histlist"></div>
-  </div>
 
   <div id="settings" class="modal" role="dialog" aria-modal="true">
     <div class="mcard">
@@ -500,6 +530,7 @@
         <div class="mtitle" data-t="settings_lbl">הגדרות</div>
         <button data-tab="general" class="on" data-t="tab_general">כללי</button>
         <button data-tab="voice" data-t="tab_voice">קול ו-AI</button>
+        <button data-tab="models" data-t="tab_models">מודלים</button>
         <button data-tab="prompt" data-t="tab_prompt">פרומפט</button>
         <button data-tab="jem" data-t="tab_jem">ג׳ם</button>
         <button data-tab="keys" data-t="tab_keys">קיצורים</button>
@@ -523,6 +554,15 @@
           <div class="srow col"><div><b data-t="s_key">מפתח OpenAI</b><small data-t="key_note"></small></div>
             <div class="keyrow"><input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button id="keysave" class="primary" data-t="save_key">שמור</button></div>
             <small id="keystate"></small></div>
+        </section>
+        <section data-tab="models">
+          <h3 data-t="tab_models">מודלים</h3>
+          <p class="mnote" data-t="models_note"></p>
+          <div class="srow"><div><b data-t="m_stt">תמלול</b><small data-t="m_stt_note"></small></div><select id="mStt" data-m="stt"></select></div>
+          <div class="srow"><div><b data-t="m_clean">ניקוי</b><small data-t="m_clean_note"></small></div><select id="mClean" data-m="clean"></select></div>
+          <div class="srow"><div><b data-t="m_full">עריכה</b><small data-t="m_full_note"></small></div><select id="mFull" data-m="full"></select></div>
+          <div class="srow"><div><b data-t="m_agent">סוכן להרצה</b><small data-t="agent_title"></small></div><select id="agent"></select></div>
+          <div class="srow"><div><b data-t="m_agent_model">מודל של הסוכן</b><small data-t="m_agent_model_note"></small></div><select id="mAgent"></select></div>
         </section>
         <section data-tab="prompt">
           <h3 data-t="tab_prompt">פרומפט</h3>
@@ -563,6 +603,11 @@ const I18N = {
     modes_title: 'איסוף: לחיצה מסמנת · שימוש: שליטה חיה · ג׳ם: שניהם יחד (⌘E, ⌘J)', copy_tip: 'העתקת הפרומפט המלא (⌘↩)',
     nav_back: 'חזרה (⌘B)', nav_home: 'מסך הבית (⌘⇧H)', nav_recents: 'אפליקציות אחרונות', nav_refresh: 'צילום מחדש של המסך',
     g_more: 'כל הקיצורים והטיפים', g_basics: 'הבסיס',
+    tab_models: 'מודלים', models_note: 'איזה מודל עושה כל עבודה. "ברירת מחדל" משאיר את הבחירה לכלי.',
+    m_stt: 'תמלול', m_stt_note: 'הופך את ההקלטה לטקסט', m_clean: 'ניקוי', m_clean_note: 'פיסוק ותיקון קל — כדאי מודל מהיר',
+    m_full: 'עריכה', m_full_note: 'מבין את כל השיחה ומסדר אותה — כדאי מודל חזק', m_agent: 'סוכן להרצה',
+    m_agent_model: 'מודל של הסוכן', m_agent_model_note: 'המודל שהסוכן ירוץ איתו כשלוחצים "הרץ"', m_default: 'ברירת מחדל ({0})', m_agent_default: 'ברירת המחדל של הסוכן',
+    run_in: 'הרץ ב-{0}',
     tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'ג׳ם', tab_keys: 'קיצורים',
     s_theme: 'מראה', s_theme_note: 'בהיר, כהה, או לפי המערכת', theme_system: 'מערכת', theme_light: 'בהיר', theme_dark: 'כהה',
     s_dir_note: 'הכיוון של שדה הטקסט', prompt_note: 'מה מצורף לפרומפט המלא בנוסף לטקסט ולעוגנים.',
@@ -580,7 +625,7 @@ const I18N = {
     refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
-    history_lbl: 'היסטוריה', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
+    history_lbl: 'שיחות קודמות', new_prompt: 'פרומפט חדש (הנוכחי נשמר ברשימה)', guide_open: 'פתיחת רשימת השיחות', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
     device_title: 'איזה מכשיר לשקף. נקודה ירוקה = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', headless: 'ללא חלון', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
@@ -596,7 +641,7 @@ const I18N = {
     st_elements: '{0} אלמנטים · {1}ms', st_slow: ' · slow path', st_lost: 'המכשיר לא מגיב — {0}', st_no_device: 'אין מכשיר מחובר',
     st_resolving: '@{0} — {1}', st_chip_copied: 'הרפרנס "{0}" הועתק', st_copied: 'הועתק — {0} רפרנסים, {1} תווים',
     btn_copied: 'הועתק ✓ {0} רפרנסים', st_copy_blocked: 'ההעתקה נחסמה — סמן והעתק ידנית', st_orphans: 'אזהרה: {0} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד',
-    st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'אין עדיין פרומפטים שהועתקו.',
+    st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'עדיין אין שיחות. כל פרומפט שמועתק, מורץ או נשמר יופיע כאן.',
     st_hist_restored: 'שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', st_pasted: 'הודבק — {0} רפרנסים שוחזרו כתגים',
     st_copied_sel: 'הועתק עם {0} רפרנסים מלאים', st_cut_sel: 'נגזר עם {0} רפרנסים מלאים', st_copied_plain: 'הועתק', st_cut_plain: 'נגזר',
     st_mic: 'אין גישה למיקרופון: {0}', st_rec: 'מקליט…', st_rec_hint: 'מקליט… (מקטע נחתך בהפסקה)', st_rec_done: 'ההקלטה הסתיימה', st_stt_fail: 'תמלול נכשל: {0}',
@@ -622,6 +667,11 @@ const I18N = {
     modes_title: 'Collect: a click marks · Use: live control · Jem: both at once (⌘E, ⌘J)', copy_tip: 'Copy the full prompt (⌘↩)',
     nav_back: 'Back (⌘B)', nav_home: 'Home (⌘⇧H)', nav_recents: 'Recent apps', nav_refresh: 'Capture the screen again',
     g_more: 'All shortcuts and tips', g_basics: 'Basics',
+    tab_models: 'Models', models_note: 'Which model does each job. "Default" leaves the choice to the tool.',
+    m_stt: 'Dictation', m_stt_note: 'Turns the recording into text', m_clean: 'Clean', m_clean_note: 'Punctuation and light fixes — a fast model fits',
+    m_full: 'Edit', m_full_note: 'Reads the whole talk and organizes it — a strong model fits', m_agent: 'Agent to run',
+    m_agent_model: 'Agent model', m_agent_model_note: 'The model the agent runs with when you press Run', m_default: 'Default ({0})', m_agent_default: "The agent's default",
+    run_in: 'Run in {0}',
     tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Jem', tab_keys: 'Shortcuts',
     s_theme: 'Appearance', s_theme_note: 'Light, dark, or follow the system', theme_system: 'System', theme_light: 'Light', theme_dark: 'Dark',
     s_dir_note: 'Direction of the text field', prompt_note: 'What the full prompt carries besides the text and its anchors.',
@@ -639,7 +689,7 @@ const I18N = {
     refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
-    history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
+    history_lbl: 'Previous prompts', new_prompt: 'New prompt (the current one is kept in the list)', guide_open: 'Open the prompt list', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
     device_title: 'Which device to mirror. Green dot = the active project\'s app is installed on it', device_none: 'No device attached', headless: 'no window', device_many: '{0} devices — pick the one to mirror',
@@ -655,7 +705,7 @@ const I18N = {
     st_elements: '{0} elements · {1}ms', st_slow: ' · slow path', st_lost: 'device not responding — {0}', st_no_device: 'no device attached',
     st_resolving: '@{0} — {1}', st_chip_copied: 'reference "{0}" copied', st_copied: 'copied — {0} references, {1} chars',
     btn_copied: 'Copied ✓ {0} references', st_copy_blocked: 'clipboard blocked — select and copy by hand', st_orphans: 'warning: {0} chips without reference data — copied as plain text',
-    st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No copied prompts yet.',
+    st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No prompts yet. Every prompt you copy, run or save lands here.',
     st_hist_restored: 'restored from history (⌥-click copies without restoring)', st_pasted: 'pasted — {0} references restored as chips',
     st_copied_sel: 'copied with {0} full references', st_cut_sel: 'cut with {0} full references', st_copied_plain: 'copied', st_cut_plain: 'cut',
     st_mic: 'no microphone access: {0}', st_rec: 'recording…', st_rec_hint: 'recording… (segments cut at pauses)', st_rec_done: 'recording stopped', st_stt_fail: 'transcription failed: {0}',
@@ -675,7 +725,7 @@ const t = (k, ...a) => String(I18N[lang]?.[k] ?? I18N.en[k] ?? k).replace(/\{(\d
 function applyLang() {
   document.documentElement.lang = lang
   // Panels that are mostly prose follow the interface language's direction.
-  for (const id of ['#settings', '#hist']) { const el = document.querySelector(id); if (el) el.dir = lang === 'he' ? 'rtl' : 'ltr' }
+  for (const id of ['#settings']) { const el = document.querySelector(id); if (el) el.dir = lang === 'he' ? 'rtl' : 'ltr' }
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t)
   for (const el of document.querySelectorAll('[data-t-title]')) el.title = t(el.dataset.tTitle)
   for (const el of document.querySelectorAll('[data-t-ph]')) el.dataset.ph = t(el.dataset.tPh)
@@ -684,6 +734,7 @@ function applyLang() {
   recTitle()
   if (typeof mode !== 'undefined') { modeHint(); renderGuide() }
   if (typeof aiLevel !== 'undefined') setAiLevel(aiLevel, false)
+  if (typeof agentsCache !== 'undefined') runLabel()
   for (const c of document.querySelectorAll('.chip.mark')) { const r = refOf(c); if (r) c.querySelector('bdi').textContent = markLabel(r) }
 }
 const ed = $('#editor'), img = $('#shot')
@@ -1476,16 +1527,43 @@ $('#copyAll').onclick = async () => {
 }
 // ---- run in an agent: the same full prompt as "copy", handed to a CLI agent in a Terminal
 // opened in the project's folder. The menu lists only agents installed on this Mac.
+// Models per purpose (Settings › Models). Empty = the server's default for that purpose.
+const MODEL_DEFAULTS = { stt: 'gpt-4o-transcribe', clean: 'gpt-5.4-mini', full: 'gpt-5.4' }
+const modelFor = k => LS('emucomposer.model.' + k) || ''
+let agentsCache = []
+function fillSelect(sel, values, current, defLabel) {
+  sel.innerHTML = `<option value="">${escapeHTML(defLabel)}</option>` + values.map(v => `<option value="${escapeHTML(v)}"${v === current ? ' selected' : ''}>${escapeHTML(v)}</option>`).join('')
+  if (current && !values.includes(current)) sel.insertAdjacentHTML('beforeend', `<option value="${escapeHTML(current)}" selected>${escapeHTML(current)}</option>`)
+}
+async function loadModels() {
+  let m = { stt: [], chat: [] }
+  try { m = await (await fetch('/api/models')).json() } catch {}
+  fillSelect($('#mStt'), m.stt || [], modelFor('stt'), t('m_default', MODEL_DEFAULTS.stt))
+  fillSelect($('#mClean'), m.chat || [], modelFor('clean'), t('m_default', MODEL_DEFAULTS.clean))
+  fillSelect($('#mFull'), m.chat || [], modelFor('full'), t('m_default', MODEL_DEFAULTS.full))
+}
+for (const id of ['#mStt', '#mClean', '#mFull']) $(id).addEventListener('change', e => LS('emucomposer.model.' + e.target.dataset.m, e.target.value))
+function fillAgentModels() {
+  const a = agentsCache.find(x => x.id === $('#agent').value)
+  fillSelect($('#mAgent'), a?.models || [], LS('emucomposer.model.agent.' + (a?.id || '')) || '', t('m_agent_default'))
+}
+$('#mAgent').addEventListener('change', e => LS('emucomposer.model.agent.' + $('#agent').value, e.target.value))
+function runLabel() {
+  const a = agentsCache.find(x => x.id === $('#agent').value)
+  $('#runLabel').textContent = a ? t('run_in', a.name) : t('run')
+}
 async function loadAgents() {
   try {
     const { agents = [] } = await (await fetch('/api/agents')).json()
+    agentsCache = agents
     const sel = $('#agent'); let want = ''
     try { want = localStorage.getItem('emucomposer.agent') || '' } catch {}
     sel.innerHTML = agents.map(a => `<option value="${escapeHTML(a.id)}"${a.id === want ? ' selected' : ''}>${escapeHTML(a.name)}</option>`).join('')
-    $('#runwrap').hidden = !agents.length
+    $('#runAgent').hidden = !agents.length
+    fillAgentModels(); runLabel()
   } catch {}
 }
-$('#agent').addEventListener('change', e => { try { localStorage.setItem('emucomposer.agent', e.target.value) } catch {} })
+$('#agent').addEventListener('change', e => { try { localStorage.setItem('emucomposer.agent', e.target.value) } catch {} fillAgentModels(); runLabel() })
 let runFlash = null
 $('#runAgent').onclick = async () => {
   const agent = $('#agent').value; if (!agent) return
@@ -1493,17 +1571,18 @@ $('#runAgent').onclick = async () => {
   const name = $('#agent').selectedOptions[0]?.textContent || agent
   setStatus(t('st_running', name), 'busy')
   try {
-    const d = await (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent, text }) })).json()
+    const d = await (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent, text, model: LS('emucomposer.model.agent.' + agent) || '' }) })).json()
     if (d.error) throw new Error(d.error)
     pushHistory(text); uilog('run', { agent, text })
     const b = $('#runAgent'); clearTimeout(runFlash)
-    b.classList.add('done'); b.querySelector('span').textContent = t('btn_ran')
-    runFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = t('run') }, 1800)
+    b.classList.add('done'); $('#runLabel').textContent = t('btn_ran')
+    runFlash = setTimeout(() => { b.classList.remove('done'); runLabel() }, 1800)
     setStatus(t('st_ran', d.agent, d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
 $('#save').onclick = async () => {
   const { text, used } = serialize()
+  pushHistory(text)
   setStatus(t('st_saving'), 'busy')
   try {
     const crops = used.map(u => u.node && u.captureId === captureId ? cropOf(u.node) : '')
@@ -1514,7 +1593,21 @@ $('#save').onclick = async () => {
     setStatus(t('st_saved', d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
-$('#clear').onclick = () => { ed.innerHTML = ''; refs.clear(); refN = 0; updateDual(); saveDraft(); syncMarks(); setStatus(t('st_cleared')) }
+// Clearing never loses work: a non-empty prompt goes to the list first.
+function newPrompt() {
+  if (ed.textContent.trim() || ed.querySelector('.chip')) pushHistory(serialize().text)
+  ed.innerHTML = ''; refs.clear(); refN = 0; updateDual(); saveDraft(); syncMarks(); setStatus(t('st_cleared')); restoreCaret()
+}
+$('#clear').onclick = newPrompt
+// A click on the empty space under the text puts the caret at the end, as if the field
+// filled the panel.
+$('#edscroll').addEventListener('mousedown', e => {
+  if (e.target !== $('#edscroll')) return
+  e.preventDefault(); ed.focus()
+  const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false)
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); rememberCaret()
+})
+$('#newPrompt').onclick = newPrompt
 
 function cropOf(n, pad = 8) {
   if (!img.naturalWidth || !still()) return ''
@@ -1548,28 +1641,40 @@ function loadDraft() {
   } catch {}
 }
 function pushHistory(text) {
+  if (!String(text || '').trim()) return
+  setTimeout(renderHistory, 0)
   try {
     const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')
     h.unshift({ at: Date.now(), text, html: ed.innerHTML, refs: [...refs], refN })
     for (let keep = 40; keep >= 5; keep = Math.floor(keep / 2)) { try { localStorage.setItem('emucomposer.history', JSON.stringify(h.slice(0, keep))); break } catch {} }
   } catch {}
 }
+// The side panel is the list of previous prompts: every copy, run, save and clear lands here.
+const relTime = at => {
+  const s = (Date.now() - at) / 1000, he = lang === 'he'
+  if (s < 60) return he ? 'עכשיו' : 'now'
+  if (s < 3600) return he ? `לפני ${Math.round(s / 60)} ד׳` : `${Math.round(s / 60)} min ago`
+  const d = new Date(at), today = new Date()
+  return d.toDateString() === today.toDateString() ? d.toLocaleTimeString(he ? 'he-IL' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(he ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short' })
+}
 function renderHistory() {
   let h = []; try { h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]') } catch {}
+  $('#guide').dir = lang === 'he' ? 'rtl' : 'ltr'
   $('#histlist').innerHTML = h.map((x, i) => {
-    const task = (x.text.split('\n# ')[0] || '').replace(/^# Task\n/, '')
-    return `<div class="hitem" data-i="${i}"><div class="t">${new Date(x.at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB')}</div><div class="p">${escapeHTML(task)}</div></div>`
-  }).join('') || `<div class="hitem" style="color:var(--dim2)">${escapeHTML(t('hist_empty'))}</div>`
+    const task = (x.text.split('\n# ')[0] || '').replace(/^# Task[^\n]*\n/, '').replace(/@(ui|ios|android|mark)\d+/g, '·').trim()
+    const refs = (x.text.match(/^### @/gm) || []).length
+    return `<button class="hitem" data-i="${i}"><span class="p">${escapeHTML(task.slice(0, 180) || '—')}</span><span class="t">${relTime(x.at)}${refs ? ` · ${refs} ${lang === 'he' ? 'עוגנים' : 'anchors'}` : ''}</span></button>`
+  }).join('') || `<div class="hempty">${escapeHTML(t('hist_empty'))}</div>`
 }
-$('#histbtn').onclick = () => { renderHistory(); $('#hist').classList.add('show') }
-$('#histclose').onclick = () => $('#hist').classList.remove('show')
+setInterval(renderHistory, 60000)
 $('#histlist').addEventListener('click', async e => {
   const it = e.target.closest('.hitem[data-i]'); if (!it) return
   const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[Number(it.dataset.i)]; if (!h) return
   if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus(t('st_hist_copied'), 'ok'); return }
   ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
   for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
-  $('#hist').classList.remove('show'); saveDraft(); syncMarks(); setStatus(t('st_hist_restored'), 'ok')
+  saveDraft(); syncMarks(); updateDual(); setStatus(t('st_hist_restored'), 'ok')
 })
 
 // ------------------------------------------------------------- dictation ----
@@ -1655,7 +1760,7 @@ async function sendSegment(blob, s) {
   const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(blob) })
   try {
     const d = await (await fetch('/api/transcribe', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttOverride ?? sttLanguage, prompt: lastTranscript }) })).json()
+      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttOverride ?? sttLanguage, prompt: lastTranscript, model: modelFor('stt') }) })).json()
     if (d.error) { setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
     const t = (d.text || '').trim()
     if (!t) { s.marker?.remove(); return }
@@ -1745,7 +1850,7 @@ async function refineText(level = aiLevel) {
   $('#edbusy span').textContent = t('st_refining', t('ai_' + level)); $('#edbusy').classList.add('show')
   try {
     const d = await (await fetch('/api/refine', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage, images: await markImages() }) })).json()
+      body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage, images: await markImages(), model: modelFor(level) }) })).json()
     if (d.error) throw new Error(d.error)
     const html = d.text.split(/(⟦\d+⟧)/).map(p => { const m = /^⟦(\d+)⟧$/.exec(p); return m ? chips[Number(m[1]) - 1] : escapeHTML(p).replace(/\n/g, '<br>') }).join('')
     ed.focus()
@@ -1787,8 +1892,9 @@ let sttOverride = null
 try { const v = localStorage.getItem('emucomposer.sttLang'); if (v !== null) sttOverride = v } catch {}
 // Settings is a modal with tabs; the last tab opened is remembered.
 function openSettings(tab) {
-  $('#hist').classList.remove('show'); closeMenus()
+  closeMenus()
   setTab(tab || LS('emucomposer.stab') || 'general')
+  loadModels()
   $('#optAnchorS').checked = anchorTaps
   $('#keylist').innerHTML = SHORTCUTS.filter(s => s.keys).map(s => `<div class="grow"><kbd dir="ltr">${escapeHTML(s.keys)}</kbd><span>${escapeHTML(t(s.t))}</span></div>`).join('')
     + MOUSE.map(([k, id]) => `<div class="grow"><kbd dir="ltr">${escapeHTML(k)}</kbd><span>${escapeHTML(t(id))}</span></div>`).join('')
@@ -1851,7 +1957,9 @@ function applyGuide() {
   const on = guideForced === '1' ? true : guideForced === '0' ? false : innerWidth >= 1180
   document.body.classList.toggle('guide-off', !on)
 }
-$('#guideBtn').onclick = () => { guideForced = document.body.classList.contains('guide-off') ? '1' : '0'; LS('emucomposer.guide', guideForced); applyGuide() }
+// The side panel closes by dragging it to nothing; the only way back is this edge tab,
+// which exists only while the panel is closed.
+$('#guideOpen').onclick = () => { guideForced = '1'; LS('emucomposer.guide', '1'); applyGuide(); requestAnimationFrame(fitScreen) }
 for (const sp of document.querySelectorAll('.split')) {
   sp.addEventListener('pointerdown', e => {
     e.preventDefault(); sp.setPointerCapture(e.pointerId); sp.classList.add('dragging'); document.body.classList.add('resizing')
@@ -1978,7 +2086,6 @@ function jemKey(e) {
 }
 function onEscape() {
   if ($('.ddm')) closeMenus()
-  else if ($('#hist').classList.contains('show')) $('#hist').classList.remove('show')
   else if ($('#settings').classList.contains('show')) $('#settings').classList.remove('show')
   else if (drawing) { drawing = null; renderMarks() }
   else if (kbdApp) setKbdApp(false)
@@ -1993,42 +2100,12 @@ addEventListener('keydown', e => {
 })
 
 let guideOpen = false
-function renderGuide() {
-  const g = $('#guide'); if (!g) return
-  const row = (k, text, id) => `<div class="grow" data-sc="${id || ''}"><kbd dir="ltr">${escapeHTML(k)}</kbd><span>${escapeHTML(text)}</span></div>`
-  const toolName = { pick: t('tool_pick'), pen: t('tool_pen'), rect: t('tool_rect'), arrow: t('tool_arrow') }[tool] || tool
-  g.dir = lang === 'he' ? 'rtl' : 'ltr'
-  // Each mode explains itself: its own basics first, everything else folded away.
-  const B = {
-    jem: [['click', 'ms_tap'], ['⇧ click', 'ms_taponly'], ['⌘ click', 'ms_ref'], ['⌘⇧R', 'sc_rec'], ['⌘K', 'sc_kbd'], ['⌘D', 'sc_draw'], ['⌘↩', 'sc_copy']],
-    collect: [['click', 'ms_c_click'], ['right', 'ms_c_right'], ['⇧ wheel', 'ms_c_wheel'], ['⌥', 'ms_raw'], ['⌘D', 'sc_draw'], ['⌘⇧R', 'sc_rec'], ['⌘J', 'sc_jem_go'], ['⌘↩', 'sc_copy']],
-    use: [['click', 'ms_u_click'], ['drag', 'ms_swipe'], ['wheel', 'ms_scroll'], ['keys', 'ms_u_keys'], ['⌘E', 'sc_mode_go'], ['⌘J', 'sc_jem_go'], ['⌘↩', 'sc_copy']],
-  }[mode] || []
-  const title = mode === 'jem' ? t('jem_title') : t(mode + '_title'), intro = mode === 'jem' ? t('jem_intro') : t(mode + '_intro')
-  g.dataset.mode = mode
-  g.innerHTML = `<h2>${escapeHTML(title)}</h2><p>${escapeHTML(intro)}</p>
-    <div class="gstate">${mode === 'jem' ? `<button data-g="kbd" class="${kbdApp ? 'hot' : ''}">${escapeHTML(t(kbdApp ? 'g_to_app' : 'g_to_text'))}</button>` : ''}
-      ${mode !== 'use' ? `<button data-g="tool" class="${tool !== 'pick' ? 'hot' : ''}">${escapeHTML(t('g_tool', toolName))}</button>` : ''}
-      <button data-g="rec" class="${recOn ? 'rec' : ''}">${escapeHTML(t(recOn ? 'g_rec_on' : 'g_rec_off'))}</button>
-      <button data-g="ai" class="${aiLevel !== 'transcribe' ? 'hot' : ''}">${escapeHTML(t('g_ai', t('ai_' + aiLevel)))}</button></div>
-    <div class="gsec">${B.map(([k, id]) => row(k, t(id), id)).join('')}</div>
-    <details class="gmore"${guideOpen ? ' open' : ''}><summary>${escapeHTML(t('g_more'))}</summary>
-      ${mode === 'jem' ? `<label class="tog"><input type="checkbox" id="optAnchor" ${anchorTaps ? 'checked' : ''}> <span>${escapeHTML(t('g_anchor'))}</span></label>` : ''}
-      <div class="gsec"><span class="lbl">${escapeHTML(t('g_kbd'))}</span>${SHORTCUTS.filter(s => s.keys).map(s => row(s.keys, t(s.t), s.t)).join('')}</div>
-      ${mode === 'jem' ? `<div class="gsec"><span class="lbl">${escapeHTML(t('g_mouse'))}</span>${MOUSE.map(([k, id]) => row(k, t(id))).join('')}</div>` : ''}
-      <ul>${['tip_items', 'tip_speak', 'tip_chip', 'tip_draw'].map(k => `<li>${escapeHTML(t(k))}</li>`).join('')}</ul>
-    </details>`
-  g.querySelector('.gmore').ontoggle = e => { guideOpen = e.target.open }
-  // Every state chip is also a button: the same action as its shortcut, for the mouse.
-  g.querySelector('.gstate').onclick = e => {
-    const b = e.target.closest('[data-g]'); if (!b) return
-    ;({ kbd: () => setKbdApp(!kbdApp), tool: () => setTool(TOOLS[(TOOLS.indexOf(tool) + 1) % TOOLS.length]), rec: () => toggleRec(),
-       ai: () => setAiLevel(AI_LEVELS[(AI_LEVELS.indexOf(aiLevel) + 1) % AI_LEVELS.length]) })[b.dataset.g]()
-  }
-  if ($('#optAnchor')) $('#optAnchor').onchange = e => { anchorTaps = e.target.checked; try { localStorage.setItem('emucomposer.anchorTaps', anchorTaps ? '1' : '0') } catch {} }
-}
+// The side panel used to be a per-mode manual; the shortcuts now live in Settings › Shortcuts
+// and the panel lists previous prompts. Kept as a hook: state changes still call it.
+function renderGuide() { renderHistory() }
 // The row of a shortcut just used lights up for a moment — the guide teaches by echo.
-function flashGuide(id) {
+function flashGuide(id) { return
+
   const r = $(`#guide .grow[data-sc="${id}"]`); if (!r) return
   r.classList.add('flash'); setTimeout(() => r.classList.remove('flash'), 450)
 }
@@ -2261,7 +2338,7 @@ fetchNotes()
 try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
 try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emucomposer.' + id); if (v !== null) $('#opt' + id).checked = v === '1' } } catch {}
 if (sttOverride !== null) $('#sttlang').value = sttOverride
-for (const id of ['#project', '#device', '#agent']) enhanceSelect($(id))
+for (const id of ['#project', '#device', '#agent', '#mStt', '#mClean', '#mFull', '#mAgent']) enhanceSelect($(id))
 applyLang()
 setAiLevel(aiLevel, false)
 loadAgents()

@@ -135,6 +135,13 @@ export class IosAgent {
     return j
   }
 
+  // A JPEG taken inside the runner — the live-frame path (simctl costs ~400 ms a shot).
+  async shot(q = 0.6, s = 1, timeoutMs = 5000) {
+    const r = await fetch(`http://127.0.0.1:${this.port}/shot?q=${q}&s=${s}`, { signal: AbortSignal.timeout(timeoutMs) })
+    const b = Buffer.from(await r.arrayBuffer())
+    if (!r.ok || b[0] !== 0xff || b[1] !== 0xd8) throw new Error(`agent shot ${r.status}`)
+    return b
+  }
   tree(bundle) { return this.get('/tree', { bundle }) }
   tap(bundle, x, y) { return this.get('/tap', { bundle, x, y }) }
   type(bundle, text) { return this.get('/type', { bundle, text }) }
