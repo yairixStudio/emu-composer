@@ -114,7 +114,14 @@
   .chip b{opacity:.6;font-weight:700}
   #editor.dual .chip[data-platform="ios"] bdi::before{content:"iOS · ";opacity:.65;font-size:.85em}
   #editor.dual .chip[data-platform="android"] bdi::before{content:"Android · ";opacity:.65;font-size:.85em}
-  .interim{color:var(--accent2);opacity:.7;border-bottom:1px dotted var(--accent2)}
+  /* A segment being transcribed: a small spinning ring where its words will land. */
+  .interim{display:inline-block;width:.95em;height:.95em;vertical-align:-.14em;margin:0 4px;border-radius:50%;
+           border:2px solid #38bdf840;border-top-color:var(--accent2);animation:spin .75s linear infinite;color:transparent;overflow:hidden}
+  /* The AI edit replaces the whole text: the text dims under a centered spinner meanwhile. */
+  #edbusy{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+          background:#0d0e13b8;color:var(--dim);font-size:12.5px;pointer-events:none}
+  #edbusy.show{display:flex}
+  #edbusy i{width:34px;height:34px;border-radius:50%;border:3px solid #a78bfa40;border-top-color:#a78bfa;animation:spin .8s linear infinite}
 
   #keyrow{display:none;gap:8px;align-items:center;background:#171213;border-bottom:1px solid #3a2a20}
   #keyrow.show{display:flex}
@@ -222,6 +229,7 @@
   <div id="edwrap">
     <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
          data-t-ph="placeholder" data-ph=""></div>
+    <div id="edbusy"><i></i><span></span></div>
     <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
     <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
   </div>
@@ -270,13 +278,13 @@ const $ = s => document.querySelector(s)
 const I18N = {
   he: {
     mode_collect: 'איסוף', mode_use: 'שימוש', mode_jem: 'ג׳ם', prompt: 'Prompt',
-    jem_title: 'ג׳ם', jem_intro: 'משתמשים באפליקציה וכותבים את הבקשה באותו זמן. לחיצה על המסך מפעילה את האפליקציה, והמקלדת כותבת בטקסט שמימין. כל אלמנט שמסמנים נכנס לטקסט כעוגן לקוד.',
+    jem_title: 'ג׳ם', jem_intro: 'משתמשים באפליקציה וכותבים את הבקשה באותו זמן. לחיצה על כפתור גם מסמנת אותו בטקסט כעוגן לקוד וגם מפעילה אותו באפליקציה, והמקלדת כותבת בטקסט שמימין.',
     g_kbd: 'מקלדת', g_mouse: 'עכבר', g_tips: 'טיפים', g_to_text: 'מקלדת → טקסט', g_to_app: 'מקלדת → אפליקציה', g_rec_on: 'מקליט', g_rec_off: 'מיקרופון כבוי',
-    g_tool: 'כלי: {0}', g_anchor: 'עוגן אוטומטי לכל הקשה בזמן הקלטה',
+    g_tool: 'כלי: {0}', g_anchor: 'כל הקשה גם מסמנת את האלמנט בטקסט',
     sc_jem: 'כניסה ויציאה ממצב ג׳ם', sc_mode: 'מעבר בין איסוף לשימוש', sc_rec: 'הקלטה קולית', sc_kbd: 'המקלדת כותבת באפליקציה או בטקסט',
     sc_draw: 'כלי הבא: עט, מסגרת, חץ, בחירה', sc_back: 'חזרה במכשיר', sc_home: 'מסך הבית במכשיר', sc_copy: 'העתקת הפרומפט המלא', sc_esc: 'חזרה לטקסט ולכלי הבחירה',
-    ms_tap: 'הקשה באפליקציה', ms_ref: 'עוגן לאלמנט בטקסט, בלי להקיש', ms_swipe: 'החלקה', ms_scroll: 'גלילה', ms_hover: 'מדגיש את האלמנט שמתחת לסמן', ms_raw: 'בחירת הצומת הגולמי',
-    tip_items: 'שורה עם -- בלבד מפרידה בין משימות', tip_speak: 'בזמן הקלטה, הקשה על אלמנט מכניסה עוגן אחרי המשפט שנאמר', tip_chip: 'לחיצה על עוגן בטקסט מעתיקה אותו לבד',
+    ms_tap: 'מסמן בטקסט וגם מקיש באפליקציה', ms_taponly: 'הקשה בלבד, בלי עוגן', ms_ref: 'עוגן בלבד, בלי להקיש', ms_swipe: 'החלקה', ms_scroll: 'גלילה', ms_hover: 'מדגיש את מה שלחיצה תסמן', ms_raw: 'בחירת הצומת הגולמי',
+    tip_items: 'שורה עם -- בלבד מפרידה בין משימות', tip_speak: 'בזמן הקלטה, העוגן של הקשה נכנס אחרי המשפט שנאמר לפניה', tip_chip: 'לחיצה על עוגן בטקסט מעתיקה אותו לבד',
     tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק. מסך שציירת עליו נשאר קפוא עד שתפעיל את האפליקציה, וה-AI רואה את הציור כשהוא עורך',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
@@ -315,13 +323,13 @@ const I18N = {
   },
   en: {
     mode_collect: 'Collect', mode_use: 'Use', mode_jem: 'Jem', prompt: 'Prompt',
-    jem_title: 'Jem', jem_intro: 'Use the app and write the request at the same time. Clicks on the screen drive the app; the keyboard writes into the text on the right. Every element you mark enters the text as an anchor to the code.',
+    jem_title: 'Jem', jem_intro: 'Use the app and write the request at the same time. A click on a button both marks it in the text as an anchor to the code and presses it in the app; the keyboard writes into the text on the right.',
     g_kbd: 'Keyboard', g_mouse: 'Mouse', g_tips: 'Tips', g_to_text: 'keyboard → text', g_to_app: 'keyboard → app', g_rec_on: 'recording', g_rec_off: 'mic off',
-    g_tool: 'tool: {0}', g_anchor: 'Anchor every tap automatically while recording',
+    g_tool: 'tool: {0}', g_anchor: 'Every tap also marks the element in the text',
     sc_jem: 'Enter or leave jem', sc_mode: 'Switch collect / use', sc_rec: 'Voice dictation', sc_kbd: 'Keyboard types into the app or the text',
     sc_draw: 'Next tool: pen, box, arrow, pick', sc_back: 'Device back', sc_home: 'Device home', sc_copy: 'Copy the full prompt', sc_esc: 'Back to text and the pick tool',
-    ms_tap: 'Tap in the app', ms_ref: 'Anchor the element in the text, no tap', ms_swipe: 'Swipe', ms_scroll: 'Scroll', ms_hover: 'Highlights the element under the cursor', ms_raw: 'Pick the raw node',
-    tip_items: 'A line with only -- separates tasks', tip_speak: 'While recording, a tap on an element drops an anchor after the sentence being said', tip_chip: 'Click an anchor in the text to copy it alone',
+    ms_tap: 'Marks it in the text and taps it in the app', ms_taponly: 'Tap only, no anchor', ms_ref: 'Anchor only, no tap', ms_swipe: 'Swipe', ms_scroll: 'Scroll', ms_hover: 'Highlights what a click would mark', ms_raw: 'Pick the raw node',
+    tip_items: 'A line with only -- separates tasks', tip_speak: "While recording, a tap's anchor lands after the sentence said before it", tip_chip: 'Click an anchor in the text to copy it alone',
     tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping. A screen you drew on stays still until you act on the app, and the AI edit sees the drawing',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
@@ -457,7 +465,10 @@ async function pumpFrames() {
 
 // ---------------------------------------------------------------- capture ---
 let capturing = null
-async function capture() {
+// fresh: a capture already in flight started BEFORE the caller's action, so its picture may
+// predate it — wait for it, then take a new one instead of sharing its result.
+async function capture({ fresh = false } = {}) {
+  if (capturing && fresh) { await capturing.catch(() => {}); if (capturing) await capturing.catch(() => {}) }
   if (capturing) return capturing
   $('#busy').classList.add('show')
   capturing = (async () => {
@@ -466,6 +477,7 @@ async function capture() {
       const d = await r.json()
       if (d.error) throw new Error(d.error)
       nodes = d.nodes; ctx = d.context; captureId = d.id; lastHash = d.hash || ''
+      lastImgSig = d.image.b64.length + ':' + d.image.b64.slice(-96)
       if (ctx?.platform) { screenCtx[ctx.platform] = ctx; if (ctx.platform !== lastPlatform) { lastPlatform = ctx.platform; fetchNotes() } }
       const src = `data:${d.image.mime};base64,${d.image.b64}`
       await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = src })
@@ -546,7 +558,9 @@ const metaKey = e => e.metaKey || e.ctrlKey
 $('#screen').addEventListener('mousemove', e => {
   if (!still() || tool !== 'pick') return
   // In jem a click is a tap, so the pick highlight shows only while ⌘ is held.
-  if (mode === 'jem' && !metaKey(e)) { if (hotIdx !== -1) { hotIdx = -1; drawOverlay() } return }
+  // In jem a plain click anchors too, so the highlight always shows what it would anchor —
+  // except with ⇧, which taps without anchoring.
+  if (mode === 'jem' && (e.shiftKey || !anchorTaps) && !metaKey(e)) { if (hotIdx !== -1) { hotIdx = -1; drawOverlay() } return }
   const i = hitTest(e.clientX, e.clientY)
   if (i !== hotIdx) { hotIdx = i; drawOverlay(i) }
 })
@@ -604,7 +618,7 @@ $('#screen').addEventListener('mousedown', e => {
   if (!(mode === 'use' || jemTap) || e.button !== 0) return
   // preventDefault also keeps the focus where it was — in jem that is the text's caret.
   e.preventDefault(); if (mode === 'use') $('#screen').focus()
-  down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1 }
+  down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1, shift: e.shiftKey }
 })
 addEventListener('mouseup', e => {
   if (!down || (mode !== 'use' && mode !== 'jem')) return
@@ -615,15 +629,36 @@ addEventListener('mouseup', e => {
     ? { type: 'swipe', x1: down.x, y1: down.y, x2: up.x, y2: up.y, ms: Math.min(800, Math.max(80, ms)) }
     : { type: 'tap', x: down.x, y: down.y }
   const d = down; down = null
-  // Speaking while tapping: the tapped element joins the sentence as an anchor.
-  if (mode === 'jem' && cmd.type === 'tap' && recOn && anchorTaps && d.i >= 0) insertRef(d.i)
+  // Jem's defining move: the tapped element enters the text as an anchor AND the tap goes to
+  // the app — mark it and open where it leads, in one click. Resolved against the capture
+  // from before the tap. ⇧-click taps only.
+  if (mode === 'jem' && cmd.type === 'tap' && anchorTaps && !d.shift && d.i >= 0) insertRef(d.i)
   input(cmd).then(() => { if (mode === 'jem') recaptureSoon(450) })
 })
 // Jem shows a still capture, so every action on the device is followed by a fresh one.
 // Debounced: a burst of taps or keys costs one capture. The server's screen watch catches
 // anything that changes later (an animation, a network reply).
-let recapTimer = null
-function recaptureSoon(ms) { clearTimeout(recapTimer); recapTimer = setTimeout(() => { if (still()) capture() }, ms) }
+// After an action the screen is captured until two captures in a row agree (at most ~6 s).
+// One capture can catch a transition half way — the tree already on the new page while the
+// pixels still show the old one, or a slow tab switch not started yet — and the screen watch
+// never fires again once the tree stops changing. A newer action restarts the sequence.
+let recapTimer = null, recapGen = 0, lastImgSig = ''
+function recaptureSoon(ms) {
+  clearTimeout(recapTimer)
+  const gen = ++recapGen
+  recapTimer = setTimeout(async () => {
+    // Stable = the tree AND the pixels match the previous capture: a heavy screen can finish
+    // its tree a second before it finishes drawing.
+    let prev = ''
+    for (let n = 0; n < 7 && gen === recapGen && still(); n++) {
+      await capture({ fresh: true })
+      const sig = lastHash + '|' + lastImgSig
+      if (lastHash && sig === prev) break
+      prev = sig
+      await sleep(650)
+    }
+  }, ms)
+}
 // Wheel: scrolls the device in use mode, or with Shift held in collect mode (then re-captures).
 let wheelAcc = 0, wheelTimer = null, wheelPt = null
 $('#screen').addEventListener('wheel', e => {
@@ -1191,7 +1226,7 @@ function startSegment() {
 // anchor tapped while talking lands after the words that led up to it.
 function placeSegMarker(s) {
   restoreCaret()
-  document.execCommand('insertHTML', false, `<span class="interim" data-seg="${s.n}">…</span>`)
+  document.execCommand('insertHTML', false, `<span class="interim" data-seg="${s.n}">&#8203;</span>`)
   s.marker = ed.querySelector(`.interim[data-seg="${s.n}"]`)
   caretAfter(s.marker)
 }
@@ -1200,7 +1235,7 @@ function cutSegment() {
   if (seg.hadSpeech && !seg.marker) {
     // Marker goes in NOW, at the caret, so the transcript has a home even if the user moves on.
     restoreCaret()
-    document.execCommand('insertHTML', false, `<span class="interim" data-seg="${seg.n}">…</span>`)
+    document.execCommand('insertHTML', false, `<span class="interim" data-seg="${seg.n}">&#8203;</span>`)
     seg.marker = ed.querySelector(`.interim[data-seg="${seg.n}"]`)
     caretAfter(seg.marker)
   }
@@ -1325,6 +1360,7 @@ async function refineText(level = aiLevel) {
   if (!text.replace(/⟦\d+⟧/g, '').trim()) return setStatus(t('st_refine_empty'), 'err')
   refining = true; $('#refine').classList.add('busy')
   setStatus(t('st_refining', t('ai_' + level)), 'busy')
+  $('#edbusy span').textContent = t('st_refining', t('ai_' + level)); $('#edbusy').classList.add('show')
   try {
     const d = await (await fetch('/api/refine', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage, images: await markImages() }) })).json()
@@ -1338,7 +1374,7 @@ async function refineText(level = aiLevel) {
     rememberCaret(); saveDraft(); syncMarks(); updateDual()
     setStatus(t('st_refined', t('ai_' + level)), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
-  finally { refining = false; $('#refine').classList.remove('busy') }
+  finally { refining = false; $('#refine').classList.remove('busy'); $('#edbusy').classList.remove('show') }
 }
 // At the end of a recording the last segments are still being transcribed; wait until their
 // markers are gone (at most 30 s) before editing.
@@ -1407,7 +1443,7 @@ const SHORTCUTS = [
   { keys: '⌘↩', t: 'sc_copy', k: 'Enter', run: () => $('#copyAll').click() },
   { keys: 'Esc', t: 'sc_esc', display: true },
 ]
-const MOUSE = [['click', 'ms_tap'], ['⌘ click · right', 'ms_ref'], ['drag', 'ms_swipe'], ['wheel', 'ms_scroll'], ['⌘ hover', 'ms_hover'], ['⌥', 'ms_raw']]
+const MOUSE = [['click', 'ms_tap'], ['⇧ click', 'ms_taponly'], ['⌘ click · right', 'ms_ref'], ['drag', 'ms_swipe'], ['wheel', 'ms_scroll'], ['hover', 'ms_hover'], ['⌥', 'ms_raw']]
 const TOOLS = ['pick', 'pen', 'rect', 'arrow']
 const shortcutFor = e => (e.metaKey || e.ctrlKey) && SHORTCUTS.find(s => !s.display && s.k === e.code && Boolean(s.shift) === e.shiftKey
   && (!s.jem || mode === 'jem') && (!s.still || still()))
