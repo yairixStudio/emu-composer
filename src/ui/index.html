@@ -439,12 +439,6 @@
   #histlist .hitem .p{font:450 12.5px/1.45 inherit;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   #histlist .hitem .t{font:500 10.5px/1 inherit;color:var(--dim2)}
   .hempty{padding:14px 16px;color:var(--dim2);font-size:12px;line-height:1.6}
-  #guideOpen{position:fixed;inset-inline-start:0;top:50%;transform:translateY(-50%);z-index:30;display:none;width:18px;height:56px;padding:0;
-             border-radius:0 10px 10px 0;border:1px solid var(--line2);border-inline-start:none;background:var(--panel);color:var(--dim);
-             align-items:center;justify-content:center}
-  #guideOpen svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-  #guideOpen:hover{width:22px;color:var(--fg)}
-  body.guide-off #guideOpen{display:flex}
   @media (max-width: 860px){ #guideOpen{display:none!important} }
 
   #runAgent{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:var(--r);background:transparent;border-color:var(--line2);color:var(--fg)}
@@ -453,17 +447,48 @@
   .mbody .srow .dd{max-width:220px}
 
   #live{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;background:#000}
+
+  /* ================= action row: copy and run as split icons ================= */
+  #edact .sp{flex:1 1 auto}
+  .splitbtn{position:relative;display:inline-flex;align-items:center}
+  .splitbtn[hidden]{display:none}
+  #edact .splitbtn .chev{width:16px;height:34px;border-radius:6px;margin-inline-start:-4px;opacity:0;transition:opacity .12s;color:var(--dim)}
+  #edact .splitbtn .chev svg{width:12px;height:12px}
+  #edact .splitbtn:hover .chev, #edact .splitbtn.open .chev, #edact .splitbtn .chev:focus-visible{opacity:1}
+  #edact #copyAll{color:var(--fg)}
+  #edact #copyAll.done, #edact #runAgent.done{background:var(--ok);color:#04231a}
+  #edact #runAgent{color:#a78bfa}
+  #pop{position:fixed;z-index:45;min-width:230px;max-width:300px;padding:6px;border-radius:12px;background:var(--panel);border:1px solid var(--line2);
+       box-shadow:0 14px 40px #000a;display:flex;flex-direction:column;gap:2px}
+  #pop[hidden]{display:none}
+  #pop .ph{padding:8px 10px 4px;font:600 11px/1 inherit;color:var(--dim2);letter-spacing:.02em}
+  .ptog{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .ptog:hover{background:var(--panel2)}
+  .ptog input{margin-top:2px}
+  .ptog b{display:block;font:520 12.5px/1.3 inherit}
+  .ptog small{display:block;color:var(--dim2);font-size:11px;line-height:1.45;margin-top:2px}
+  .pitem{justify-content:flex-start;text-align:start;height:32px;border:none;background:none;border-radius:8px;color:var(--fg);font-weight:500}
+  .pitem:hover{background:var(--panel2)}
+  .pitem.on{background:var(--violet-soft);color:#d8ccff}
+  [data-theme="light"] #pop{box-shadow:0 14px 40px #0002}
+  [data-theme="light"] .pitem.on{color:#5b21b6}
+  #topbar{position:relative}
+  #guideOpen{position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);display:none;width:30px;height:30px;border:none;border-radius:8px;background:none;color:var(--dim)}
+  #guideOpen svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #guideOpen:hover{background:var(--panel2);color:var(--fg)}
+  body.guide-off #guideOpen{display:inline-flex}
 </style>
 
 <aside id="guide">
   <div class="ghead"><span data-t="history_lbl">שיחות קודמות</span><button id="newPrompt" class="ghost ic" data-t-title="new_prompt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
   <div id="histlist"></div>
 </aside>
-<button id="guideOpen" data-t-title="guide_open"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+
 <div class="split" data-side="guide" data-t-title="split_tip"></div>
 
 <div id="left">
   <div class="bar" id="topbar">
+    <button id="guideOpen" class="ghost ic" data-t-title="guide_open"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/><path d="M5.8 8.5h1.6M5.8 11h1.6M5.8 13.5h1.6"/></svg></button>
     <div class="seg modes" data-t-title="modes_title">
       <button id="mCollect" class="on" data-t="mode_collect">איסוף</button>
       <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
@@ -513,17 +538,16 @@
         <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
         <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
         <button id="save" class="ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
+        <span class="sp"></span>
+        <span class="splitbtn" id="runWrap" hidden><button id="runAgent" class="ic" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none"/></svg></button><button class="chev" data-pop="run" data-t-title="run_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
+        <span class="splitbtn"><button id="copyAll" class="ic" data-t-title="copy_tip"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button><button class="chev" data-pop="copy" data-t-title="copy_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
         <button id="clear" class="ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
       </div>
     </div>
     <div id="edbusy"><i></i><span></span></div>
   </div>
-  <div id="foot">
-    <span class="grow"></span>
-    <button id="runAgent" data-t-title="run_tip" hidden><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></svg><span id="runLabel">הרץ</span></button>
-    <button id="copyAll" class="primary" data-t-title="copy_tip"><span data-t="copy_all">העתק</span></button>
-    <span id="warn" hidden></span>
-  </div>
+  <span id="warn" hidden></span>
+  <div id="pop" hidden></div>
 
 
   <div id="settings" class="modal" role="dialog" aria-modal="true">
@@ -552,7 +576,7 @@
           <div class="srow"><div><b data-t="s_stt_lang">שפת ההקלטה</b></div>
             <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
           <div class="srow"><div><b data-t="s_ai">מעורבות ה-AI</b><small data-t="ai_note"></small></div>
-            <span class="seg aiseg" id="aiseg2"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
+            <span class="seg aiseg" id="aiseg2"><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
           <div class="srow col"><div><b data-t="s_key">מפתח OpenAI</b><small data-t="key_note"></small></div>
             <div class="keyrow"><input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button id="keysave" class="primary" data-t="save_key">שמור</button></div>
             <small id="keystate"></small></div>
@@ -609,7 +633,7 @@ const I18N = {
     m_stt: 'תמלול', m_stt_note: 'הופך את ההקלטה לטקסט', m_clean: 'ניקוי', m_clean_note: 'פיסוק ותיקון קל — כדאי מודל מהיר',
     m_full: 'עריכה', m_full_note: 'מבין את כל השיחה ומסדר אותה — כדאי מודל חזק', m_agent: 'סוכן להרצה',
     m_agent_model: 'מודל של הסוכן', m_agent_model_note: 'המודל שהסוכן ירוץ איתו כשלוחצים "הרץ"', m_default: 'ברירת מחדל ({0})', m_agent_default: 'ברירת המחדל של הסוכן',
-    run_in: 'הרץ ב-{0}',
+    run_in: 'הרץ ב-{0}', copy_opts: 'מה מצורף להעתקה', run_opts: 'סוכן ומודל',
     tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'ג׳ם', tab_keys: 'קיצורים',
     s_theme: 'מראה', s_theme_note: 'בהיר, כהה, או לפי המערכת', theme_system: 'מערכת', theme_light: 'בהיר', theme_dark: 'כהה',
     s_dir_note: 'הכיוון של שדה הטקסט', prompt_note: 'מה מצורף לפרומפט המלא בנוסף לטקסט ולעוגנים.',
@@ -623,7 +647,7 @@ const I18N = {
     st_running: 'פותח את {0}…', st_ran: '{0} נפתח בטרמינל — הפרומפט נשמר ב-{1}', btn_ran: 'נפתח ✓', sc_run: 'הרצת הפרומפט בסוכן',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
-    ai_note: 'תמלול: הטקסט כפי שנאמר. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד דברים שנאמרו פעמיים, מסדר, מפסק ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. העוגנים נשמרים תמיד, והעריכה רצה בסוף כל הקלטה ובכפתור ✨ (⌘⇧E). ⌘Z מבטל.',
+    ai_note: 'מה כפתור ✨ עושה. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד חזרות, מסדר ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. ההקלטה עצמה רק מתמללת. העוגנים נשמרים תמיד; ⌘Z מבטל.',
     refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
@@ -673,7 +697,7 @@ const I18N = {
     m_stt: 'Dictation', m_stt_note: 'Turns the recording into text', m_clean: 'Clean', m_clean_note: 'Punctuation and light fixes — a fast model fits',
     m_full: 'Edit', m_full_note: 'Reads the whole talk and organizes it — a strong model fits', m_agent: 'Agent to run',
     m_agent_model: 'Agent model', m_agent_model_note: 'The model the agent runs with when you press Run', m_default: 'Default ({0})', m_agent_default: "The agent's default",
-    run_in: 'Run in {0}',
+    run_in: 'Run in {0}', copy_opts: 'What the copy carries', run_opts: 'Agent and model',
     tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Jem', tab_keys: 'Shortcuts',
     s_theme: 'Appearance', s_theme_note: 'Light, dark, or follow the system', theme_system: 'System', theme_light: 'Light', theme_dark: 'Dark',
     s_dir_note: 'Direction of the text field', prompt_note: 'What the full prompt carries besides the text and its anchors.',
@@ -687,7 +711,7 @@ const I18N = {
     st_running: 'opening {0}…', st_ran: '{0} opened in Terminal — prompt saved at {1}', btn_ran: 'Opened ✓', sc_run: 'Run the prompt in an agent',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
-    ai_note: 'Dictate: the text as spoken. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges what was said twice, orders, punctuates and sharpens it into a clear request, adding nothing you did not say. Anchors are always kept; the edit runs at the end of every recording and on ✨ (⌘⇧E). ⌘Z undoes it.',
+    ai_note: 'What ✨ does. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges repeats, orders and sharpens it into a clear request, adding nothing you did not say. Recording itself only transcribes. Anchors are always kept; ⌘Z undoes.',
     refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
@@ -1663,10 +1687,48 @@ $('#copyAll').onclick = async () => {
   pushHistory(text); uilog('copy', { text, refs: used.length })
   if (orphans) setStatus(t('st_orphans', orphans), 'err')
   clearTimeout(copyFlash)
-  b.classList.add('done'); b.querySelector('span').textContent = t('btn_copied', used.length)
-  copyFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = t('copy_all') }, 1600)
+  b.classList.add('done'); b.title = t('btn_copied', used.length)
+  copyFlash = setTimeout(() => { b.classList.remove('done'); b.title = t('copy_tip') }, 1600)
   if (!orphans) setStatus(t('st_copied', used.length, text.length), 'ok')
 }
+// ---- split buttons: the chevron beside copy / run opens a small popover of that action's
+// options. Every choice is stored at once and is the default from then on.
+function openPop(kind, anchor) {
+  const pop = $('#pop')
+  if (!pop.hidden && pop.dataset.kind === kind) return closePop()
+  const tog = (id, label, note) => `<label class="ptog"><input type="checkbox" data-mirror="${id}" ${$(id).checked ? 'checked' : ''}><span><b>${escapeHTML(label)}</b>${note ? `<small>${escapeHTML(note)}</small>` : ''}</span></label>`
+  if (kind === 'copy') {
+    pop.innerHTML = `<div class="ph">${escapeHTML(t('copy_opts'))}</div>
+      ${tog('#optNotes', t('notes'), t('notes_note'))}${tog('#optErrors', t('errors'), t('errors_title'))}${tog('#optPath', t('path'), t('path_title'))}`
+  } else {
+    const cur = $('#agent').value, a = agentsCache.find(x => x.id === cur)
+    const m = LS('emucomposer.model.agent.' + cur) || ''
+    pop.innerHTML = `<div class="ph">${escapeHTML(t('m_agent'))}</div>
+      ${agentsCache.map(x => `<button class="pitem${x.id === cur ? ' on' : ''}" data-agent="${escapeHTML(x.id)}">${escapeHTML(x.name)}</button>`).join('')}
+      <div class="ph">${escapeHTML(t('m_agent_model'))}</div>
+      ${['', ...(a?.models || [])].map(v => `<button class="pitem${v === m ? ' on' : ''}" data-model="${escapeHTML(v)}">${escapeHTML(v || t('m_agent_default'))}</button>`).join('')}`
+  }
+  pop.dataset.kind = kind; pop.hidden = false
+  pop.dir = lang === 'he' ? 'rtl' : 'ltr'
+  const r = anchor.getBoundingClientRect()
+  const top = r.top - pop.offsetHeight - 8 >= 8 ? r.top - pop.offsetHeight - 8 : r.bottom + 8
+  pop.style.top = top + 'px'
+  pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + 'px'
+  anchor.closest('.splitbtn').classList.add('open')
+}
+function closePop() { $('#pop').hidden = true; for (const x of document.querySelectorAll('.splitbtn.open')) x.classList.remove('open') }
+$('#edact').addEventListener('click', e => { const c = e.target.closest('.chev'); if (c) { e.stopPropagation(); openPop(c.dataset.pop, c) } })
+$('#pop').addEventListener('change', e => {
+  const m = e.target.closest('[data-mirror]'); if (!m) return
+  const real = $(m.dataset.mirror); real.checked = m.checked; real.dispatchEvent(new Event('change', { bubbles: true }))
+})
+$('#pop').addEventListener('click', e => {
+  const b = e.target.closest('.pitem'); if (!b) return
+  if (b.dataset.agent !== undefined) { const sel = $('#agent'); sel.value = b.dataset.agent; sel.dispatchEvent(new Event('change', { bubbles: true })); openPop('run', $('#runWrap .chev')); openPop('run', $('#runWrap .chev')) }
+  else { LS('emucomposer.model.agent.' + $('#agent').value, b.dataset.model); fillAgentModels(); runLabel(); closePop() }
+})
+document.addEventListener('mousedown', e => { if (!$('#pop').hidden && !e.target.closest('#pop, .chev')) closePop() })
+
 // ---- run in an agent: the same full prompt as "copy", handed to a CLI agent in a Terminal
 // opened in the project's folder. The menu lists only agents installed on this Mac.
 // Models per purpose (Settings › Models). Empty = the server's default for that purpose.
@@ -1692,7 +1754,8 @@ function fillAgentModels() {
 $('#mAgent').addEventListener('change', e => LS('emucomposer.model.agent.' + $('#agent').value, e.target.value))
 function runLabel() {
   const a = agentsCache.find(x => x.id === $('#agent').value)
-  $('#runLabel').textContent = a ? t('run_in', a.name) : t('run')
+  const m = a ? LS('emucomposer.model.agent.' + a.id) : ''
+  $('#runAgent').title = a ? t('run_in', a.name) + (m ? ` · ${m}` : '') + ' (⌘⇧↩)' : t('run')
 }
 async function loadAgents() {
   try {
@@ -1701,7 +1764,7 @@ async function loadAgents() {
     const sel = $('#agent'); let want = ''
     try { want = localStorage.getItem('emucomposer.agent') || '' } catch {}
     sel.innerHTML = agents.map(a => `<option value="${escapeHTML(a.id)}"${a.id === want ? ' selected' : ''}>${escapeHTML(a.name)}</option>`).join('')
-    $('#runAgent').hidden = !agents.length
+    $('#runWrap').hidden = !agents.length
     fillAgentModels(); runLabel()
   } catch {}
 }
@@ -1717,8 +1780,8 @@ $('#runAgent').onclick = async () => {
     if (d.error) throw new Error(d.error)
     pushHistory(text); uilog('run', { agent, text })
     const b = $('#runAgent'); clearTimeout(runFlash)
-    b.classList.add('done'); $('#runLabel').textContent = t('btn_ran')
-    runFlash = setTimeout(() => { b.classList.remove('done'); runLabel() }, 1800)
+    b.classList.add('done')
+    runFlash = setTimeout(() => b.classList.remove('done'), 1800)
     setStatus(t('st_ran', d.agent, d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
@@ -1874,7 +1937,6 @@ function stopRec() {
   $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle(); renderGuide()
   audioCtx?.close().catch(() => {}); audioCtx = null
   setStatus(t('st_rec_done'), 'ok')
-  if (aiLevel !== 'transcribe') refineAfterDictation()
 }
 function startMeter() {
   audioCtx = new AudioContext()
@@ -1934,15 +1996,17 @@ $('#rec').onclick = toggleRec
 // everything said and turns it into an organized request. Chips travel as ⟦n⟧ tokens with a
 // legend, the server refuses an answer that loses one, and the result replaces the text
 // through execCommand so ⌘Z brings the original back.
-const AI_LEVELS = ['transcribe', 'clean', 'full']
-let aiLevel = 'transcribe'
-try { aiLevel = AI_LEVELS.includes(localStorage.getItem('emucomposer.ai')) ? localStorage.getItem('emucomposer.ai') : 'transcribe' } catch {}
+// Dictation only ever transcribes; the AI touches the text only when ✨ is pressed, at the
+// level chosen here (clean or full edit).
+const AI_LEVELS = ['clean', 'full']
+let aiLevel = 'full'
+try { aiLevel = AI_LEVELS.includes(localStorage.getItem('emucomposer.ai')) ? localStorage.getItem('emucomposer.ai') : 'full' } catch {}
 function setAiLevel(l, save = true) {
   if (save && l !== aiLevel) uilog('ai-level', { to: l })
-  aiLevel = AI_LEVELS.includes(l) ? l : 'transcribe'
+  aiLevel = AI_LEVELS.includes(l) ? l : 'full'
   for (const b of document.querySelectorAll('.aiseg [data-ai]')) b.classList.toggle('on', b.dataset.ai === aiLevel)
   for (const c of AI_LEVELS) document.body.classList.toggle('ai-' + c, c === aiLevel)
-  $('#refine').title = t('refine_tip', t('ai_' + (aiLevel === 'transcribe' ? 'full' : aiLevel)))
+  $('#refine').title = t('refine_tip', t('ai_' + aiLevel))
   if (save) try { localStorage.setItem('emucomposer.ai', aiLevel) } catch {}
   renderGuide()
 }
@@ -2227,7 +2291,8 @@ function jemKey(e) {
   if (e.key.length === 1 && a !== ed && !/^(INPUT|TEXTAREA|SELECT)$/.test(a?.tagName || '')) restoreCaret()
 }
 function onEscape() {
-  if ($('.ddm')) closeMenus()
+  if (!$('#pop').hidden) closePop()
+  else if ($('.ddm')) closeMenus()
   else if ($('#settings').classList.contains('show')) $('#settings').classList.remove('show')
   else if (drawing) { drawing = null; renderMarks() }
   else if (kbdApp) setKbdApp(false)
