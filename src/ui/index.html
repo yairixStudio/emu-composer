@@ -175,9 +175,6 @@
 <div id="right">
   <div class="row">
     <span class="lbl" data-t="prompt">Prompt</span>
-    <div class="seg" id="dirseg">
-      <button data-dir="rtl" class="on">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button>
-    </div>
     <button id="rec"><span id="dot"></span><span id="reclabel" data-t="rec">הקלטה</span><span id="level"><i></i></span></button>
     <button id="histbtn" class="ghost" data-t="history">היסטוריה</button>
     <button id="settingsbtn" class="ghost" data-t-title="settings_title" title="הגדרות">⚙</button>
@@ -1142,14 +1139,14 @@ function placeTranscript(marker, text) {
 $('#rec').onclick = toggleRec
 
 // ------------------------------------------------------ direction & key -----
-$('#dirseg').addEventListener('click', e => {
-  const b = e.target.closest('[data-dir]'); if (!b) return
-  ;[...$('#dirseg').children].forEach(x => x.classList.toggle('on', x === b))
-  ;[...$('#dirseg2').children].forEach(x => x.classList.toggle('on', x.dataset.dir === b.dataset.dir))
-  ed.dir = b.dataset.dir
-  ed.style.textAlign = b.dataset.dir === 'ltr' ? 'left' : b.dataset.dir === 'rtl' ? 'right' : ''
-  try { localStorage.setItem('emucomposer.dir', b.dataset.dir) } catch {}
-})
+// Text direction lives in settings only; the header stays for the device and the prompt.
+function setDir(d) {
+  if (!['rtl', 'ltr', 'auto'].includes(d)) d = 'rtl'
+  ;[...$('#dirseg2').children].forEach(x => x.classList.toggle('on', x.dataset.dir === d))
+  ed.dir = d
+  ed.style.textAlign = d === 'ltr' ? 'left' : d === 'rtl' ? 'right' : ''
+  try { localStorage.setItem('emucomposer.dir', d) } catch {}
+}
 // ---------------------------------------------------------------- settings ---
 let sttOverride = null
 try { const v = localStorage.getItem('emucomposer.sttLang'); if (v !== null) sttOverride = v } catch {}
@@ -1163,7 +1160,7 @@ $('#langseg').addEventListener('click', e => {
 $('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} })
 $('#optNotes2').addEventListener('change', e => { $('#optNotes').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
 $('#optNotes').addEventListener('change', e => { $('#optNotes2').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
-$('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) $(`#dirseg [data-dir="${b.dataset.dir}"]`)?.click() })
+$('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) setDir(b.dataset.dir) })
 $('#keysave').onclick = async () => {
   const key = $('#apikey').value.trim()
   if (!key) return setStatus(t('st_key_missing'), 'err')
@@ -1368,7 +1365,7 @@ $('#device').addEventListener('change', async e => {
 
 $('#agentpill').onclick = async () => { setStatus(t('st_agent_starting'), 'busy'); const d = await (await fetch('/api/agent/restart', { method: 'POST' })).json(); setStatus(d.ok ? t('st_agent_on') : d.reason, d.ok ? 'ok' : 'err'); health() }
 fetchNotes()
-try { const d = localStorage.getItem('emucomposer.dir'); if (d) $(`#dirseg [data-dir="${d}"]`)?.click() } catch {}
+{ let d = 'rtl'; try { d = localStorage.getItem('emucomposer.dir') || 'rtl' } catch {} setDir(d) }
 try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
 try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emucomposer.' + id); if (v !== null) $('#opt' + id).checked = v === '1' } } catch {}
 $('#optNotes2').checked = $('#optNotes').checked
