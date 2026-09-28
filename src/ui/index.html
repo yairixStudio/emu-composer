@@ -1,5 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>emu-composer</title>
 <style>
   :root{
@@ -282,12 +283,69 @@
   .ddm button.on{background:#ffffff12}
   .ddm small{grid-column:2;color:var(--dim2);font-size:11px}
   .ddm button:not(:has(.dot)) small{grid-column:1}
+
+  /* ================= layout: guide | device | text, in every mode ================= */
+  body{--gw:290px;--rw:460px}
+  body.collect #guide, body.use #guide, body.jem #guide{display:flex;flex-direction:column;flex:0 0 var(--gw);width:var(--gw);min-width:0;
+    gap:16px;padding:22px;overflow:auto;background:var(--panel);border:none}
+  body.guide-off #guide, body.guide-off .split[data-side="guide"]{display:none}
+  #guide[data-mode="collect"] h2::before{background:var(--accent)}
+  #guide[data-mode="use"] h2::before{background:var(--accent2)}
+  .split{flex:0 0 1px;background:var(--line);position:relative;cursor:col-resize;z-index:4}
+  .split::after{content:'';position:absolute;inset:0 -4px;}
+  .split:hover, .split.dragging{background:#a78bfa88}
+  body.resizing{cursor:col-resize;user-select:none}
+  body.resizing #screen{pointer-events:none}
+  #left, body.jem #left{flex:1 1 auto;min-width:280px;padding:10px 14px 12px;gap:8px;border:none;display:flex;flex-direction:column}
+  body.collect #right, body.use #right, body.jem #right{flex:0 0 var(--rw);width:var(--rw);min-width:0}
+  #topbar{gap:6px;justify-content:center;flex-wrap:wrap}
+  #agentpill{margin-inline-start:4px}
+  #stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center}
+  #shot{max-height:none}
+  #tools, body.collect #tools, body.jem #tools{display:none}
+  /* the dock: a slim vertical rail, draggable inside the device column */
+  #dock{position:absolute;z-index:6;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 5px;
+        background:#14171ecc;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line2);border-radius:12px;
+        box-shadow:0 8px 28px #0007}
+  #dock.dragging{box-shadow:0 12px 36px #000a;border-color:#a78bfa66}
+  #dock .grip{display:flex;gap:3px;padding:3px 6px 5px;cursor:grab}
+  #dock .grip i{width:3px;height:3px;border-radius:50%;background:var(--dim2)}
+  #dock.dragging .grip{cursor:grabbing}
+  body.collect #dock #tools, body.jem #dock #tools{display:flex}
+  #dock #tools{flex-direction:column;align-items:center;gap:8px}
+  #dock #toolseg{flex-direction:column;background:none;border:none}
+  #dock #toolseg button, #dock #tools .seg button{width:32px;height:32px;padding:0;border-radius:8px;margin:1px 0}
+  #dock #colors{flex-direction:column;gap:7px;padding:4px 0}
+  #dock #undoMark{width:32px;height:30px}
+  #dock #navbar{flex-direction:column;gap:2px;padding-top:6px;border-top:1px solid var(--line2)}
+  body.use #dock #navbar{border-top:none;padding-top:0}
+  #dock #navbar button{width:32px;height:30px}
+  #dock button.ghost{color:#aeb4c4}
+  #dock button.ghost:hover:not(:disabled){color:var(--fg)}
+
+  /* narrow: guide off by default (see applyGuide); phone-ish: stack device over text */
+  @media (max-width: 860px){
+    body{flex-direction:column;overflow:auto;height:auto;min-height:100vh}
+    body #guide, .split{display:none!important}
+    #left, body.jem #left{flex:0 0 auto;height:64vh;min-width:0}
+    body.collect #right, body.use #right, body.jem #right{flex:0 0 auto;width:auto;height:70vh}
+    #topbar{justify-content:flex-start}
+    #dock, #dock #tools, #dock #toolseg, #dock #colors, #dock #navbar{flex-direction:row}
+    #dock #navbar{border-top:none;border-inline-start:1px solid var(--line2);padding:0 0 0 6px}
+    #dock .grip{flex-direction:column;padding:4px 3px}
+    #dock #colors{padding:0 4px}
+    #stage{flex-direction:column;justify-content:flex-start;gap:10px;padding-top:4px}
+    #dock{position:static;flex-wrap:wrap;justify-content:center;max-width:100%}
+    #dock .grip{display:none}
+  }
 </style>
 
 <aside id="guide"></aside>
+<div class="split" data-side="guide" data-t-title="split_tip"></div>
 
 <div id="left">
-  <div class="bar">
+  <div class="bar" id="topbar">
+    <button id="guideBtn" class="ghost ic" data-t-title="guide_toggle"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9 4.5v15"/></svg></button>
     <div class="seg modes" data-t-title="modes_title">
       <button id="mCollect" class="on" data-t="mode_collect">איסוף</button>
       <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
@@ -295,26 +353,32 @@
     </div>
     <select id="project" data-t-title="project_title"></select>
     <select id="device" data-t-title="device_title"></select>
-    <span id="modehint"></span>
+    <span id="agentpill" class="pill" title="on-device agent"></span>
+    <span id="modehint" hidden></span>
   </div>
   <div id="problems"></div>
-  <div class="bar" id="tools">
-    <div class="seg" id="toolseg">
+  <div id="stage">
+    <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg><span id="busy">…</span><div id="lost"></div></div>
+    <div id="dock">
+      <div class="grip" data-t-title="dock_grip"><i></i><i></i><i></i></div>
+      <div id="tools">
+        <div class="seg" id="toolseg">
       <button data-tool="pick" class="on ic" data-t-title="tool_pick"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z"/></svg></button><button data-tool="pen" class="ic" data-t-title="tool_pen"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button><button data-tool="rect" class="ic" data-t-title="tool_rect"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg></button><button data-tool="arrow" class="ic" data-t-title="tool_arrow"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><path d="M9 5h10v10"/></svg></button>
     </div>
-    <span id="colors">
+        <span id="colors">
       <button class="sw on" data-c="#ef4444" style="--c:#ef4444" title="red"></button>
       <button class="sw" data-c="#facc15" style="--c:#facc15" title="yellow"></button>
       <button class="sw" data-c="#3b82f6" style="--c:#3b82f6" title="blue"></button>
     </span>
-    <button id="undoMark" class="ghost ic" data-t-title="undo_mark"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
-  </div>
-  <div id="screen" tabindex="0"><img id="shot" alt="" draggable="false"><div id="ov"></div><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg><span id="busy">…</span><div id="lost"></div></div>
-  <div id="navbar">
-    <button data-key="4" class="ghost ic" data-t-title="nav_back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button data-key="3" class="ghost ic" data-t-title="nav_home"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button><button data-key="187" class="ghost ic" data-t-title="nav_recents"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button><button id="recap" class="ghost ic" data-t-title="nav_refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
-    <span id="agentpill" class="pill" title="on-device agent"></span>
+        <button id="undoMark" class="ghost ic" data-t-title="undo_mark"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      </div>
+      <div id="navbar">
+        <button data-key="4" class="ghost ic" data-t-title="nav_back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button data-key="3" class="ghost ic" data-t-title="nav_home"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button><button data-key="187" class="ghost ic" data-t-title="nav_recents"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button><button id="recap" class="ghost ic" data-t-title="nav_refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
+      </div>
+    </div>
   </div>
 </div>
+<div class="split" data-side="right" data-t-title="split_tip"></div>
 
 <div id="right">
   <div class="row">
@@ -394,6 +458,11 @@ const I18N = {
     modes_title: 'איסוף: לחיצה מסמנת · שימוש: שליטה חיה · ג׳ם: שניהם יחד (⌘E, ⌘J)', copy_tip: 'העתקת הפרומפט המלא (⌘↩)',
     nav_back: 'חזרה (⌘B)', nav_home: 'מסך הבית (⌘⇧H)', nav_recents: 'אפליקציות אחרונות', nav_refresh: 'צילום מחדש של המסך',
     g_more: 'כל הקיצורים והטיפים', g_basics: 'הבסיס',
+    guide_toggle: 'הצגה או הסתרה של פאנל ההנחיות', split_tip: 'גרירה משנה רוחב · לחיצה כפולה מחזירה לברירת המחדל', dock_grip: 'גרירה מזיזה את הסרגל',
+    collect_title: 'איסוף', collect_intro: 'המסך קפוא. כל לחיצה על אלמנט מכניסה אותו לטקסט כעוגן לקוד, וקליק ימני מקיש במכשיר.',
+    use_title: 'שימוש', use_intro: 'המסך חי. לחיצות, גרירות, גלילה ומקלדת עוברים ישר למכשיר.',
+    ms_c_click: 'מסמן את האלמנט בטקסט', ms_c_right: 'מקיש במכשיר בלי לצאת מאיסוף', ms_c_wheel: 'גלילה במכשיר',
+    ms_u_click: 'הקשה במכשיר', ms_u_keys: 'המקלדת מקלידה במכשיר (גם עברית)', sc_jem_go: 'מעבר לג׳ם', sc_mode_go: 'מעבר בין איסוף לשימוש',
     run: 'הרץ בסוכן', run_tip: 'פותח טרמינל בתיקיית הפרויקט ומריץ את הסוכן עם הפרומפט המלא (⌘⇧↩)', agent_title: 'איזה סוכן יריץ את הפרומפט — מה שמותקן במחשב',
     st_running: 'פותח את {0}…', st_ran: '{0} נפתח בטרמינל — הפרומפט נשמר ב-{1}', btn_ran: 'נפתח ✓', sc_run: 'הרצת הפרומפט בסוכן',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
@@ -444,6 +513,11 @@ const I18N = {
     modes_title: 'Collect: a click marks · Use: live control · Jem: both at once (⌘E, ⌘J)', copy_tip: 'Copy the full prompt (⌘↩)',
     nav_back: 'Back (⌘B)', nav_home: 'Home (⌘⇧H)', nav_recents: 'Recent apps', nav_refresh: 'Capture the screen again',
     g_more: 'All shortcuts and tips', g_basics: 'Basics',
+    guide_toggle: 'Show or hide the guide panel', split_tip: 'Drag to resize · double-click to reset', dock_grip: 'Drag to move the toolbar',
+    collect_title: 'Collect', collect_intro: 'The screen is still. A click on an element puts it in the text as an anchor to the code; a right-click taps the device.',
+    use_title: 'Use', use_intro: 'The screen is live. Clicks, drags, the wheel and the keyboard go straight to the device.',
+    ms_c_click: 'Marks the element in the text', ms_c_right: 'Taps the device without leaving collect', ms_c_wheel: 'Scrolls the device',
+    ms_u_click: 'Taps the device', ms_u_keys: 'The keyboard types into the device (any script)', sc_jem_go: 'Go to jem', sc_mode_go: 'Switch collect / use',
     run: 'Run in agent', run_tip: 'Opens a terminal in the project folder and runs the agent with the full prompt (⌘⇧↩)', agent_title: 'Which agent runs the prompt — the ones installed on this Mac',
     st_running: 'opening {0}…', st_ran: '{0} opened in Terminal — prompt saved at {1}', btn_ran: 'Opened ✓', sc_run: 'Run the prompt in an agent',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
@@ -538,12 +612,13 @@ function setMode(m) {
   mode = m
   uilog('mode', { to: m })
   if (m !== 'jem') plainMode = m
-  document.body.className = m
+  // Only the mode class changes: the body also carries layout and state classes.
+  document.body.classList.remove(...Object.keys(MODES)); document.body.classList.add(m)
   $('#mCollect').classList.toggle('on', m === 'collect')
   $('#mUse').classList.toggle('on', m === 'use')
   $('#mJem').classList.toggle('on', m === 'jem')
   if (m !== 'jem') setKbdApp(false)
-  modeHint(); renderGuide()
+  modeHint(); renderGuide(); requestAnimationFrame(fitScreen)
   $('#ov').style.display = still() ? 'block' : 'none'
   $('#marks').style.display = still() ? 'block' : 'none'
   setWatch(MODES[m].watch)
@@ -1619,6 +1694,101 @@ $('#keysave').onclick = async () => {
 }
 $('#apikey').addEventListener('keydown', e => e.key === 'Enter' && $('#keysave').click())
 
+// ----------------------------------------------------------------- layout ---
+// Three columns in every mode — guide | device | text — with the device in the middle. The
+// side widths live in CSS variables (--gw, --rw) that the splitters write; the screen is
+// fitted to the space its column actually has (no fixed pixel budget), and every change of
+// that space re-lays the overlay and the marks.
+const LS = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch {} }
+const DEF_GW = 290, DEF_RW = 460
+function applyWidths() {
+  const gw = Number(LS('emucomposer.gw')) || DEF_GW, rw = Number(LS('emucomposer.rw')) || DEF_RW
+  document.body.style.setProperty('--gw', gw + 'px'); document.body.style.setProperty('--rw', rw + 'px')
+}
+let guideForced = LS('emucomposer.guide')   // '1' shown, '0' hidden, null = by width
+function applyGuide() {
+  const on = guideForced === '1' ? true : guideForced === '0' ? false : innerWidth >= 1180
+  document.body.classList.toggle('guide-off', !on)
+}
+$('#guideBtn').onclick = () => { guideForced = document.body.classList.contains('guide-off') ? '1' : '0'; LS('emucomposer.guide', guideForced); applyGuide() }
+for (const sp of document.querySelectorAll('.split')) {
+  sp.addEventListener('pointerdown', e => {
+    e.preventDefault(); sp.setPointerCapture(e.pointerId); sp.classList.add('dragging'); document.body.classList.add('resizing')
+    const side = sp.dataset.side
+    const move = ev => {
+      if (side === 'guide') {
+        const w = ev.clientX - $('#guide').getBoundingClientRect().left
+        if (w < 150) { document.body.classList.add('guide-off'); return }
+        document.body.classList.remove('guide-off')
+        document.body.style.setProperty('--gw', Math.max(220, Math.min(560, w)) + 'px')
+      } else {
+        const w = $('#right').getBoundingClientRect().right - ev.clientX
+        document.body.style.setProperty('--rw', Math.max(340, Math.min(innerWidth - 520, w)) + 'px')
+      }
+    }
+    const up = () => {
+      sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up)
+      sp.classList.remove('dragging'); document.body.classList.remove('resizing')
+      if (side === 'guide') { guideForced = document.body.classList.contains('guide-off') ? '0' : '1'; LS('emucomposer.guide', guideForced); if (guideForced === '1') LS('emucomposer.gw', parseInt(getComputedStyle(document.body).getPropertyValue('--gw'))) }
+      else LS('emucomposer.rw', parseInt(getComputedStyle(document.body).getPropertyValue('--rw')))
+    }
+    sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up)
+  })
+  sp.addEventListener('dblclick', () => { LS(sp.dataset.side === 'guide' ? 'emucomposer.gw' : 'emucomposer.rw', ''); applyWidths() })
+}
+// The screen takes the largest size its column allows, keeping the device's aspect, with
+// room left on both sides for the dock so the device stays centred.
+function fitScreen() {
+  const st = $('#stage'); if (!img.naturalWidth || !st.clientWidth) return
+  // A vertical dock takes width on both sides (the device stays centred); a horizontal one
+  // (narrow screens) takes height below.
+  const d = $('#dock'), vertical = d.offsetHeight >= d.offsetWidth
+  const W = Math.max(120, st.clientWidth - (vertical ? 2 * ((d.offsetWidth || 44) + 18) : 16))
+  const H = Math.max(160, st.clientHeight - (vertical ? 16 : d.offsetHeight + 22))
+  const ar = img.naturalWidth / img.naturalHeight
+  let h = H, w = h * ar
+  if (w > W) { w = W; h = w / ar }
+  img.style.width = Math.floor(w) + 'px'; img.style.height = Math.floor(h) + 'px'
+  if (still()) { drawOverlay(hotIdx); renderMarks() }
+  placeDock()
+}
+let lastNat = ''
+img.addEventListener('load', () => { const n = img.naturalWidth + 'x' + img.naturalHeight; if (n !== lastNat || !img.style.width) { lastNat = n; fitScreen() } })
+new ResizeObserver(() => fitScreen()).observe($('#stage'))
+
+// The dock (drawing tools + device keys) floats in the device column. Its default spot is
+// just beside the screen; dragged, it stays where it was put (as a fraction of the column,
+// so it survives resizes), always clamped inside the column.
+let dockPos = null
+try { dockPos = JSON.parse(LS('emucomposer.dock') || 'null') } catch {}
+function placeDock() {
+  const st = $('#stage'), d = $('#dock'), sr = st.getBoundingClientRect()
+  let x, y
+  if (dockPos) { x = dockPos.fx * sr.width; y = dockPos.fy * sr.height }
+  else {
+    const r = $('#screen').getBoundingClientRect()
+    if (d.offsetHeight >= d.offsetWidth) { x = r.left - sr.left - d.offsetWidth - 14; y = r.top - sr.top + (r.height - d.offsetHeight) / 2; if (x < 6) x = 6 }
+    else { x = (sr.width - d.offsetWidth) / 2; y = r.bottom - sr.top + 8 }
+  }
+  d.style.left = Math.max(4, Math.min(sr.width - d.offsetWidth - 4, x)) + 'px'
+  d.style.top = Math.max(4, Math.min(sr.height - d.offsetHeight - 4, y)) + 'px'
+}
+$('#dock .grip').addEventListener('pointerdown', e => {
+  e.preventDefault()
+  const g = e.currentTarget, d = $('#dock'), sr = $('#stage').getBoundingClientRect(), dr = d.getBoundingClientRect()
+  const ox = e.clientX - dr.left, oy = e.clientY - dr.top
+  g.setPointerCapture(e.pointerId); d.classList.add('dragging')
+  const move = ev => {
+    dockPos = { fx: (ev.clientX - ox - sr.left) / sr.width, fy: (ev.clientY - oy - sr.top) / sr.height }
+    placeDock()
+  }
+  const up = () => { g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', up); d.classList.remove('dragging'); LS('emucomposer.dock', JSON.stringify(dockPos)) }
+  g.addEventListener('pointermove', move); g.addEventListener('pointerup', up)
+})
+$('#dock .grip').addEventListener('dblclick', () => { dockPos = null; LS('emucomposer.dock', ''); placeDock() })
+addEventListener('resize', () => { applyGuide(); fitScreen() })
+applyWidths(); applyGuide()
+
 // ---------------------------------------------------------------- startup ---
 // ONE table: the keydown handler reads it and the jem guide renders it, so the explanation
 // on screen can never drift from what the keys actually do. `k` is the physical key
@@ -1683,21 +1853,28 @@ addEventListener('keydown', e => {
 
 let guideOpen = false
 function renderGuide() {
-  const g = $('#guide'); if (!g || mode !== 'jem') return
+  const g = $('#guide'); if (!g) return
   const row = (k, text, id) => `<div class="grow" data-sc="${id || ''}"><kbd dir="ltr">${escapeHTML(k)}</kbd><span>${escapeHTML(text)}</span></div>`
   const toolName = { pick: t('tool_pick'), pen: t('tool_pen'), rect: t('tool_rect'), arrow: t('tool_arrow') }[tool] || tool
   g.dir = lang === 'he' ? 'rtl' : 'ltr'
-  const basics = [['click', 'ms_tap'], ['⇧ click', 'ms_taponly'], ['⌘ click', 'ms_ref'], ['⌘⇧R', 'sc_rec'], ['⌘K', 'sc_kbd'], ['⌘D', 'sc_draw'], ['⌘↩', 'sc_copy']]
-  g.innerHTML = `<h2>${escapeHTML(t('jem_title'))}</h2><p>${escapeHTML(t('jem_intro'))}</p>
-    <div class="gstate"><button data-g="kbd" class="${kbdApp ? 'hot' : ''}">${escapeHTML(t(kbdApp ? 'g_to_app' : 'g_to_text'))}</button>
-      <button data-g="tool" class="${tool !== 'pick' ? 'hot' : ''}">${escapeHTML(t('g_tool', toolName))}</button>
+  // Each mode explains itself: its own basics first, everything else folded away.
+  const B = {
+    jem: [['click', 'ms_tap'], ['⇧ click', 'ms_taponly'], ['⌘ click', 'ms_ref'], ['⌘⇧R', 'sc_rec'], ['⌘K', 'sc_kbd'], ['⌘D', 'sc_draw'], ['⌘↩', 'sc_copy']],
+    collect: [['click', 'ms_c_click'], ['right', 'ms_c_right'], ['⇧ wheel', 'ms_c_wheel'], ['⌥', 'ms_raw'], ['⌘D', 'sc_draw'], ['⌘⇧R', 'sc_rec'], ['⌘J', 'sc_jem_go'], ['⌘↩', 'sc_copy']],
+    use: [['click', 'ms_u_click'], ['drag', 'ms_swipe'], ['wheel', 'ms_scroll'], ['keys', 'ms_u_keys'], ['⌘E', 'sc_mode_go'], ['⌘J', 'sc_jem_go'], ['⌘↩', 'sc_copy']],
+  }[mode] || []
+  const title = mode === 'jem' ? t('jem_title') : t(mode + '_title'), intro = mode === 'jem' ? t('jem_intro') : t(mode + '_intro')
+  g.dataset.mode = mode
+  g.innerHTML = `<h2>${escapeHTML(title)}</h2><p>${escapeHTML(intro)}</p>
+    <div class="gstate">${mode === 'jem' ? `<button data-g="kbd" class="${kbdApp ? 'hot' : ''}">${escapeHTML(t(kbdApp ? 'g_to_app' : 'g_to_text'))}</button>` : ''}
+      ${mode !== 'use' ? `<button data-g="tool" class="${tool !== 'pick' ? 'hot' : ''}">${escapeHTML(t('g_tool', toolName))}</button>` : ''}
       <button data-g="rec" class="${recOn ? 'rec' : ''}">${escapeHTML(t(recOn ? 'g_rec_on' : 'g_rec_off'))}</button>
       <button data-g="ai" class="${aiLevel !== 'transcribe' ? 'hot' : ''}">${escapeHTML(t('g_ai', t('ai_' + aiLevel)))}</button></div>
-    <div class="gsec">${basics.map(([k, id]) => row(k, t(id), id)).join('')}</div>
+    <div class="gsec">${B.map(([k, id]) => row(k, t(id), id)).join('')}</div>
     <details class="gmore"${guideOpen ? ' open' : ''}><summary>${escapeHTML(t('g_more'))}</summary>
-      <label class="tog"><input type="checkbox" id="optAnchor" ${anchorTaps ? 'checked' : ''}> <span>${escapeHTML(t('g_anchor'))}</span></label>
+      ${mode === 'jem' ? `<label class="tog"><input type="checkbox" id="optAnchor" ${anchorTaps ? 'checked' : ''}> <span>${escapeHTML(t('g_anchor'))}</span></label>` : ''}
       <div class="gsec"><span class="lbl">${escapeHTML(t('g_kbd'))}</span>${SHORTCUTS.filter(s => s.keys).map(s => row(s.keys, t(s.t), s.t)).join('')}</div>
-      <div class="gsec"><span class="lbl">${escapeHTML(t('g_mouse'))}</span>${MOUSE.map(([k, id]) => row(k, t(id))).join('')}</div>
+      ${mode === 'jem' ? `<div class="gsec"><span class="lbl">${escapeHTML(t('g_mouse'))}</span>${MOUSE.map(([k, id]) => row(k, t(id))).join('')}</div>` : ''}
       <ul>${['tip_items', 'tip_speak', 'tip_chip', 'tip_draw'].map(k => `<li>${escapeHTML(t(k))}</li>`).join('')}</ul>
     </details>`
   g.querySelector('.gmore').ontoggle = e => { guideOpen = e.target.open }
@@ -1707,11 +1884,10 @@ function renderGuide() {
     ;({ kbd: () => setKbdApp(!kbdApp), tool: () => setTool(TOOLS[(TOOLS.indexOf(tool) + 1) % TOOLS.length]), rec: () => toggleRec(),
        ai: () => setAiLevel(AI_LEVELS[(AI_LEVELS.indexOf(aiLevel) + 1) % AI_LEVELS.length]) })[b.dataset.g]()
   }
-  $('#optAnchor').onchange = e => { anchorTaps = e.target.checked; try { localStorage.setItem('emucomposer.anchorTaps', anchorTaps ? '1' : '0') } catch {} }
+  if ($('#optAnchor')) $('#optAnchor').onchange = e => { anchorTaps = e.target.checked; try { localStorage.setItem('emucomposer.anchorTaps', anchorTaps ? '1' : '0') } catch {} }
 }
 // The row of a shortcut just used lights up for a moment — the guide teaches by echo.
 function flashGuide(id) {
-  if (mode !== 'jem') return
   const r = $(`#guide .grow[data-sc="${id}"]`); if (!r) return
   r.classList.add('flash'); setTimeout(() => r.classList.remove('flash'), 450)
 }
