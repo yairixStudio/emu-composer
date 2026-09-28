@@ -8,6 +8,7 @@
 //   emu-composer install-app     "<App> Composer.app" in ~/Applications (Spotlight / Dock)
 //   emu-composer bar             build + launch the floating bar beside the emulator window
 //   emu-composer doctor          check node, adb, device, agent jar, key, config
+//   emu-composer log [N] [--day YYYY-MM-DD] [--json]   the session journal, last N events
 import { spawn, execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
@@ -190,7 +191,25 @@ async function doctor() {
   }
 }
 
-const commands = { run, init, 'setup-agent': () => sh('setup-agent.sh'), 'setup-ios-agent': () => sh('setup-ios-agent.sh'), 'install-app': installApp, bar, doctor,
+// The session journal (~/.config/emu-composer/logs/<day>.jsonl), readable: time, event, the
+// fields that matter. --json passes the raw lines through for a script or an agent.
+async function journal() {
+  const n = Number(args.find(a => /^\d+$/.test(a))) || 60
+  const day = flag('day') || new Date().toISOString().slice(0, 10)
+  const file = path.join(HOME, 'logs', `${day}.jsonl`)
+  if (!fsSync.existsSync(file)) return say(`no journal for ${day} (${file})`)
+  const lines = fsSync.readFileSync(file, 'utf8').trim().split('\n').slice(-n)
+  if (has('json')) return say(lines.join('\n'))
+  for (const l of lines) {
+    let d; try { d = JSON.parse(l) } catch { continue }
+    const { t, ev, at, src, mode, serial, ...rest } = d
+    const v = Object.entries(rest).filter(([, x]) => x !== undefined && x !== '').map(([k, x]) => `${k}=${typeof x === 'string' ? JSON.stringify(x.length > 90 ? x.slice(0, 90) + '…' : x) : JSON.stringify(x)}`).join(' ')
+    say(`${new Date(t).toLocaleTimeString('en-GB')}  ${(src === 'ui' ? '·' : ' ')}${String(ev).padEnd(13)} ${mode ? `[${mode}] ` : ''}${v}`)
+  }
+  say(`\n${file}`)
+}
+
+const commands = { log: journal, run, init, 'setup-agent': () => sh('setup-agent.sh'), 'setup-ios-agent': () => sh('setup-ios-agent.sh'), 'install-app': installApp, bar, doctor,
   help: () => say(fsSync.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).map(l => l.replace(/^\/\/ ?/, '')).join('\n')) }
 if (!commands[cmd]) die(`unknown command "${cmd}"\n` + Object.keys(commands).join(' | '))
 commands[cmd]().catch(e => die(e.message))

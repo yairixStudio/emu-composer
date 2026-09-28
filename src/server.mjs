@@ -19,6 +19,8 @@ import { IosAgent, listSimulators, screenshotPng, installedApp, deviceProps, lau
 import { StringIndex, buildTree, tapTarget, siblingPosition, region, role, article, anchorText, normalise, firstText, countTexts, rankKeys, siblingHints, screenTitleOf } from './resolve.mjs'
 import { filterLog, errorBlock, collapseLines } from './logcat.mjs'
 import { HOME } from './config.mjs'
+import { DeviceShell } from './devshell.mjs'
+import { slog, LOG_DIR } from './sessionlog.mjs'
 
 const execFileP = promisify(execFile)
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -179,6 +181,7 @@ async function listDevices() {
   // is gone or not fully up (a booting emulator is listed "offline" first).
   const up = new Set(rows.map(l => l.split(/\s+/)).filter(([, st]) => st === 'device').map(([sr]) => sr))
   for (const sr of [...avdNames.keys()]) if (!up.has(sr)) avdNames.delete(sr)
+  for (const [sr, sh] of shells) if (!up.has(sr)) { sh.close(); shells.delete(sr) }
   // Emulators started with -no-window (test runners, CI-style boots) are not for mirroring
   // by default: a restart once landed on one while the visible emulator sat unused.
   const ps = await execFileP('ps', ['-axo', 'command'], { encoding: 'utf8', timeout: 3000, maxBuffer: 8 << 20 }).then(r => r.stdout).catch(() => '')
@@ -221,8 +224,11 @@ async function switchDevice(serial, why = '') {
   staticCtx = null; captures.clear(); lastHash = ''; trail.length = 0; lastForeground = null; iosScreen = null
   agent = serial ? agentFor(serial) : null
   log(`device → ${serial || '(none)'}${why ? ` (${why})` : ''}`)
+  slog('device', { serial, why })
   if (old && old !== agent) await old.stop().catch(() => {})
   if (agent) agent.start().catch(() => {})
+  // Open the input shell now, so the first tap does not pay the ~250 ms of starting it.
+  if (serial && state.kind === 'android') shellFor(serial).run('true').catch(() => {})
   broadcast({ type: 'device', serial: state.serial, devices: await listDevices() })
 }
 
@@ -398,6 +404,7 @@ async function finishCapture(t0, nodes, image, source, activity) {
   noteScreen(ctx.screen || activityName(activity))
   lastHash = screenHash(nodes)
   log(`capture #${id} via ${source}: ${nodes.length} nodes in ${ms} ms`)
+  slog('capture', { id, ms, nodes: nodes.length, source, screen: ctx.screen || '', serial: state.serial })
   return { id, image, nodes: nodes.map(publicNode), activity, context: ctx, source, ms, hash: lastHash }
 }
 const publicNode = n => ({ ...n, children: undefined, parent: undefined })
@@ -480,6 +487,12 @@ async function frame() {
 const deviceArg = s => `'${String(s).replace(/'/g, `'\\''`).replace(/ /g, '%s')}'`
 const userError = msg => { const e = new Error(msg); e.userFacing = true; return e }
 
+const shells = new Map()   // serial -> DeviceShell
+function shellFor(serial) {
+  let sh = shells.get(serial)
+  if (!sh) { sh = new DeviceShell(ADB, serial, log); shells.set(serial, sh) }
+  return sh
+}
 async function doInput(cmd) {
   const r = v => String(Math.round(v))
   if (isIos()) {
@@ -493,6 +506,16 @@ async function doInput(cmd) {
       case 'key': return agent.key(activePkg(), Number(cmd.code))
       default: throw userError(`unknown input type: ${cmd.type}`)
     }
+  }
+  // Taps, swipes and keys go through a persistent adb shell (~20-40 ms), not the agent
+  // (~250 ms, and queued behind whatever tree dump it is busy with). Text stays with the
+  // agent: it is the only path for Hebrew and other non-ASCII input.
+  const line = cmd.type === 'tap' ? `input tap ${r(cmd.x)} ${r(cmd.y)}`
+    : cmd.type === 'swipe' ? `input swipe ${r(cmd.x1)} ${r(cmd.y1)} ${r(cmd.x2)} ${r(cmd.y2)} ${r(Math.max(40, cmd.ms || 200))}`
+    : cmd.type === 'key' ? `input keyevent ${Number(cmd.code) | 0}` : ''
+  if (line && state.serial) {
+    try { return await shellFor(state.serial).run(line) }
+    catch (e) { log('input shell failed, falling back:', e.message) }
   }
   if (agent?.ready) {
     switch (cmd.type) {
@@ -895,6 +918,7 @@ exec ${shq(a.bin)} ${spec.args(shq(file))}
   await fs.writeFile(cmd, script, { mode: 0o755 })
   if (!dryRun) await execFileP('open', ['-a', 'Terminal', cmd])
   log(`run → ${a.name} in ${root}${dryRun ? ' (dry run)' : ''}`)
+  slog('run', { agent: a.id, root, file: path.relative(root, file), chars: text.length, dryRun: Boolean(dryRun) })
   return { ok: true, agent: a.name, file: path.relative(root, file), script: dryRun ? script : undefined }
 }
 
@@ -926,6 +950,7 @@ async function refine({ text, level, legend, language, images = [] }) {
   if (!key) throw userError('no OpenAI key — add one in settings ⚙')
   const want = (text.match(TOKEN_RE) || []).sort()
   const cfg = P.cfg.refine?.[level] || {}
+  const t0 = Date.now()
   const system = `${L.rules}
 
 The text is about a mobile app being tested. Tokens like ⟦1⟧ are anchors to things the author pointed at on the screen (the legend below says what each one is). Rules for tokens:
@@ -947,6 +972,7 @@ ${level !== 'full' ? '' : `Some tokens are MARKS the author drew on the screen (
   const body = await r.text()
   if (!r.ok) { let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {} throw userError(`OpenAI ${r.status}: ${msg}`) }
   const out = (JSON.parse(body).choices?.[0]?.message?.content || '').trim()
+  slog('refine', { level, model: cfg.model || L.model, ms: Date.now() - t0, anchors: want.length, images: images.length, in: text, out })
   const got = (out.match(TOKEN_RE) || []).sort()
   if (!out || got.join() !== want.join()) throw userError(`the AI edit lost or changed an anchor (${want.length} in, ${got.length} out) — the text was left as it was`)
   return out
@@ -978,14 +1004,28 @@ const server = http.createServer(async (req, res) => {
       }
       case '/api/input': {
         const body = await readBody(req)
-        for (const cmd of body.cmds || [body]) await doInput(cmd)
+        for (const cmd of body.cmds || [body]) {
+          const t0 = Date.now()
+          for (const k of ['x', 'y', 'x1', 'y1', 'x2', 'y2']) if (typeof cmd[k] === 'number') cmd[k] = Math.round(cmd[k])
+          try { await doInput(cmd) }
+          catch (e) { slog('input', { ...cmd, s: cmd.s ? `${String(cmd.s).length} chars` : undefined, ms: Date.now() - t0, error: e.message }); throw e }
+          slog('input', { ...cmd, s: cmd.s ? `${String(cmd.s).length} chars` : undefined, ms: Date.now() - t0, serial: state.serial })
+        }
         return send(res, 200, { ok: true })
+      }
+      case '/api/log': {
+        // The page's own events (mode, anchors, marks, dictation, copy, run, errors).
+        const { events = [] } = await readBody(req)
+        for (const e of events.slice(0, 200)) if (e && typeof e.ev === 'string') { const { ev, ...rest } = e; slog(ev, { ...rest, src: 'ui' }) }
+        return send(res, 200, { ok: true, dir: LOG_DIR })
       }
       case '/api/resolve': {
         const { captureId, i } = await readBody(req)
         const cap = captures.get(Number(captureId))
         if (!cap || !cap.nodes[i]) throw userError('that capture is gone — refresh and pick again')
-        return send(res, 200, await referenceFor(cap, Number(i)))
+        const ref = await referenceFor(cap, Number(i))
+        slog('anchor', { capture: cap.id, title: ref.title, what: ref.what, screen: ref.screen, copy: (ref.lines.find(l => l.startsWith('copy:')) || '').replace(/^copy:\s+/, ''), rendered: (ref.lines.find(l => l.startsWith('rendered:')) || '').replace(/^rendered:\s+/, '') })
+        return send(res, 200, ref)
       }
       case '/api/open':
         execFile('open', [`http://localhost:${PORT}`], () => {})
@@ -1058,6 +1098,8 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true, active: state.serial })
       }
       case '/api/health': {
+        // A page polling while the daemon is still loading its first project.
+        if (!P) return send(res, 503, { starting: true })
         const k = await openaiKey()
         return send(res, 200, {
           stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', app: P.cfg.appName,
@@ -1112,6 +1154,7 @@ const server = http.createServer(async (req, res) => {
     send(res, 404, { error: 'not found' })
   } catch (e) {
     if (!e.userFacing) log('ERROR', url.pathname, e.stack || e)
+    slog('error', { path: url.pathname, message: String(e.message || e), user: Boolean(e.userFacing) })
     send(res, e.userFacing ? 400 : 500, { error: String(e.message || e) })
   }
 })
@@ -1136,6 +1179,7 @@ server.on('listening', async () => {
   if (!serial) { log('no device attached — waiting for one to be picked'); return }
   // Through the same door as a later switch, so `kind` and every cache agree with the agent.
   state.serial = serial; state.kind = IOS_UDID.test(serial) ? 'ios' : 'android'; agent = agentFor(serial)
+  if (state.kind === 'android') shellFor(serial).run('true').catch(() => {})
   const devices = await listDevices()
   log(`devices: ${devices.map(d => `${d.serial}${d.avd ? ` (${d.avd})` : ''}${d.serial === serial ? ' ←' : ''}`).join(', ')}`)
   const ok = await agent.start()

@@ -121,6 +121,7 @@
   #edbusy{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;
           background:#0d0e13b8;color:var(--dim);font-size:12.5px;pointer-events:none}
   #edbusy.show{display:flex}
+  body.burst #ov, body.burst #marks{visibility:hidden}
   #edbusy i{width:34px;height:34px;border-radius:50%;border:3px solid #a78bfa40;border-top-color:#a78bfa;animation:spin .8s linear infinite}
 
   #keyrow{display:none;gap:8px;align-items:center;background:#171213;border-bottom:1px solid #3a2a20}
@@ -486,7 +487,19 @@ function updateDual() { ed.classList.toggle('dual', platformsInEditor().size > 1
 function fetchNotes() { return fetch('/api/notes').then(r => r.json()).then(d => { notesText = d.notes || ''; notesBoth = d.both || '' }).catch(() => {}) }
 let refs = new Map()   // uid -> { label, block, node, captureId }
 let refN = 0
-const setStatus = (t, c = '') => { $('#status').textContent = t; $('#status').className = c }
+// The page's half of the session journal (~/.config/emu-composer/logs/<day>.jsonl): what
+// was done here, batched every 1.5 s and flushed when the page goes away.
+const uiLogQ = []
+function uilog(ev, data = {}) { uiLogQ.push({ ev, at: Date.now(), mode: typeof mode === 'string' ? mode : '', ...data }) }
+function flushUiLog(beacon = false) {
+  if (!uiLogQ.length) return
+  const body = JSON.stringify({ events: uiLogQ.splice(0) })
+  if (beacon && navigator.sendBeacon) navigator.sendBeacon('/api/log', new Blob([body], { type: 'application/json' }))
+  else fetch('/api/log', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).catch(() => {})
+}
+setInterval(flushUiLog, 1500)
+addEventListener('pagehide', () => flushUiLog(true))
+const setStatus = (t, c = '') => { $('#status').textContent = t; $('#status').className = c; if (c === 'err') uilog('status-error', { text: String(t) }) }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
@@ -502,6 +515,7 @@ function setMode(m) {
   if (!MODES[m]) m = 'collect'
   if (m === mode && nodes.length) return
   mode = m
+  uilog('mode', { to: m })
   if (m !== 'jem') plainMode = m
   document.body.className = m
   $('#mCollect').classList.toggle('on', m === 'collect')
@@ -662,14 +676,14 @@ $('#screen').addEventListener('click', e => {
   if (tool !== 'pick') return
   if (mode !== 'collect' && !(mode === 'jem' && metaKey(e))) return
   const i = hitTest(e.clientX, e.clientY)
-  if (i >= 0) insertRef(i)
+  if (i >= 0) insertRef(i, 'click')
 })
 // Right-click in collect mode = a tap on the device without leaving collect. The screen
 // re-captures after the tap so the overlay matches what the tap produced.
 $('#screen').addEventListener('contextmenu', async e => {
   e.preventDefault()
   // Jem mirrors collect: there a click taps, so the right button anchors.
-  if (mode === 'jem') { const i = hitTest(e.clientX, e.clientY); if (i >= 0) insertRef(i); return }
+  if (mode === 'jem') { const i = hitTest(e.clientX, e.clientY); if (i >= 0) insertRef(i, 'right-click'); return }
   if (mode !== 'collect') return
   const p = toDisplay(e.clientX, e.clientY)
   await input({ type: 'tap', x: p.x, y: p.y })
@@ -713,7 +727,7 @@ $('#screen').addEventListener('mousedown', e => {
   e.preventDefault(); if (mode === 'use') $('#screen').focus()
   down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1, shift: e.shiftKey }
 })
-addEventListener('mouseup', e => {
+addEventListener('mouseup', async e => {
   if (!down || (mode !== 'use' && mode !== 'jem')) return
   const up = toDisplay(e.clientX, e.clientY)
   const moved = Math.hypot(e.clientX - down.cx, e.clientY - down.cy)
@@ -724,8 +738,15 @@ addEventListener('mouseup', e => {
   const d = down; down = null
   // Jem's defining move: the tapped element enters the text as an anchor AND the tap goes to
   // the app — mark it and open where it leads, in one click. Resolved against the capture
-  // from before the tap. ⇧-click taps only.
-  if (mode === 'jem' && cmd.type === 'tap' && anchorTaps && !d.shift && d.i >= 0) insertRef(d.i)
+  // from before the tap. ⇧-click taps only. While the picture is a live frame after an
+  // earlier action, the element tree is from the screen BEFORE it: capture first, then
+  // anchor what is actually under the cursor, then tap (costs a capture only in that case).
+  if (mode === 'jem' && cmd.type === 'tap' && anchorTaps && !d.shift) {
+    let i = d.i
+    if (screenStale) { await capture({ fresh: true }); i = hitAt(d.x, d.y) }
+    if (i >= 0) insertRef(i, 'tap')
+  }
+  if (mode === 'jem') uilog('device-input', { type: cmd.type, label: d.i >= 0 ? labelFor(d.i) : '', anchored: cmd.type === 'tap' && anchorTaps && !d.shift })
   input(cmd).then(() => { if (mode === 'jem') recaptureSoon(450) })
 })
 // Jem shows a still capture, so every action on the device is followed by a fresh one.
@@ -735,10 +756,33 @@ addEventListener('mouseup', e => {
 // One capture can catch a transition half way — the tree already on the new page while the
 // pixels still show the old one, or a slow tab switch not started yet — and the screen watch
 // never fires again once the tree stops changing. A newer action restarts the sequence.
-let recapTimer = null, recapGen = 0, lastImgSig = ''
+let recapTimer = null, recapGen = 0, lastImgSig = '', screenStale = false
+// Right after an action jem shows LIVE frames (~100-200 ms each) so the app visibly reacts
+// at once, like the emulator window; the element overlay hides meanwhile because its tree is
+// the old screen's. Then the capture-until-stable brings the overlay back.
+async function liveBurst(gen, ms) {
+  const until = Date.now() + ms
+  document.body.classList.add('burst')
+  let url = ''
+  try {
+    while (gen === recapGen && still() && Date.now() < until) {
+      try {
+        const r = await fetch('/api/frame', { cache: 'no-store' })
+        if (r.status === 429) { await sleep(30); continue }
+        if (!r.ok || gen !== recapGen) break
+        const next = URL.createObjectURL(await r.blob())
+        await new Promise(ok => { img.onload = ok; img.onerror = ok; img.src = next })
+        if (url) URL.revokeObjectURL(url)
+        url = next
+      } catch { break }
+    }
+  } finally { if (gen === recapGen) document.body.classList.remove('burst') }
+}
 function recaptureSoon(ms) {
   clearTimeout(recapTimer)
   const gen = ++recapGen
+  screenStale = true
+  if (mode === 'jem') liveBurst(gen, Math.max(ms, 900))
   recapTimer = setTimeout(async () => {
     // Stable = the tree AND the pixels match the previous capture: a heavy screen can finish
     // its tree a second before it finishes drawing.
@@ -750,7 +794,8 @@ function recaptureSoon(ms) {
       prev = sig
       await sleep(650)
     }
-  }, ms)
+    if (gen === recapGen) screenStale = false
+  }, mode === 'jem' ? Math.max(ms, 900) : ms)
 }
 // Wheel: scrolls the device in use mode, or with Shift held in collect mode (then re-captures).
 let wheelAcc = 0, wheelTimer = null, wheelPt = null
@@ -831,10 +876,11 @@ function labelFor(i) {
   if (!t) for (let j = i + 1; j < nodes.length && nodes[j].depth > n.depth; j++) { if (nodes[j].text || nodes[j].desc) { t = nodes[j].text || nodes[j].desc; break } }
   return (t || n.rid?.split('/').pop() || n.cls.split('.').pop()).slice(0, 34)
 }
-async function insertRef(i) {
+async function insertRef(i, via = '') {
   if (i < 0 || !nodes[i]) return
   const node = nodes[i]
   const label = labelFor(i)
+  uilog('anchor', { label, via, capture: captureId, screen: ctx?.screen || '' })
   const uid = 'r' + (++refN)
   // Insert immediately with a placeholder block; the resolved block replaces it when the
   // server answers. The user never waits on the network to keep typing.
@@ -894,6 +940,7 @@ function rememberCapture(id, src, w) {
   for (const k of [...capImages.keys()].slice(0, -6)) capImages.delete(k)
 }
 function setTool(tl) {
+  if (tl !== tool) uilog('tool', { to: tl })
   tool = tl
   for (const b of $('#toolseg').children) b.classList.toggle('on', b.dataset.tool === tl)
   modeHint(); renderGuide()
@@ -972,6 +1019,7 @@ function addMark(d) {
   const n = Math.max(0, ...allMarks().map(m => m.n)) + 1
   const m = { kind: 'mark', n, shape: d.shape, color: d.color, colorName: COLOR_NAMES[d.color] || d.color, ...markGeometry(d), captureId, screen: ctx?.screen || '', platform: ctx?.platform || '' }
   m.label = markLabel(m); m.block = markBlock(m)
+  uilog('mark', { n: m.n, shape: m.shape, color: m.colorName, screen: m.screen, block: m.block })
   if (mode === 'jem' && recOn && seg?.hadSpeech) seg.anchorPending = true
   const uid = 'r' + (++refN)
   insertHTMLAtCaret(`<span class="chip mark" contenteditable="false" data-uid="${uid}" data-platform="${m.platform}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(m.label)}</bdi></span>&nbsp;`)
@@ -1208,7 +1256,7 @@ $('#copyAll').onclick = async () => {
   const { text, used } = serialize()
   const b = $('#copyAll')
   try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus(t('st_copy_blocked'), 'err') }
-  pushHistory(text)
+  pushHistory(text); uilog('copy', { text, refs: used.length })
   if (orphans) setStatus(t('st_orphans', orphans), 'err')
   clearTimeout(copyFlash)
   b.classList.add('done'); b.querySelector('span').textContent = t('btn_copied', used.length)
@@ -1236,7 +1284,7 @@ $('#runAgent').onclick = async () => {
   try {
     const d = await (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent, text }) })).json()
     if (d.error) throw new Error(d.error)
-    pushHistory(text)
+    pushHistory(text); uilog('run', { agent, text })
     const b = $('#runAgent'); clearTimeout(runFlash)
     b.classList.add('done'); b.querySelector('span').textContent = t('btn_ran')
     runFlash = setTimeout(() => { b.classList.remove('done'); b.querySelector('span').textContent = t('run') }, 1800)
@@ -1328,7 +1376,7 @@ async function toggleRec() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
-  recOn = true
+  recOn = true; uilog('rec', { on: true })
   $('#rec').classList.add('on'); recTitle(); renderGuide()
   setStatus(t('st_rec_hint'), 'busy')
   startMeter()
@@ -1363,7 +1411,7 @@ function cutSegment() {
   mediaRec.stop()
 }
 function stopRec() {
-  recOn = false
+  recOn = false; uilog('rec', { on: false })
   if (mediaRec?.state === 'recording') cutSegment()
   $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle(); renderGuide()
   audioCtx?.close().catch(() => {}); audioCtx = null
@@ -1401,6 +1449,7 @@ async function sendSegment(blob, s) {
     const t = (d.text || '').trim()
     if (!t) { s.marker?.remove(); return }
     lastTranscript = (lastTranscript + ' ' + t).slice(-600)
+    uilog('transcript', { text: t, ms: Date.now() - s.t0 })
     placeTranscript(s.marker, t)
     if (recOn) setStatus(t('st_rec'), 'busy')
   } catch (e) { setStatus(t('st_stt_fail', e.message), 'err'); s.marker?.remove() }
@@ -1431,6 +1480,7 @@ const AI_LEVELS = ['transcribe', 'clean', 'full']
 let aiLevel = 'transcribe'
 try { aiLevel = AI_LEVELS.includes(localStorage.getItem('emucomposer.ai')) ? localStorage.getItem('emucomposer.ai') : 'transcribe' } catch {}
 function setAiLevel(l, save = true) {
+  if (save && l !== aiLevel) uilog('ai-level', { to: l })
   aiLevel = AI_LEVELS.includes(l) ? l : 'transcribe'
   for (const b of document.querySelectorAll('.aiseg [data-ai]')) b.classList.toggle('on', b.dataset.ai === aiLevel)
   for (const c of AI_LEVELS) document.body.classList.toggle('ai-' + c, c === aiLevel)
@@ -1479,7 +1529,7 @@ async function refineText(level = aiLevel) {
   if (level === 'transcribe') level = 'full'   // ✨/⌘⇧E at the dictation level means "edit it"
   const { text, chips, legend } = tokenizeEditor()
   if (!text.replace(/⟦\d+⟧/g, '').trim()) return setStatus(t('st_refine_empty'), 'err')
-  refining = true; $('#refine').classList.add('busy')
+  refining = true; $('#refine').classList.add('busy'); uilog('refine', { level })
   setStatus(t('st_refining', t('ai_' + level)), 'busy')
   $('#edbusy span').textContent = t('st_refining', t('ai_' + level)); $('#edbusy').classList.add('show')
   try {
@@ -1575,6 +1625,7 @@ async function deviceKey(code) { await input({ type: 'key', code }); if (still()
 let kbdApp = false, anchorTaps = true
 try { anchorTaps = localStorage.getItem('emucomposer.anchorTaps') !== '0' } catch {}
 function setKbdApp(on) {
+  if (Boolean(on) !== kbdApp) uilog('keyboard', { to: on ? 'app' : 'text' })
   kbdApp = Boolean(on) && mode === 'jem'
   document.body.classList.toggle('kbdapp', kbdApp)
   if (kbdApp) ed.blur(); else if (mode === 'jem') restoreCaret()
@@ -1660,13 +1711,8 @@ async function health() {
     renderProjects(h.projects || [], h.active || '')
     renderProblems(h.problems || [])
     if (!activeSerial) activeSerial = h.serial || ''
-    try {
-      const want = localStorage.getItem('emucomposer.device')
-      if (want && want !== h.serial && (h.devices || []).some(d => d.serial === want && d.state === 'device') && !wantedOnce) {
-        wantedOnce = true
-        fetch('/api/device', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial: want }) })
-      }
-    } catch {}
+    // The server owns the active device. Pages used to re-apply the device they remembered
+    // on load, so two open tabs flipped the daemon between an emulator and a simulator.
     const p = $('#agentpill')
     p.className = 'pill ' + (h.agent ? 'on' : h.device === 'device' ? 'bad' : 'bad')
     p.title = h.agent ? t('agent_on_tip') : t('agent_off_tip', h.agentReason || 'no device')
@@ -1824,7 +1870,6 @@ $('#device').addEventListener('change', async e => {
   try {
     const d = await (await fetch('/api/device', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial }) })).json()
     if (d.error) throw new Error(d.error)
-    try { localStorage.setItem('emucomposer.device', serial) } catch {}
     setStatus(t('st_mirroring', serial), 'ok')
   } catch (err) { setStatus(err.message, 'err') }
 })
