@@ -865,9 +865,11 @@ async function pumpFrames() {
 // write boundaries), decoded by WebCodecs straight onto a canvas over the screenshot: frames
 // only when the screen changes, arriving tens of ms after it does — the path the emulator
 // window itself is fast on. The <img> stays the layout and coordinate box (device px), so
-// input mapping, the overlay and marks are unchanged. iOS, or a browser without
-// VideoDecoder, falls back to the frame pump.
-const Live = { on: false, failed: false, gen: 0, ac: null, dec: null, sps: null, pps: null, codec: '', key: false, ts: 0, tapAt: 0, tapType: '' }
+// input mapping, the overlay and marks are unchanged. The iOS simulator streams the same way,
+// from its framebuffer through simbridge, and then also takes touch directly (Live.touch): use
+// mode sends the pointer as it moves — a real drag, with the momentum a scroll view gives it.
+// A browser without VideoDecoder, or a simulator simbridge cannot serve, pumps frames instead.
+const Live = { on: false, failed: false, gen: 0, ac: null, dec: null, sps: null, pps: null, codec: '', key: false, ts: 0, tapAt: 0, tapType: '', touch: false }
 const liveCv = $('#live'), liveG = liveCv.getContext('2d')
 const isIosSerial = s => /^[0-9A-F]{8}-[0-9A-F]{4}-/i.test(s || '')
 function liveShow(on) { liveCv.hidden = !on }
@@ -877,7 +879,7 @@ function liveStop() {
 }
 // Returns false at once when the stream cannot apply (so the caller pumps frames instead).
 function liveStart(show) {
-  if (!('VideoDecoder' in window) || isIosSerial(activeSerial) || Live.failed) return false
+  if (!('VideoDecoder' in window) || Live.failed) return false
   if (show) liveShow(true)
   if (Live.on) return true
   Live.on = true
@@ -904,10 +906,11 @@ function liveDecoder() {
       liveG.drawImage(f, 0, 0); f.close()
       Live.lastFrame = performance.now()
       // The encoder's first frame after a change is soft, and a still screen sends no
-      // better one. Once the stream has been quiet for 350 ms, paint one crisp still over it.
+      // better one. Once the stream has been quiet for 350 ms, paint one crisp still over it —
+      // after 160 ms for simbridge, whose still (the framebuffer as JPEG) costs ~10 ms.
       clearTimeout(Live.sharpTimer)
-      Live.sharpTimer = setTimeout(liveSharpen, 350)
-      if (Live.tapAt) { uilog('tap-to-frame', { ms: Math.round(performance.now() - Live.tapAt), type: Live.tapType, via: 'stream' }); Live.tapAt = 0 }
+      Live.sharpTimer = setTimeout(liveSharpen, Live.via === 'simbridge' ? 160 : 350)
+      if (Live.tapAt) { uilog('tap-to-frame', { ms: Math.round(performance.now() - Live.tapAt), type: Live.tapType, via: Live.via }); Live.tapAt = 0 }
     },
     error: e => { uilog('stream-error', { message: String(e.message || e) }); Live.key = false; try { Live.ac?.abort() } catch {} },
   })
@@ -962,7 +965,8 @@ async function liveLoop(gen) {
       if (!still()) blankDeviceImage(r.headers.get('x-device-size'))
       markAlive()
       const png = r.headers.get('x-stream') === 'png'
-      Live.via = png ? 'grpc' : 'stream'
+      Live.via = png ? 'grpc' : isIosSerial(activeSerial) ? 'simbridge' : 'stream'
+      Live.touch = r.headers.get('x-touch') === 'direct'
       let seq = 0, drawn = 0
       const reader = r.body.getReader()
       let buf = new Uint8Array(0)
@@ -1121,7 +1125,15 @@ $('#screen').addEventListener('contextmenu', async e => {
 // characters coalesce into a single `text` command (one clipboard paste per burst).
 const queue = []
 let draining = false, textBuf = '', textTimer = null
-function input(cmd) { return new Promise((ok, bad) => { queue.push({ cmd, ok, bad }); drain() }) }
+function input(cmd) {
+  return new Promise((ok, bad) => {
+    // A drag's moves collapse while a request is in flight: only the latest position matters.
+    const last = queue[queue.length - 1]
+    if (cmd.type === 'touch' && cmd.p === 'move' && last?.cmd.type === 'touch' && last.cmd.p === 'move') { last.cmd = cmd; last.ok(); last.ok = ok; last.bad = bad }
+    else queue.push({ cmd, ok, bad })
+    drain()
+  })
+}
 async function drain() {
   if (draining) return
   draining = true
@@ -1152,8 +1164,28 @@ $('#screen').addEventListener('mousedown', e => {
   // preventDefault also keeps the focus where it was — in jem that is the text's caret.
   e.preventDefault(); if (mode === 'use') $('#screen').focus()
   down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1, shift: e.shiftKey }
+  // Direct touch (the iOS simulator through simbridge): the finger goes down now and follows
+  // the pointer. A press that starts on the screen's edge carries that edge, which is how the
+  // system reads its own gestures — back from the left, home and the switcher from the bottom.
+  if (mode === 'use' && Live.on && Live.touch) {
+    const W = img.naturalWidth, H = img.naturalHeight
+    const edge = down.x < W * 0.025 ? 2 : down.x > W * 0.975 ? 4 : down.y > H * 0.985 ? 3 : down.y < H * 0.012 ? 1 : 0
+    down.stream = true; Live.tapAt = performance.now(); Live.tapType = 'touch'
+    input({ type: 'touch', p: 'down', x: down.x, y: down.y, edge })
+  }
+})
+let touchMove = null
+addEventListener('mousemove', e => {
+  if (!down?.stream) return
+  const first = !touchMove
+  touchMove = toDisplay(e.clientX, e.clientY)
+  if (first) requestAnimationFrame(() => { if (touchMove && down?.stream) input({ type: 'touch', p: 'move', ...touchMove }); touchMove = null })
 })
 addEventListener('mouseup', async e => {
+  if (down?.stream) {
+    const p = toDisplay(e.clientX, e.clientY); down = null; touchMove = null
+    return input({ type: 'touch', p: 'up', ...p })
+  }
   if (!down || (mode !== 'use' && mode !== 'jem')) return
   const up = toDisplay(e.clientX, e.clientY)
   const moved = Math.hypot(e.clientX - down.cx, e.clientY - down.cy)
@@ -2516,7 +2548,7 @@ function connectEvents() {
         markAlive(); nodes = []; captureId = 0; drawOverlay()
         for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
         if (was !== undefined) setStatus(t('st_connected', ev.serial), 'ok')
-        liveStop()
+        liveStop(); Live.failed = false; Live.touch = false
         if (still()) capture()
         if (mode === 'jem') liveStart(false)
         else if (mode === 'use') liveStart(true) || pumpFrames()

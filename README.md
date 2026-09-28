@@ -122,12 +122,27 @@ bundle id and serves its `XCUIElementSnapshot` over HTTP for as long as
 npx emu-composer setup-ios-agent   # Xcode + XcodeGen (brew install xcodegen); a few minutes
 ```
 
-Taps, typing, swipes and keys go through the same runner, so `use` mode works: a swipe is a
-press-and-drag whose speed follows the gesture (a fast one flings), HOME presses the home
-button, BACK is the interactive-pop drag from the leading edge (it pops a pushed screen and
-does nothing on a sheet — iOS has no back button), ENTER/DEL/ESC type the key, and RECENTS
-answers with a plain "no XCUITest gesture" instead of pretending. Frames arrive in points and
-are scaled to the screenshot's pixels, so bounds in the prompt are pixels on both platforms.
+**The screen and the touch skip XCUITest: `simbridge`.** A small Objective-C helper
+(`ios/simbridge/simbridge.m`, built with `clang` on first use and cached per Xcode build) talks
+to CoreSimulator directly, the way Meta's idb does:
+
+- **Screen** — it registers for the simulator's own framebuffer (an IOSurface, one callback per
+  presented frame, nothing when the screen is still), scales it on the GPU and encodes it with
+  VideoToolbox as low-latency H.264. The page decodes it with WebCodecs — the path Android
+  emulators already use. A still (capture, the crisp frame after motion) is the framebuffer as
+  JPEG: ~10-30 ms, where `simctl io screenshot` took ~400.
+- **Touch** — it connects to the guest's `dtuhidd` digitizer over XPC and sends start /
+  position / end contacts. `use` mode streams the pointer as it moves, so a drag is a real drag
+  and a list keeps its momentum; a press that starts on the screen's edge carries that edge, so
+  the system gestures (back from the left, home and the switcher from the bottom) work too.
+  Touch to first changed frame measured 29-50 ms; through the XCUITest runner it was hundreds.
+- HOME is the hardware button, BACK the left-edge swipe, RECENTS the bottom-edge swipe.
+
+Typing, ENTER/DEL/ESC and the element tree stay with the runner. When `simbridge` cannot start
+(an Xcode whose private interfaces moved), everything falls back to the runner and `simctl`: a
+swipe is a press-and-drag whose speed follows the gesture, BACK the interactive-pop drag from
+the leading edge. Frames arrive in points and are scaled to the screenshot's pixels, so bounds
+in the prompt are pixels on both platforms.
 
 ## One screen, two platforms, one prompt
 
@@ -248,6 +263,7 @@ Two string registries are understood today: standard `res/values*/strings.xml` (
 - [x] Optional `# Errors` (logcat + crashes) and `# Path` (screens walked) sections
 - [x] A problem bar that names what is wrong, with the button that fixes it
 - [x] iOS Simulator — collect, tap, type, swipe and keys through a UI-test agent
+- [x] iOS live screen (framebuffer → H.264) and direct touch (dtuhidd), no XCUITest in the loop
 - [x] One prompt for the same screen on both platforms (@ios*/@android*, two `# Screen` blocks)
 - [ ] Android Studio plugin for the embedded emulator
 - [ ] Linux launcher (the server and page already run there)
@@ -270,4 +286,5 @@ burst. No npm dependencies; the page is one HTML file.
 
 ## License
 
-MIT.
+MIT. `ios/simbridge/` follows the approach of Meta's idb (FBSimulatorControl), also MIT — its
+license is in `ios/simbridge/LICENSE-idb.txt`.

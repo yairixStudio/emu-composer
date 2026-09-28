@@ -22,6 +22,7 @@ import { HOME } from './config.mjs'
 import { DeviceShell } from './devshell.mjs'
 import { discover as discoverGrpc, EmuGrpc } from './emugrpc.mjs'
 import { slog, LOG_DIR } from './sessionlog.mjs'
+import { SimBridge } from './simbridge.mjs'
 
 const execFileP = promisify(execFile)
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -161,6 +162,22 @@ const sh = cmd => execFileP('/bin/sh', ['-c', cmd], { cwd: P.cfg.root, maxBuffer
 
 const agents = new Map()
 let agent = null
+// One simbridge per booted simulator: its screen as H.264 and its touch, without XCUITest.
+// Null once it failed, so the agent paths below take over instead of retrying every call.
+const bridges = new Map()   // udid -> SimBridge | null
+function bridgeFor(udid) {
+  if (!IOS_UDID.test(udid || '')) return null
+  let b = bridges.get(udid)
+  if (b === undefined || (b && b.dead)) {
+    if (b?.dead) log(`[${udid.slice(0, 13)}] simbridge ended: ${b.error}`)
+    b = new SimBridge(udid, { log: (...a) => log(`[${udid.slice(0, 13)}]`, ...a) })
+    b.ready.catch(e => { log(`[${udid.slice(0, 13)}] simbridge unavailable:`, e.message); slog('simbridge', { udid, error: e.message }) })
+    bridges.set(udid, b)
+  }
+  return b
+}
+// The bridge when it can serve right now (started, and for input: the digitizer answered).
+const liveBridge = (udid, forTouch = false) => { const b = bridges.get(udid); return b && !b.dead && b.screen && (!forTouch || b.touch) ? b : null }
 function agentFor(serial) {
   if (!agents.has(serial)) {
     const alog = (...a) => log(`[${serial.slice(0, 13)}]`, ...a)
@@ -204,7 +221,10 @@ async function listDevices() {
     return { serial, kind: 'android', state: st, model: kv.model || kv.product || '', avd, headless: Boolean(avd && headless.has(avd)), active: serial === state.serial }
   }))
   // Booted iOS simulators sit in the same list; the page shows them in the same menu.
-  for (const d of await listSimulators()) devices.push({ ...d, active: d.serial === state.serial })
+  const sims = await listSimulators()
+  for (const d of sims) devices.push({ ...d, active: d.serial === state.serial })
+  const booted = new Set(sims.map(d => d.serial))
+  for (const [u, b] of bridges) if (!booted.has(u)) { b?.close(); bridges.delete(u) }
   return devices
 }
 
@@ -235,6 +255,7 @@ async function switchDevice(serial, why = '') {
   if (agent) agent.start().catch(() => {})
   // Open the input shell now, so the first tap does not pay the ~250 ms of starting it.
   if (serial && state.kind === 'android') shellFor(serial).run('true').catch(() => {})
+  if (serial && state.kind === 'ios') bridgeFor(serial)
   broadcast({ type: 'device', serial: state.serial, devices: await listDevices() })
 }
 
@@ -357,17 +378,24 @@ async function captureIos() {
   // picture and an empty tree, and the problem bar says what is missing. It used to throw,
   // and the page stayed blank.
   const ready = agent && await agent.ensureReady(agent._starting ? 30000 : 3000)
-  const [png, tree] = await Promise.all([
-    screenshotPng(state.serial),
+  // The picture: the framebuffer through simbridge (~20 ms, full size) when it runs, else
+  // simctl (~400 ms). Taken together with the tree, so the two describe the same moment.
+  const b = liveBridge(state.serial)
+  const [image, tree] = await Promise.all([
+    (async () => {
+      if (b) { try { return { mime: 'image/jpeg', bytes: await b.jpeg(0, 0.92), w: b.screen.w, h: b.screen.h } } catch (e) { log('simbridge still failed, simctl:', e.message) } }
+      const png = await screenshotPng(state.serial)
+      return { mime: 'image/png', bytes: png, w: png.readUInt32BE(16), h: png.readUInt32BE(20) }
+    })(),
     ready ? agent.tree(bundle).catch(e => ({ state: /not running/.test(e.message) ? 1 : 0, nodes: [], error: e.message }))
       : Promise.resolve({ state: 0, nodes: [], error: agent?.reason || 'the iOS agent is not running' }),
   ])
-  const w = png.readUInt32BE(16), h = png.readUInt32BE(20)
+  const { w, h } = image
   const root = (tree.nodes || [])[0]
   const scale = root && root.w > 0 ? w / root.w : (iosScreen?.scale || 3)
   iosScreen = { w, h, scale }
   const nodes = buildTree(iosNodes(tree, scale, bundle))
-  return { nodes, image: { mime: 'image/png', b64: png.toString('base64') }, source: tree.error ? 'simctl' : 'ios-agent', activity: tree.state === 4 ? bundle : (tree.state ? `${bundle} (background)` : '') }
+  return { nodes, image: { mime: image.mime, b64: image.bytes.toString('base64') }, source: tree.error ? 'simctl' : 'ios-agent', activity: tree.state === 4 ? bundle : (tree.state ? `${bundle} (background)` : '') }
 }
 
 async function capture() {
@@ -489,6 +517,8 @@ async function frame() {
   framing = true
   try {
     if (isIos()) {
+      const b = liveBridge(state.serial)
+      if (b) { try { return { mime: 'image/jpeg', bytes: await b.jpeg(0, 0.85) } } catch (e) { log('simbridge frame failed:', e.message) } }
       if (agent?.ready && agent.shot) { try { return { mime: 'image/jpeg', bytes: await agent.shot(0.55, 1) } } catch (e) { log('ios shot failed, simctl:', e.message) } }
       return { mime: 'image/png', bytes: await screenshotPng(state.serial) }
     }
@@ -522,6 +552,23 @@ async function doInput(cmd) {
   const r = v => String(Math.round(v))
   if (isIos()) {
     requireIos()
+    // Touch goes straight to the simulator's digitizer (simbridge) — ~1 ms, and no agent
+    // needed. Typing, and keys the digitizer cannot express, stay with the agent.
+    const b = liveBridge(state.serial, true)
+    if (b) {
+      const { w, h } = b.screen
+      switch (cmd.type) {
+        case 'tap': return b.tap(cmd.x, cmd.y)
+        case 'swipe': return b.swipe(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.ms || 200, cmd.edge)
+        case 'touch': return b.touchEvent(cmd.p, cmd.x, cmd.y, cmd.edge)
+        case 'key':
+          // Android key codes, as the page sends them: HOME, BACK (the left-edge swipe), RECENTS.
+          if (cmd.code === 3) return b.button('home')
+          if (cmd.code === 4) return b.swipe(1, h / 2, w * 0.7, h / 2, 260, 2)
+          if (cmd.code === 187) return b.swipe(w / 2, h - 2, w / 2, h * 0.6, 700, 3)
+      }
+    }
+    if (cmd.type === 'touch') throw userError('live touch needs simbridge, which is not running for this simulator')
     if (!agent?.ready) throw userError(agent?.reason || 'the iOS agent is not running')
     const k = iosScreen?.scale || 3
     switch (cmd.type) {
@@ -1051,7 +1098,23 @@ const server = http.createServer(async (req, res) => {
         // after it does. screenrecord writes one access unit per write, so the stream is cut
         // at write boundaries (flushed after 2 ms of quiet) and each piece is sent with a
         // 4-byte length: the page never waits for the NEXT frame to know this one ended.
-        if (isIos() || !state.serial) return send(res, 409, { error: 'the live stream is for Android devices' })
+        if (isIos()) {
+          // The simulator's framebuffer as H.264 (simbridge): same framing as screenrecord below,
+          // but every message is exactly one access unit, so nothing has to guess where frames end.
+          const b = bridgeFor(state.serial)
+          try { await b?.ready } catch {}
+          if (!b || b.dead || !b.screen) return send(res, 409, { error: `no live stream for this simulator${b?.error ? `: ${b.error}` : ''}` })
+          // The page decides at connect time whether to send touch directly: give the digitizer
+          // (answers ~150 ms after the helper starts) a moment to come up first.
+          if (!b.touch) await Promise.race([b.touchReady, new Promise(ok => setTimeout(ok, 1500))])
+          const want = Number(url.searchParams.get('w')) || Math.round(b.screen.w / 2)
+          res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-device-size': `${b.screen.w}x${b.screen.h}`, 'x-stream': 'h264', 'x-touch': b.touch ? 'direct' : '' })
+          const stop = b.watch(want, au => { const head = Buffer.alloc(4); head.writeUInt32BE(au.length); res.write(Buffer.concat([head, au])) }, () => res.end())
+          req.on('close', stop)
+          slog('stream', { serial: state.serial, via: 'simbridge', w: want, touch: b.touch })
+          return
+        }
+        if (!state.serial) return send(res, 409, { error: 'no device' })
         const size = (await staticContext()).size || ''
         const g = grpcFor(state.serial)
         if (g) {
@@ -1100,7 +1163,8 @@ const server = http.createServer(async (req, res) => {
           for (const k of ['x', 'y', 'x1', 'y1', 'x2', 'y2']) if (typeof cmd[k] === 'number') cmd[k] = Math.round(cmd[k])
           try { await doInput(cmd) }
           catch (e) { slog('input', { ...cmd, s: cmd.s ? `${String(cmd.s).length} chars` : undefined, ms: Date.now() - t0, error: e.message }); throw e }
-          slog('input', { ...cmd, s: cmd.s ? `${String(cmd.s).length} chars` : undefined, ms: Date.now() - t0, serial: state.serial })
+          // A drag streams dozens of moves: the journal keeps where it started and ended.
+          if (cmd.type !== 'touch' || cmd.p !== 'move') slog('input', { ...cmd, s: cmd.s ? `${String(cmd.s).length} chars` : undefined, ms: Date.now() - t0, serial: state.serial })
         }
         return send(res, 200, { ok: true })
       }
