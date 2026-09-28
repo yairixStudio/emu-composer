@@ -78,19 +78,22 @@
   /* ================= composer column ================= */
   #right{flex:1 1 auto;min-width:430px;display:flex;flex-direction:column;overflow:hidden}
   .row{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-  #rec{display:flex;align-items:center;gap:7px}
-  #rec.on{background:var(--rec);border-color:var(--rec);color:#fff}
-  #dot{width:7px;height:7px;background:currentColor;opacity:.5}
-  #rec.on #dot{animation:pulse .9s infinite}
-  @keyframes pulse{50%{opacity:.12}}
-  #level{width:46px;height:3px;background:#ffffff33;overflow:hidden;display:none}
-  #rec.on #level{display:block}
-  #level i{display:block;height:100%;width:0;background:#fff;transition:width .07s}
+  /* The mic lives inside the text box, bottom-right, positioned against a wrapper so it
+     neither scrolls with the text nor breaks #editor:empty (the placeholder). */
+  #edwrap{position:relative;flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+  #rec{position:absolute;right:14px;bottom:12px;z-index:2;width:38px;height:38px;padding:0;border-radius:50%;
+       display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--dim);
+       --lv:0;transition:color .12s,background .12s,box-shadow .07s}
+  #rec svg{width:20px;height:20px;display:block}
+  #rec:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
+  /* Recording: red, with a ring that swells with the input level — the only sign the mic hears you. */
+  #rec.on{color:#fff;background:var(--rec);box-shadow:0 0 0 calc(3px + var(--lv) * 12px) #ef444440}
+  #rec.on:hover:not(:disabled){background:#dc2626;color:#fff}
   #status{margin-inline-start:auto;color:var(--dim);font-size:11.5px;text-align:end;flex:0 1 auto;min-width:0;max-width:340px;
           font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #status.busy{color:var(--accent2)} #status.err{color:var(--bad)} #status.ok{color:var(--ok)}
 
-  #editor{flex:1 1 auto;overflow:auto;padding:18px 20px;font-size:14.5px;line-height:1.8;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
+  #editor{flex:1 1 auto;overflow:auto;padding:18px 20px 60px;font-size:14.5px;line-height:1.8;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
   #editor:empty::before{content:attr(data-ph);color:var(--dim2);font-size:13px}
   /* An INLINE box (not inline-block): its background hugs the glyphs, so it sits on the
      sentence's baseline at the sentence's size instead of floating above it. */
@@ -175,14 +178,16 @@
 <div id="right">
   <div class="row">
     <span class="lbl" data-t="prompt">Prompt</span>
-    <button id="rec"><span id="dot"></span><span id="reclabel" data-t="rec">הקלטה</span><span id="level"><i></i></span></button>
     <button id="histbtn" class="ghost" data-t="history">היסטוריה</button>
     <button id="settingsbtn" class="ghost" data-t-title="settings_title" title="הגדרות">⚙</button>
     <span id="status" data-t="ready">מוכן</span>
   </div>
 
-  <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
-       data-t-ph="placeholder" data-ph=""></div>
+  <div id="edwrap">
+    <div id="editor" contenteditable="true" dir="rtl" spellcheck="false"
+         data-t-ph="placeholder" data-ph=""></div>
+    <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
+  </div>
   <div class="row" style="border-bottom:none;border-top:1px solid var(--line)">
     <button id="copyAll" class="primary"><span data-t="copy_all">העתק פרומפט מלא</span> <kbd style="color:#140b03;border-color:#140b0355">⌘↩</kbd></button>
     <button id="save" data-t="save">שמור לקובץ</button>
@@ -222,7 +227,7 @@ const $ = s => document.querySelector(s)
 // ------------------------------------------------------------------- i18n ---
 const I18N = {
   he: {
-    mode_collect: 'איסוף', mode_use: 'שימוש', prompt: 'Prompt', rec: 'הקלטה', rec_stop: 'עצור', history: 'היסטוריה',
+    mode_collect: 'איסוף', mode_use: 'שימוש', prompt: 'Prompt', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק פרומפט מלא', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
     history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
@@ -254,7 +259,7 @@ const I18N = {
     st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש',
   },
   en: {
-    mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt', rec: 'Record', rec_stop: 'Stop', history: 'History',
+    mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy full prompt', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
     history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
@@ -296,7 +301,7 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-t-ph]')) el.dataset.ph = t(el.dataset.tPh)
   for (const b of document.querySelectorAll('#langseg [data-lang]')) b.classList.toggle('on', b.dataset.lang === lang)
   for (const c of document.querySelectorAll('.chip')) c.title = t('chip_title')
-  if (typeof recOn !== 'undefined' && recOn) $('#reclabel').textContent = t('rec_stop')
+  recTitle()
   if (typeof mode !== 'undefined') modeHint()
   for (const c of document.querySelectorAll('.chip.mark')) { const r = refOf(c); if (r) c.querySelector('bdi').textContent = markLabel(r) }
 }
@@ -1055,7 +1060,7 @@ async function toggleRec() {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
   recOn = true
-  $('#rec').classList.add('on'); $('#reclabel').textContent = t('rec_stop')
+  $('#rec').classList.add('on'); recTitle()
   setStatus(t('st_rec_hint'), 'busy')
   startMeter()
   startSegment()
@@ -1083,7 +1088,7 @@ function cutSegment() {
 function stopRec() {
   recOn = false
   if (mediaRec?.state === 'recording') cutSegment()
-  $('#rec').classList.remove('on'); $('#reclabel').textContent = t('rec')
+  $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle()
   audioCtx?.close().catch(() => {}); audioCtx = null
   setStatus(t('st_rec_done'), 'ok')
 }
@@ -1097,7 +1102,7 @@ function startMeter() {
     an.getFloatTimeDomainData(buf)
     let sum = 0; for (const v of buf) sum += v * v
     const rms = Math.sqrt(sum / buf.length)
-    $('#level i').style.width = Math.min(100, rms / 0.25 * 100) + '%'
+    $('#rec').style.setProperty('--lv', Math.min(1, rms / 0.25).toFixed(3))
     const now = Date.now()
     if (seg) {
       if (rms > SPEECH_LEVEL) { seg.lastLoud = now; seg.hadSpeech = true }
@@ -1137,6 +1142,12 @@ function placeTranscript(marker, text) {
   rememberCaret(); saveDraft()
 }
 $('#rec').onclick = toggleRec
+// The button has no text any more, so its tooltip says what it does — or why it is disabled.
+function recTitle() {
+  const b = $('#rec'); if (!b) return
+  const tip = b.disabled ? t('key_needed') : t(typeof recOn !== 'undefined' && recOn ? 'rec_stop' : 'rec')
+  b.title = tip; b.setAttribute('aria-label', tip)
+}
 
 // ------------------------------------------------------ direction & key -----
 // Text direction lives in settings only; the header stays for the device and the prompt.
@@ -1167,7 +1178,7 @@ $('#keysave').onclick = async () => {
   try {
     const d = await (await fetch('/api/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })).json()
     if (d.error) throw new Error(d.error)
-    $('#apikey').value = ''; $('#rec').disabled = false
+    $('#apikey').value = ''; $('#rec').disabled = false; recTitle()
     $('#keystate').innerHTML = escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
     setStatus(t('st_key_saved'), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
@@ -1198,7 +1209,7 @@ async function health() {
     $('#rec').disabled = !h.stt
     sttLanguage = h.language || ''
     if (h.app) document.title = `${h.app} · emu-composer`
-    $('#rec').title = h.stt ? '' : t('key_needed')
+    recTitle()
     $('#keystate').innerHTML = h.stt ? escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>' : escapeHTML(t('key_needed'))
     if (sttOverride === null && !$('#sttlang').value) $('#sttlang').value = h.language || ''
     renderDevices(h.devices || [], h.serial || '')
