@@ -179,6 +179,10 @@ async function listDevices() {
   // is gone or not fully up (a booting emulator is listed "offline" first).
   const up = new Set(rows.map(l => l.split(/\s+/)).filter(([, st]) => st === 'device').map(([sr]) => sr))
   for (const sr of [...avdNames.keys()]) if (!up.has(sr)) avdNames.delete(sr)
+  // Emulators started with -no-window (test runners, CI-style boots) are not for mirroring
+  // by default: a restart once landed on one while the visible emulator sat unused.
+  const ps = await execFileP('ps', ['-axo', 'command'], { encoding: 'utf8', timeout: 3000, maxBuffer: 8 << 20 }).then(r => r.stdout).catch(() => '')
+  const headless = new Set(ps.split('\n').filter(l => /qemu-system/.test(l) && /-no-window|-headless/.test(l)).map(l => (/-avd\s+(\S+)/.exec(l) || [])[1]).filter(Boolean))
   const devices = await Promise.all(rows.map(async l => {
     const [serial, st, ...rest] = l.split(/\s+/)
     const kv = Object.fromEntries(rest.map(x => x.split(':')).filter(x => x.length === 2))
@@ -188,7 +192,7 @@ async function listDevices() {
         .then(r => r.stdout.split('\n')[0].trim()).catch(() => '')
       if (avd && !/^(OK|KO)/.test(avd)) avdNames.set(serial, avd); else avd = ''
     }
-    return { serial, kind: 'android', state: st, model: kv.model || kv.product || '', avd, active: serial === state.serial }
+    return { serial, kind: 'android', state: st, model: kv.model || kv.product || '', avd, headless: Boolean(avd && headless.has(avd)), active: serial === state.serial }
   }))
   // Booted iOS simulators sit in the same list; the page shows them in the same menu.
   for (const d of await listSimulators()) devices.push({ ...d, active: d.serial === state.serial })
@@ -198,8 +202,15 @@ async function listDevices() {
 async function pickDefaultSerial() {
   const devices = (await listDevices()).filter(d => d.state === 'device')
   if (state.serial && devices.some(d => d.serial === state.serial)) return state.serial
-  const pick = devices.find(d => /^emulator-/.test(d.serial)) || devices[0]
-  return pick ? pick.serial : ''
+  return choosePreferred(devices)?.serial || ''
+}
+// The same preference everywhere a device is chosen for the user: an emulator with a window
+// that has the active project's app, then any windowed emulator, then anything with the app.
+function choosePreferred(usable) {
+  const has = new Set(availability.get(P?.id) || [])
+  const shown = d => /^emulator-/.test(d.serial) && !d.headless
+  return usable.find(d => has.has(d.serial) && shown(d)) || usable.find(d => shown(d))
+    || usable.find(d => has.has(d.serial)) || usable.find(d => /^emulator-/.test(d.serial)) || usable[0]
 }
 
 async function switchDevice(serial, why = '') {
@@ -253,9 +264,7 @@ async function onDevicesChanged() {
   const activeOk = usable.some(d => d.serial === state.serial)
   if (!activeOk) {
     const back = usable.find(d => d.serial === lastChosen)
-    const has = new Set(availability.get(P?.id) || [])
-    const pick = back || usable.find(d => has.has(d.serial) && /^emulator-/.test(d.serial)) || usable.find(d => has.has(d.serial))
-      || usable.find(d => /^emulator-/.test(d.serial)) || usable[0]
+    const pick = back || choosePreferred(usable)
     if (pick) await switchDevice(pick.serial, state.serial ? 'previous device went away' : 'device appeared')
     else if (state.serial) { await switchDevice('', 'no device left') }
     else broadcast({ type: 'device', serial: '', devices })
@@ -863,7 +872,7 @@ const REFINE = {
   },
 }
 const TOKEN_RE = /⟦\d+⟧/g
-async function refine({ text, level, legend, language }) {
+async function refine({ text, level, legend, language, images = [] }) {
   const L = REFINE[level]
   if (!L) throw userError(`unknown AI level: ${level}`)
   const key = await openaiKey()
@@ -876,11 +885,16 @@ The text is about a mobile app being tested. Tokens like ⟦1⟧ are anchors to 
 - Every token must appear in your output exactly once, spelled exactly as given.
 - Keep each token right next to the words that refer to it ("this button ⟦2⟧"); you may move it together with its sentence.
 - Never add a token that is not in the input.
-Write in the same language as the text${language ? ` (${language})` : ''}. Output ONLY the edited text — no preamble, no quotes, no markdown headings.${legend ? `\n\nLegend:\n${legend}` : ''}`
+${level !== 'full' ? '' : `Some tokens are MARKS the author drew on the screen (a box, a freehand stroke, an arrow). A box or stroke singles out an area; an arrow means "from here to there" (move, connect, flow). Read each mark together with what the author said around it and state the intent precisely (which elements, which area, which direction); the legend lists what each mark covers or points at${images.length ? ', and the attached screenshots show the marks as numbered badges — look at them to get position, size, spacing and colour right' : ''}. Keep the mark's token next to that description.
+`}Write in the same language as the text${language ? ` (${language})` : ''}. Output ONLY the edited text — no preamble, no quotes, no markdown headings.${legend ? `\n\nLegend:\n${legend}` : ''}`
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: cfg.model || L.model, reasoning_effort: cfg.effort || L.effort,
-      messages: [{ role: 'system', content: system }, { role: 'user', content: text }] }),
+      messages: [{ role: 'system', content: system }, { role: 'user', content: images.length
+        ? [{ type: 'text', text }, ...images.slice(0, 4).flatMap(im => [
+            { type: 'text', text: `Screenshot of "${im.screen || '?'}" with marks ${(im.marks || []).join(', ')}:` },
+            { type: 'image_url', image_url: { url: im.url, detail: 'high' } }])]
+        : text }] }),
     signal: AbortSignal.timeout(60000),
   })
   const body = await r.text()

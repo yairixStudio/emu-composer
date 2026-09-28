@@ -277,7 +277,7 @@ const I18N = {
     sc_draw: 'כלי הבא: עט, מסגרת, חץ, בחירה', sc_back: 'חזרה במכשיר', sc_home: 'מסך הבית במכשיר', sc_copy: 'העתקת הפרומפט המלא', sc_esc: 'חזרה לטקסט ולכלי הבחירה',
     ms_tap: 'הקשה באפליקציה', ms_ref: 'עוגן לאלמנט בטקסט, בלי להקיש', ms_swipe: 'החלקה', ms_scroll: 'גלילה', ms_hover: 'מדגיש את האלמנט שמתחת לסמן', ms_raw: 'בחירת הצומת הגולמי',
     tip_items: 'שורה עם -- בלבד מפרידה בין משימות', tip_speak: 'בזמן הקלטה, הקשה על אלמנט מכניסה עוגן אחרי המשפט שנאמר', tip_chip: 'לחיצה על עוגן בטקסט מעתיקה אותו לבד',
-    tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק',
+    tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק. מסך שציירת עליו נשאר קפוא עד שתפעיל את האפליקציה, וה-AI רואה את הציור כשהוא עורך',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
     ai_note: 'תמלול: הטקסט כפי שנאמר. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד דברים שנאמרו פעמיים, מסדר, מפסק ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. העוגנים נשמרים תמיד, והעריכה רצה בסוף כל הקלטה ובכפתור ✨ (⌘⇧E). ⌘Z מבטל.',
@@ -287,7 +287,7 @@ const I18N = {
     history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
-    device_title: 'איזה מכשיר לשקף. 🟢 = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
+    device_title: 'איזה מכשיר לשקף. 🟢 = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', headless: 'ללא חלון', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
     project_title: 'איזה פרויקט — הרפרנסים נפתרים מול הקוד שלו. 🟢 = האפליקציה שלו מותקנת במכשיר פתוח', project_none: 'אין פרויקט',
     errors: 'שגיאות', errors_title: 'לצרף לפרומפט את השגיאות האחרונות מהמכשיר (logcat + קריסות)',
     path: 'מסלול', path_title: 'לצרף לפרומפט את מסלול המסכים שעברת בסשן הזה',
@@ -311,7 +311,7 @@ const I18N = {
     tool_pick: 'בחירה', tool_pen: 'עט', tool_rect: 'מסגרת', tool_arrow: 'חץ', undo_mark: 'בטל סימון',
     hint_draw: 'גרירה על המסך = ציור שנכנס לפרומפט כ-@סימון · Esc = בחירה',
     mark_label: 'סימון {0} · {1}', shape_pen: 'עט', shape_rect: 'מסגרת', shape_arrow: 'חץ',
-    st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש',
+    st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש', st_marks_hold: 'המסך השתנה, אבל נשאר קפוא כי ציירת עליו — הקשה באפליקציה או רענון ימשיכו',
   },
   en: {
     mode_collect: 'Collect', mode_use: 'Use', mode_jem: 'Jem', prompt: 'Prompt',
@@ -322,7 +322,7 @@ const I18N = {
     sc_draw: 'Next tool: pen, box, arrow, pick', sc_back: 'Device back', sc_home: 'Device home', sc_copy: 'Copy the full prompt', sc_esc: 'Back to text and the pick tool',
     ms_tap: 'Tap in the app', ms_ref: 'Anchor the element in the text, no tap', ms_swipe: 'Swipe', ms_scroll: 'Scroll', ms_hover: 'Highlights the element under the cursor', ms_raw: 'Pick the raw node',
     tip_items: 'A line with only -- separates tasks', tip_speak: 'While recording, a tap on an element drops an anchor after the sentence being said', tip_chip: 'Click an anchor in the text to copy it alone',
-    tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping',
+    tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping. A screen you drew on stays still until you act on the app, and the AI edit sees the drawing',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
     ai_note: 'Dictate: the text as spoken. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges what was said twice, orders, punctuates and sharpens it into a clear request, adding nothing you did not say. Anchors are always kept; the edit runs at the end of every recording and on ✨ (⌘⇧E). ⌘Z undoes it.',
@@ -332,7 +332,7 @@ const I18N = {
     history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
-    device_title: 'Which device to mirror. 🟢 = the active project\'s app is installed on it', device_none: 'No device attached', device_many: '{0} devices — pick the one to mirror',
+    device_title: 'Which device to mirror. 🟢 = the active project\'s app is installed on it', device_none: 'No device attached', headless: 'no window', device_many: '{0} devices — pick the one to mirror',
     project_title: 'Which project — references resolve against its sources. 🟢 = its app is installed on an open device', project_none: 'No project',
     errors: 'Errors', errors_title: "Attach the device's recent errors (logcat + crash buffer) to the prompt",
     path: 'Path', path_title: 'Attach the screens walked in this session to the prompt',
@@ -356,7 +356,7 @@ const I18N = {
     tool_pick: 'Pick', tool_pen: 'Pen', tool_rect: 'Box', tool_arrow: 'Arrow', undo_mark: 'Undo mark',
     hint_draw: 'drag on the screen = a drawing that enters the prompt as @mark · Esc = pick',
     mark_label: 'mark {0} · {1}', shape_pen: 'pen', shape_rect: 'box', shape_arrow: 'arrow',
-    st_mark_added: 'mark {0} added — write what to do with it', st_mark_undone: 'mark {0} removed', st_screen_changed: 'screen changed — re-captured',
+    st_mark_added: 'mark {0} added — write what to do with it', st_mark_undone: 'mark {0} removed', st_screen_changed: 'screen changed — re-captured', st_marks_hold: 'the screen changed but stays still because you drew on it — a tap or refresh moves on',
   },
 }
 let lang = 'he'
@@ -844,6 +844,7 @@ function addMark(d) {
   const n = Math.max(0, ...allMarks().map(m => m.n)) + 1
   const m = { kind: 'mark', n, shape: d.shape, color: d.color, colorName: COLOR_NAMES[d.color] || d.color, ...markGeometry(d), captureId, screen: ctx?.screen || '', platform: ctx?.platform || '' }
   m.label = markLabel(m); m.block = markBlock(m)
+  if (mode === 'jem' && recOn && seg?.hadSpeech) seg.anchorPending = true
   const uid = 'r' + (++refN)
   insertHTMLAtCaret(`<span class="chip mark" contenteditable="false" data-uid="${uid}" data-platform="${m.platform}" title="${escapeHTML(t('chip_title'))}"><b>@</b><bdi>${escapeHTML(m.label)}</bdi></span>&nbsp;`)
   const el = ed.querySelector(`[data-uid="${uid}"]`)
@@ -888,7 +889,7 @@ function renderMarks() {
 // Marks are read back from the editor (the chips ARE the list): a deleted chip drops its
 // drawing and the image file is rewritten for that capture.
 const savedSets = new Map()
-let markSaveTimer = null
+const markSaveTimers = new Map()
 function syncMarks() {
   renderMarks()
   const byCap = new Map()
@@ -897,16 +898,19 @@ function syncMarks() {
     const key = (byCap.get(id) || []).map(m => m.n).sort().join(',')
     if (savedSets.get(id) === key || !capImages.has(id)) continue
     savedSets.set(id, key)
-    clearTimeout(markSaveTimer); markSaveTimer = setTimeout(() => saveMarkImage(id, byCap.get(id) || []), 400)
+    clearTimeout(markSaveTimers.get(id)); markSaveTimers.set(id, setTimeout(() => saveMarkImage(id, byCap.get(id) || []), 400))
   }
 }
-async function saveMarkImage(id, marks) {
-  const cap = capImages.get(id); if (!cap) return
+// The screenshot with the numbered marks burned in: written next to the prompt for the
+// agent, and shown to the AI edit so it SEES what was drawn instead of reading about it.
+async function burnMarks(id, marks, maxW = 0) {
+  const cap = capImages.get(id); if (!cap) return null
   const im = new Image(); await new Promise(ok => { im.onload = ok; im.onerror = ok; im.src = cap.src })
-  const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight
-  const g = c.getContext('2d'); g.drawImage(im, 0, 0)
+  const k = maxW && im.naturalWidth > maxW ? maxW / im.naturalWidth : 1
+  const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k)
+  const g = c.getContext('2d'); g.drawImage(im, 0, 0, c.width, c.height)
   // Marks are in device px; the capture image may be scaled. Sizes chosen for a ~1080-wide screen.
-  const s = im.naturalWidth / cap.w
+  const s = c.width / cap.w
   g.lineCap = g.lineJoin = 'round'
   for (const m of marks) {
     g.strokeStyle = g.fillStyle = m.color; g.lineWidth = 6 * s
@@ -923,6 +927,11 @@ async function saveMarkImage(id, marks) {
     g.fillStyle = m.color === '#facc15' ? '#000' : '#fff'; g.font = `bold ${Math.round(32 * s)}px system-ui,sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'
     g.fillText(String(m.n), bx, by + 1 * s)
   }
+  return c
+}
+async function saveMarkImage(id, marks) {
+  const cap = capImages.get(id); if (!cap) return
+  const c = await burnMarks(id, marks); if (!c) return
   try {
     const d = await (await fetch('/api/mark-image', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: cap.name, png: c.toDataURL('image/png') }) })).json()
@@ -1285,7 +1294,7 @@ function tokenizeEditor() {
     if (n.classList.contains('chip')) {
       const r = refOf(n); chips.push(n.outerHTML); const k = chips.length
       legend.push(`⟦${k}⟧ = ` + (!r ? `"${n.textContent}"`
-        : r.kind === 'mark' ? `a ${r.colorName} ${r.shape === 'rect' ? 'box' : r.shape} the author drew on the screen "${r.screen || '?'}"`
+        : r.kind === 'mark' ? `mark ${r.n} — ${(r.block || '').split('\n').map(l => l.replace(/^\w+:\s+/, '')).join('; ')}${capImages.has(r.captureId) ? ` (badge ${r.n} in the attached screenshot of "${r.screen || '?'}")` : ''}`
         : `${r.what || 'element'} "${r.label}" on the screen "${r.screen || '?'}"${r.platform ? ` (${r.platform})` : ''}`))
       return `⟦${k}⟧`
     }
@@ -1297,6 +1306,17 @@ function tokenizeEditor() {
   for (const c of ed.childNodes) text += walk(c)
   return { text: text.replace(/\u00a0/g, ' ').trim(), chips, legend: legend.join('\n') }
 }
+// One image per screen that holds marks in the text, marks burned in, downscaled for the model.
+async function markImages() {
+  const byCap = new Map()
+  for (const m of allMarks()) { if (!byCap.has(m.captureId)) byCap.set(m.captureId, []); byCap.get(m.captureId).push(m) }
+  const out = []
+  for (const [id, ms] of [...byCap].slice(-4)) {
+    const c = await burnMarks(id, ms, 720)
+    if (c) out.push({ screen: ms[0].screen || '', marks: ms.map(m => m.n), url: c.toDataURL('image/jpeg', 0.82) })
+  }
+  return out
+}
 let refining = false
 async function refineText(level = aiLevel) {
   if (refining) return
@@ -1307,7 +1327,7 @@ async function refineText(level = aiLevel) {
   setStatus(t('st_refining', t('ai_' + level)), 'busy')
   try {
     const d = await (await fetch('/api/refine', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage }) })).json()
+      body: JSON.stringify({ text, level, legend, language: sttOverride ?? sttLanguage, images: await markImages() }) })).json()
     if (d.error) throw new Error(d.error)
     const html = d.text.split(/(⟦\d+⟧)/).map(p => { const m = /^⟦(\d+)⟧$/.exec(p); return m ? chips[Number(m[1]) - 1] : escapeHTML(p).replace(/\n/g, '<br>') }).join('')
     ed.focus()
@@ -1502,7 +1522,7 @@ function renderDevices(devices, active) {
   if (sig === deviceSig) return
   deviceSig = sig
   sel.innerHTML = usable.length
-    ? usable.map(d => `<option value="${d.serial}"${d.serial === active ? ' selected' : ''}>${escapeHTML(dot(has.has(d.serial)) + (d.avd || d.model || d.serial) + (d.avd || d.model ? ` · ${d.serial}` : ''))}</option>`).join('')
+    ? usable.map(d => `<option value="${d.serial}"${d.serial === active ? ' selected' : ''}>${escapeHTML(dot(has.has(d.serial)) + (d.avd || d.model || d.serial) + (d.headless ? ` · ${t('headless')}` : '') + (d.avd || d.model ? ` · ${d.serial}` : ''))}</option>`).join('')
     : `<option value="">${escapeHTML(t('device_none'))}</option>`
   sel.classList.toggle('bad', !usable.length)
   sel.title = usable.length > 1 ? t('device_many', usable.length) : t('device_title')
@@ -1607,6 +1627,9 @@ function connectEvents() {
       // window itself). Re-capture — unless a drawing is in progress or the tab is hidden.
       if (!MODES[mode].watch || ev.hash === lastHash) return
       if (drawing || document.hidden) { pendingCapture = true; return }
+      // Jem: a screen you drew on stays put — an animation must not wipe the drawing away.
+      // It moves on when you act on the device (tap, swipe, key) or press refresh.
+      if (mode === 'jem' && allMarks().some(m => m.captureId === captureId)) { setStatus(t('st_marks_hold'), 'ok'); return }
       await capture(); setStatus(t('st_screen_changed'), 'ok')
     } else if (ev.type === 'device') {
       if (ev.client) clientId = ev.client
