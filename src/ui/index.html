@@ -338,6 +338,85 @@
     #dock{position:static;flex-wrap:wrap;justify-content:center;max-width:100%}
     #dock .grip{display:none}
   }
+
+  /* ================= header · footer · settings modal ================= */
+  #rhead{gap:2px;padding:8px 10px;flex-wrap:nowrap}
+  #rhead #status{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rhead #ctx{flex:1 1 auto;min-width:0;margin:0 8px;max-width:none;text-align:end;font:500 11px/1.3 var(--mono);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rhead button.ic{width:28px;height:28px}
+  #foot{display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:nowrap;min-width:0}
+  #foot .runwrap{min-width:0}
+  #foot .runwrap .dd{min-width:0;max-width:130px}
+  #foot .grow{flex:1 1 auto}
+  .aiwrap{display:inline-flex;align-items:center;gap:6px;color:var(--dim)}
+  .aiic{width:15px;height:15px;fill:none;stroke:#a78bfa;stroke-width:1.8;stroke-linejoin:round}
+  #foot .aiseg{background:none;border-color:var(--line)}
+  #foot .aiseg button{height:26px;padding:0 10px;font-size:12px;color:var(--dim)}
+  #foot .aiseg button.on{background:var(--violet-soft);color:#d8ccff;margin:1px}
+  .runwrap .dd{height:32px;border-radius:var(--r) 0 0 var(--r);border-inline-end:none;max-width:150px;background:transparent}
+  #runAgent{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:0 var(--r) var(--r) 0;
+            background:transparent;border-color:var(--line2);color:var(--fg)}
+  #runAgent svg{width:12px;height:12px;fill:currentColor;stroke:none}
+  #runAgent:hover:not(:disabled){background:var(--violet-soft);border-color:#a78bfa77}
+  #copyAll{height:32px;padding:0 18px;border-radius:var(--r);font-weight:600}
+
+  .modal{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;background:#05060899;
+         backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .modal.show{display:flex}
+  .mcard{display:flex;width:min(760px,100%);height:min(560px,calc(100vh - 48px));border-radius:16px;overflow:hidden;
+         background:var(--panel);border:1px solid var(--line2);box-shadow:0 30px 80px #000a}
+  .mtabs{flex:0 0 190px;display:flex;flex-direction:column;gap:2px;padding:18px 10px;background:var(--bg);border-inline-end:1px solid var(--line)}
+  .mtitle{font:650 15px/1 inherit;padding:4px 10px 16px;color:var(--fg)}
+  .mtabs button{justify-content:flex-start;text-align:start;height:34px;border:none;background:none;color:var(--dim);border-radius:8px;font-weight:520}
+  .mtabs button:hover{background:var(--panel2);color:var(--fg)}
+  .mtabs button.on{background:var(--panel2);color:var(--fg)}
+  .mbody{position:relative;flex:1 1 auto;overflow:auto;padding:22px 26px}
+  .mclose{position:absolute;top:12px;inset-inline-end:12px}
+  .mbody section{display:none;flex-direction:column}
+  .mbody section.on{display:flex}
+  .mbody h3{margin:0 0 14px;font:650 16px/1.2 inherit}
+  .mnote{margin:0 0 8px;color:var(--dim);font-size:12.5px}
+  .mbody .srow{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .mbody .srow.col{flex-direction:column;align-items:stretch;gap:10px}
+  .mbody .srow b{display:block;font-weight:560;font-size:13px}
+  .mbody .srow small{display:block;margin-top:3px;color:var(--dim2);font-size:11.5px;line-height:1.5}
+  .mbody label.srow{cursor:pointer}
+  .mbody input[type=checkbox]{width:16px;height:16px;flex:0 0 auto}
+  .keyrow{display:flex;gap:8px}
+  .keyrow input{flex:1 1 auto;height:32px}
+  #keylist .grow{padding:6px 0}
+  @media (max-width: 640px){ .mcard{flex-direction:column;height:calc(100vh - 32px)} .mtabs{flex:0 0 auto;flex-direction:row;overflow:auto;padding:10px} .mtitle{display:none} }
+
+  /* ================= light theme ================= */
+  :root[data-theme="light"]{--bg:#f5f6f8;--panel:#ffffff;--panel2:#f1f3f6;--line:#e6e9ee;--line2:#d9dde4;--fg:#16181d;--dim:#5d6473;--dim2:#8b92a1;
+    --violet-soft:#7c3aed14;color-scheme:light}
+  :root[data-theme="dark"]{color-scheme:dark}
+  [data-theme="light"] body{background:var(--bg)}
+  [data-theme="light"] button:hover:not(:disabled){background:#eceff3;border-color:#cdd2da}
+  [data-theme="light"] button.primary:hover:not(:disabled){background:#fb8a3c}
+  [data-theme="light"] input{background:#fff}
+  [data-theme="light"] .dd{background:#fff}
+  [data-theme="light"] .dd:hover:not(:disabled){background:#f6f7f9;border-color:#c9ced7}
+  [data-theme="light"] .ddm{background:#fff;box-shadow:0 14px 40px #0002,0 2px 8px #0001}
+  [data-theme="light"] .ddm button:hover:not(:disabled), [data-theme="light"] .ddm button.on{background:#f1f3f6}
+  [data-theme="light"] .dot{background:#c3c8d1}
+  [data-theme="light"] #dock{background:#ffffffe6;box-shadow:0 8px 28px #0000001f}
+  [data-theme="light"] #dock button.ghost{color:#555c6b}
+  [data-theme="light"] #screen{box-shadow:0 12px 40px #0000002a}
+  [data-theme="light"] .chip{background:#f973161a;border-color:#f9731666;color:#c2410c}
+  [data-theme="light"] .chip.mark{background:#ef444414;border-color:#ef444466;color:#b91c1c}
+  [data-theme="light"] .grow{color:#333845}
+  [data-theme="light"] .grow kbd, [data-theme="light"] #guide h2{color:#6d28d9}
+  [data-theme="light"] #guide h2{color:var(--fg)}
+  [data-theme="light"] .gstate button.hot, [data-theme="light"] #foot .aiseg button.on{color:#5b21b6}
+  [data-theme="light"] .prob.warn{background:#fef3c7;color:#92400e;border-color:#fcd34d88}
+  [data-theme="light"] .prob.error{background:#fee2e2;color:#991b1b;border-color:#fca5a588}
+  [data-theme="light"] #edbusy{background:#ffffffc7}
+  [data-theme="light"] .modal{background:#11141a55}
+  [data-theme="light"] .mcard{box-shadow:0 30px 80px #0003}
+  [data-theme="light"] #runAgent:hover:not(:disabled){background:#7c3aed12}
+  [data-theme="light"] .side{box-shadow:-10px 0 30px #0002}
+  [data-theme="light"] kbd{background:#f5f6f8}
 </style>
 
 <aside id="guide"></aside>
@@ -381,10 +460,13 @@
 <div class="split" data-side="right" data-t-title="split_tip"></div>
 
 <div id="right">
-  <div class="row">
+  <div class="row" id="rhead">
     <span id="status" data-t="ready">מוכן</span>
+    <span id="ctx"></span>
+    <button id="save" class="ghost ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
+    <button id="clear" class="ghost ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
     <button id="histbtn" class="ghost ic" data-t-title="history"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></button>
-    <button id="settingsbtn" class="ghost ic" data-t-title="settings_title"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
+    <button id="settingsbtn" class="ghost ic" data-t-title="settings_title"><svg viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </div>
 
   <div id="edwrap">
@@ -395,24 +477,16 @@
     <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
   </div>
   <div id="foot">
-    <div class="frow">
-      <button id="copyAll" class="primary" data-t-title="copy_tip"><span data-t="copy_all">העתק פרומפט מלא</span></button>
-      <span class="runwrap" id="runwrap" hidden>
-        <select id="agent" data-t-title="agent_title"></select><button id="runAgent" data-t-title="run_tip"><span data-t="run">הרץ בסוכן</span></button>
-      </span>
-      <button id="save" class="ghost ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
-      <button id="clear" class="ghost ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
-      <span class="grow"></span>
-      <span class="aiwrap" data-t-title="ai_title"><span class="flbl" data-t="ai_lbl">AI</span>
-        <span class="seg aiseg" id="aiseg"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></span>
-    </div>
-    <div class="frow opts">
-      <label class="tog"><input type="checkbox" id="optNotes" checked> <span data-t="notes">הערות לסוכן</span></label>
-      <label class="tog" data-t-title="errors_title"><input type="checkbox" id="optErrors"> <span data-t="errors">שגיאות</span><span id="errCount" class="cnt"></span></label>
-      <label class="tog" data-t-title="path_title"><input type="checkbox" id="optPath"> <span data-t="path">מסלול</span><span id="pathCount" class="cnt"></span></label>
-      <span id="warn"></span>
-      <span id="ctx"></span>
-    </div>
+    <span class="aiwrap" data-t-title="ai_title">
+      <svg class="aiic" viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/></svg>
+      <span class="seg aiseg" id="aiseg"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span>
+    </span>
+    <span class="grow"></span>
+    <span class="runwrap" id="runwrap" hidden>
+      <select id="agent" data-t-title="agent_title"></select><button id="runAgent" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></svg><span data-t="run">הרץ</span></button>
+    </span>
+    <button id="copyAll" class="primary" data-t-title="copy_tip"><span data-t="copy_all">העתק</span></button>
+    <span id="warn" hidden></span>
   </div>
 
   <div id="hist" class="side">
@@ -420,28 +494,59 @@
     <div id="histlist"></div>
   </div>
 
-  <div id="settings" class="side">
-    <div class="row"><span class="lbl" data-t="settings_lbl">Settings</span><button id="settingsclose" class="ghost" data-t="close">סגור</button></div>
-    <div class="sbody">
-      <div class="srow"><span data-t="s_ui_lang">שפת הממשק</span>
-        <div class="seg" id="langseg"><button data-lang="he">עברית</button><button data-lang="en">English</button></div></div>
-      <div class="srow"><span data-t="s_stt_lang">שפת ההקלטה</span>
-        <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
-      <div class="srow"><span data-t="s_key">מפתח OpenAI</span>
-        <div style="display:flex;gap:6px;flex:1 1 auto;justify-content:flex-end"><input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" style="flex:1 1 auto;min-width:120px;max-width:260px"><button id="keysave" class="primary" data-t="save_key">שמור</button></div></div>
-      <div class="snote" data-t="key_note">נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.</div>
-      <div class="snote" id="keystate"></div>
-      <div class="srow"><span data-t="s_notes">הערות לסוכן בפרומפט</span><input type="checkbox" id="optNotes2"></div>
-      <div class="srow"><span data-t="s_ai">מעורבות ה-AI</span>
-        <span class="seg aiseg" id="aiseg2"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
-      <div class="snote" data-t="ai_note"></div>
-      <div class="srow"><span data-t="s_dir">כיוון טקסט</span><div class="seg" id="dirseg2"><button data-dir="rtl">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button></div></div>
+  <div id="settings" class="modal" role="dialog" aria-modal="true">
+    <div class="mcard">
+      <nav class="mtabs">
+        <div class="mtitle" data-t="settings_lbl">הגדרות</div>
+        <button data-tab="general" class="on" data-t="tab_general">כללי</button>
+        <button data-tab="voice" data-t="tab_voice">קול ו-AI</button>
+        <button data-tab="prompt" data-t="tab_prompt">פרומפט</button>
+        <button data-tab="jem" data-t="tab_jem">ג׳ם</button>
+        <button data-tab="keys" data-t="tab_keys">קיצורים</button>
+      </nav>
+      <div class="mbody">
+        <button id="settingsclose" class="ghost ic mclose" data-t-title="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <section data-tab="general" class="on">
+          <h3 data-t="tab_general">כללי</h3>
+          <div class="srow"><div><b data-t="s_theme">מראה</b><small data-t="s_theme_note"></small></div>
+            <div class="seg" id="themeseg"><button data-theme="system" data-t="theme_system"></button><button data-theme="light" data-t="theme_light"></button><button data-theme="dark" data-t="theme_dark"></button></div></div>
+          <div class="srow"><div><b data-t="s_ui_lang">שפת הממשק</b></div>
+            <div class="seg" id="langseg"><button data-lang="he">עברית</button><button data-lang="en">English</button></div></div>
+          <div class="srow"><div><b data-t="s_dir">כיוון טקסט</b><small data-t="s_dir_note"></small></div><div class="seg" id="dirseg2"><button data-dir="rtl">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button></div></div>
+        </section>
+        <section data-tab="voice">
+          <h3 data-t="tab_voice">קול ו-AI</h3>
+          <div class="srow"><div><b data-t="s_stt_lang">שפת ההקלטה</b></div>
+            <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
+          <div class="srow"><div><b data-t="s_ai">מעורבות ה-AI</b><small data-t="ai_note"></small></div>
+            <span class="seg aiseg" id="aiseg2"><button data-ai="transcribe" data-t="ai_transcribe"></button><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
+          <div class="srow col"><div><b data-t="s_key">מפתח OpenAI</b><small data-t="key_note"></small></div>
+            <div class="keyrow"><input id="apikey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button id="keysave" class="primary" data-t="save_key">שמור</button></div>
+            <small id="keystate"></small></div>
+        </section>
+        <section data-tab="prompt">
+          <h3 data-t="tab_prompt">פרומפט</h3>
+          <p class="mnote" data-t="prompt_note"></p>
+          <label class="srow tog"><div><b data-t="notes">הערות לסוכן</b><small data-t="notes_note"></small></div><input type="checkbox" id="optNotes" checked></label>
+          <label class="srow tog"><div><b><span data-t="errors">שגיאות</span><span id="errCount" class="cnt"></span></b><small data-t="errors_title"></small></div><input type="checkbox" id="optErrors"></label>
+          <label class="srow tog"><div><b><span data-t="path">מסלול</span><span id="pathCount" class="cnt"></span></b><small data-t="path_title"></small></div><input type="checkbox" id="optPath"></label>
+        </section>
+        <section data-tab="jem">
+          <h3 data-t="tab_jem">ג׳ם</h3>
+          <label class="srow tog"><div><b data-t="g_anchor">כל הקשה גם מסמנת</b><small data-t="anchor_note"></small></div><input type="checkbox" id="optAnchorS"></label>
+        </section>
+        <section data-tab="keys">
+          <h3 data-t="tab_keys">קיצורים</h3>
+          <div id="keylist"></div>
+        </section>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
 const $ = s => document.querySelector(s)
+const LS = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch {} }
 
 // ------------------------------------------------------------------- i18n ---
 const I18N = {
@@ -458,20 +563,24 @@ const I18N = {
     modes_title: 'איסוף: לחיצה מסמנת · שימוש: שליטה חיה · ג׳ם: שניהם יחד (⌘E, ⌘J)', copy_tip: 'העתקת הפרומפט המלא (⌘↩)',
     nav_back: 'חזרה (⌘B)', nav_home: 'מסך הבית (⌘⇧H)', nav_recents: 'אפליקציות אחרונות', nav_refresh: 'צילום מחדש של המסך',
     g_more: 'כל הקיצורים והטיפים', g_basics: 'הבסיס',
+    tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'ג׳ם', tab_keys: 'קיצורים',
+    s_theme: 'מראה', s_theme_note: 'בהיר, כהה, או לפי המערכת', theme_system: 'מערכת', theme_light: 'בהיר', theme_dark: 'כהה',
+    s_dir_note: 'הכיוון של שדה הטקסט', prompt_note: 'מה מצורף לפרומפט המלא בנוסף לטקסט ולעוגנים.',
+    notes_note: 'הנחיות קצרות לסוכן: איפה הקוד, איך המחרוזות בנויות, מה המידות', anchor_note: 'לחיצה על כפתור גם מכניסה אותו לטקסט וגם מקישה עליו. ⇧ לחיצה מקישה בלבד',
     guide_toggle: 'הצגה או הסתרה של פאנל ההנחיות', split_tip: 'גרירה משנה רוחב · לחיצה כפולה מחזירה לברירת המחדל', dock_grip: 'גרירה מזיזה את הסרגל',
     collect_title: 'איסוף', collect_intro: 'המסך קפוא. כל לחיצה על אלמנט מכניסה אותו לטקסט כעוגן לקוד, וקליק ימני מקיש במכשיר.',
     use_title: 'שימוש', use_intro: 'המסך חי. לחיצות, גרירות, גלילה ומקלדת עוברים ישר למכשיר.',
     ms_c_click: 'מסמן את האלמנט בטקסט', ms_c_right: 'מקיש במכשיר בלי לצאת מאיסוף', ms_c_wheel: 'גלילה במכשיר',
     ms_u_click: 'הקשה במכשיר', ms_u_keys: 'המקלדת מקלידה במכשיר (גם עברית)', sc_jem_go: 'מעבר לג׳ם', sc_mode_go: 'מעבר בין איסוף לשימוש',
-    run: 'הרץ בסוכן', run_tip: 'פותח טרמינל בתיקיית הפרויקט ומריץ את הסוכן עם הפרומפט המלא (⌘⇧↩)', agent_title: 'איזה סוכן יריץ את הפרומפט — מה שמותקן במחשב',
+    run: 'הרץ', run_tip: 'פותח טרמינל בתיקיית הפרויקט ומריץ את הסוכן עם הפרומפט המלא (⌘⇧↩)', agent_title: 'איזה סוכן יריץ את הפרומפט — מה שמותקן במחשב',
     st_running: 'פותח את {0}…', st_ran: '{0} נפתח בטרמינל — הפרומפט נשמר ב-{1}', btn_ran: 'נפתח ✓', sc_run: 'הרצת הפרומפט בסוכן',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
     ai_note: 'תמלול: הטקסט כפי שנאמר. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד דברים שנאמרו פעמיים, מסדר, מפסק ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. העוגנים נשמרים תמיד, והעריכה רצה בסוף כל הקלטה ובכפתור ✨ (⌘⇧E). ⌘Z מבטל.',
     refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
-    settings_title: 'הגדרות', copy_all: 'העתק פרומפט מלא', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
-    history_lbl: 'History', settings_lbl: 'Settings', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
+    settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
+    history_lbl: 'היסטוריה', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
     device_title: 'איזה מכשיר לשקף. נקודה ירוקה = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', headless: 'ללא חלון', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
@@ -513,19 +622,23 @@ const I18N = {
     modes_title: 'Collect: a click marks · Use: live control · Jem: both at once (⌘E, ⌘J)', copy_tip: 'Copy the full prompt (⌘↩)',
     nav_back: 'Back (⌘B)', nav_home: 'Home (⌘⇧H)', nav_recents: 'Recent apps', nav_refresh: 'Capture the screen again',
     g_more: 'All shortcuts and tips', g_basics: 'Basics',
+    tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Jem', tab_keys: 'Shortcuts',
+    s_theme: 'Appearance', s_theme_note: 'Light, dark, or follow the system', theme_system: 'System', theme_light: 'Light', theme_dark: 'Dark',
+    s_dir_note: 'Direction of the text field', prompt_note: 'What the full prompt carries besides the text and its anchors.',
+    notes_note: 'Short notes for the agent: where the code is, how strings are built, the units', anchor_note: 'A click both puts the element in the text and taps it. ⇧-click taps only',
     guide_toggle: 'Show or hide the guide panel', split_tip: 'Drag to resize · double-click to reset', dock_grip: 'Drag to move the toolbar',
     collect_title: 'Collect', collect_intro: 'The screen is still. A click on an element puts it in the text as an anchor to the code; a right-click taps the device.',
     use_title: 'Use', use_intro: 'The screen is live. Clicks, drags, the wheel and the keyboard go straight to the device.',
     ms_c_click: 'Marks the element in the text', ms_c_right: 'Taps the device without leaving collect', ms_c_wheel: 'Scrolls the device',
     ms_u_click: 'Taps the device', ms_u_keys: 'The keyboard types into the device (any script)', sc_jem_go: 'Go to jem', sc_mode_go: 'Switch collect / use',
-    run: 'Run in agent', run_tip: 'Opens a terminal in the project folder and runs the agent with the full prompt (⌘⇧↩)', agent_title: 'Which agent runs the prompt — the ones installed on this Mac',
+    run: 'Run', run_tip: 'Opens a terminal in the project folder and runs the agent with the full prompt (⌘⇧↩)', agent_title: 'Which agent runs the prompt — the ones installed on this Mac',
     st_running: 'opening {0}…', st_ran: '{0} opened in Terminal — prompt saved at {1}', btn_ran: 'Opened ✓', sc_run: 'Run the prompt in an agent',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
     ai_note: 'Dictate: the text as spoken. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges what was said twice, orders, punctuates and sharpens it into a clear request, adding nothing you did not say. Anchors are always kept; the edit runs at the end of every recording and on ✨ (⌘⇧E). ⌘Z undoes it.',
     refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
-    settings_title: 'Settings', copy_all: 'Copy full prompt', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
+    settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
     history_lbl: 'History', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
@@ -561,6 +674,8 @@ try { lang = localStorage.getItem('emucomposer.lang') || (navigator.language.sta
 const t = (k, ...a) => String(I18N[lang]?.[k] ?? I18N.en[k] ?? k).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '')
 function applyLang() {
   document.documentElement.lang = lang
+  // Panels that are mostly prose follow the interface language's direction.
+  for (const id of ['#settings', '#hist']) { const el = document.querySelector(id); if (el) el.dir = lang === 'he' ? 'rtl' : 'ltr' }
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t)
   for (const el of document.querySelectorAll('[data-t-title]')) el.title = t(el.dataset.tTitle)
   for (const el of document.querySelectorAll('[data-t-ph]')) el.dataset.ph = t(el.dataset.tPh)
@@ -1670,16 +1785,43 @@ function setDir(d) {
 // ---------------------------------------------------------------- settings ---
 let sttOverride = null
 try { const v = localStorage.getItem('emucomposer.sttLang'); if (v !== null) sttOverride = v } catch {}
-$('#settingsbtn').onclick = () => { $('#hist').classList.remove('show'); $('#settings').classList.toggle('show') }
+// Settings is a modal with tabs; the last tab opened is remembered.
+function openSettings(tab) {
+  $('#hist').classList.remove('show'); closeMenus()
+  setTab(tab || LS('emucomposer.stab') || 'general')
+  $('#optAnchorS').checked = anchorTaps
+  $('#keylist').innerHTML = SHORTCUTS.filter(s => s.keys).map(s => `<div class="grow"><kbd dir="ltr">${escapeHTML(s.keys)}</kbd><span>${escapeHTML(t(s.t))}</span></div>`).join('')
+    + MOUSE.map(([k, id]) => `<div class="grow"><kbd dir="ltr">${escapeHTML(k)}</kbd><span>${escapeHTML(t(id))}</span></div>`).join('')
+  $('#settings').classList.add('show')
+}
+function setTab(tab) {
+  for (const el of document.querySelectorAll('#settings [data-tab]')) el.classList.toggle('on', el.dataset.tab === tab)
+  LS('emucomposer.stab', tab)
+}
+$('#settingsbtn').onclick = () => $('#settings').classList.contains('show') ? $('#settings').classList.remove('show') : openSettings()
 $('#settingsclose').onclick = () => $('#settings').classList.remove('show')
+$('#settings').addEventListener('mousedown', e => { if (e.target === $('#settings')) $('#settings').classList.remove('show') })
+$('.mtabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab) })
+$('#optAnchorS').addEventListener('change', e => { anchorTaps = e.target.checked; LS('emucomposer.anchorTaps', anchorTaps ? '1' : '0'); renderGuide() })
+
+// Theme: follow the system, or pinned light / dark.
+let themePref = LS('emucomposer.theme') || 'system'
+const darkMQ = matchMedia('(prefers-color-scheme: dark)')
+function applyTheme() {
+  const th = themePref === 'system' ? (darkMQ.matches ? 'dark' : 'light') : themePref
+  document.documentElement.dataset.theme = th
+  for (const b of document.querySelectorAll('#themeseg [data-theme]')) b.classList.toggle('on', b.dataset.theme === themePref)
+}
+darkMQ.addEventListener('change', applyTheme)
+$('#themeseg').addEventListener('click', e => { const b = e.target.closest('[data-theme]'); if (!b) return; themePref = b.dataset.theme; LS('emucomposer.theme', themePref); applyTheme() })
+applyTheme()
 $('#langseg').addEventListener('click', e => {
   const b = e.target.closest('[data-lang]'); if (!b) return
   lang = b.dataset.lang; try { localStorage.setItem('emucomposer.lang', lang) } catch {}
   applyLang(); setStatus(t('ready'))
 })
 $('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} })
-$('#optNotes2').addEventListener('change', e => { $('#optNotes').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
-$('#optNotes').addEventListener('change', e => { $('#optNotes2').checked = e.target.checked; try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
+$('#optNotes').addEventListener('change', e => { try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
 $('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) setDir(b.dataset.dir) })
 $('#keysave').onclick = async () => {
   const key = $('#apikey').value.trim()
@@ -1699,7 +1841,6 @@ $('#apikey').addEventListener('keydown', e => e.key === 'Enter' && $('#keysave')
 // side widths live in CSS variables (--gw, --rw) that the splitters write; the screen is
 // fitted to the space its column actually has (no fixed pixel budget), and every change of
 // that space re-lays the overlay and the marks.
-const LS = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch {} }
 const DEF_GW = 290, DEF_RW = 460
 function applyWidths() {
   const gw = Number(LS('emucomposer.gw')) || DEF_GW, rw = Number(LS('emucomposer.rw')) || DEF_RW
@@ -2119,7 +2260,6 @@ fetchNotes()
 { let d = 'rtl'; try { d = localStorage.getItem('emucomposer.dir') || 'rtl' } catch {} setDir(d) }
 try { const n = localStorage.getItem('emucomposer.notes'); if (n !== null) $('#optNotes').checked = n === '1' } catch {}
 try { for (const id of ['Errors', 'Path']) { const v = localStorage.getItem('emucomposer.' + id); if (v !== null) $('#opt' + id).checked = v === '1' } } catch {}
-$('#optNotes2').checked = $('#optNotes').checked
 if (sttOverride !== null) $('#sttlang').value = sttOverride
 for (const id of ['#project', '#device', '#agent']) enhanceSelect($(id))
 applyLang()
