@@ -141,6 +141,11 @@ const avdNames = new Map()
 async function listDevices() {
   const out = await execFileP(ADB, ['devices', '-l'], { encoding: 'utf8', timeout: 3000 }).then(r => r.stdout).catch(() => '')
   const rows = out.split('\n').slice(1).map(l => l.trim()).filter(l => l && !l.startsWith('*'))
+  // A serial is a PORT, and ports are reused: once emulator-5556 was lumela_ui_a, the next
+  // emulator on that port showed up under the old name. Forget a name as soon as its serial
+  // is gone or not fully up (a booting emulator is listed "offline" first).
+  const up = new Set(rows.map(l => l.split(/\s+/)).filter(([, st]) => st === 'device').map(([sr]) => sr))
+  for (const sr of [...avdNames.keys()]) if (!up.has(sr)) avdNames.delete(sr)
   const devices = await Promise.all(rows.map(async l => {
     const [serial, st, ...rest] = l.split(/\s+/)
     const kv = Object.fromEntries(rest.map(x => x.split(':')).filter(x => x.length === 2))
