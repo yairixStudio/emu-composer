@@ -936,7 +936,7 @@ async function openaiKey() {
 
 // Scrub a stray API key out of anything that lands in the journal — OpenAI's own error text
 // sometimes echoes a masked key back.
-const scrubKey = s => String(s).replace(/sk-[A-Za-z0-9_*-]{4,}/g, 'sk-***')
+const scrubKey = s => String(s).replace(/sk-[A-Za-z0-9_*-]{4,}/g, 'sk-***').replace(/ek_[A-Za-z0-9_-]{4,}/g, 'ek_***')
 
 async function transcribe(audioB64, mime, language, prompt, model) {
   const bytes = Buffer.from(audioB64, 'base64').length
@@ -967,6 +967,50 @@ async function transcribe(audioB64, mime, language, prompt, model) {
     return text
   } catch (e) {
     slog('transcribe', { model: usedModel, language: language || '', bytes, ms: Date.now() - t0, chars: 0, error: scrubKey(e.message || e) })
+    throw e
+  }
+}
+
+// Live dictation: the page streams the microphone straight to OpenAI's Realtime API over
+// WebRTC, so the words come back while the user is still talking. The page never sees the
+// permanent key — it gets a short-lived client secret (ek_…) minted here for ONE
+// transcription session, configured entirely at mint time (a transcription session rejects
+// the realtime-style session.update, so the page never sends one). Server VAD cuts the
+// utterances at the same pause length the per-pause recorder uses.
+const RT_MODELS = /^(gpt-4o-transcribe|gpt-4o-mini-transcribe|whisper-1)(-\d{4}-\d\d-\d\d)?$/
+async function sttSession({ model, language, silenceMs, noise = true, prompt } = {}) {
+  const usedModel = model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe'
+  const silence = Math.max(200, Math.min(2000, Math.round(Number(silenceMs) || 450)))
+  const t0 = Date.now()
+  const meta = { provider: 'realtime', model: usedModel, language: language || '', silenceMs: silence, noise: Boolean(noise) }
+  try {
+    // gpt-live-transcribe and friends take no server VAD; the realtime provider is built on it.
+    if (!RT_MODELS.test(usedModel)) throw userError(`${usedModel} is not supported for live dictation (use gpt-4o-transcribe, gpt-4o-mini-transcribe or whisper-1)`)
+    const key = await openaiKey()
+    if (!key) throw userError('no OpenAI key — add one with the "מפתח API" button')
+    const input = {
+      format: { type: 'audio/pcm', rate: 24000 },
+      transcription: { model: usedModel, ...(language ? { language } : {}), ...(prompt ? { prompt: String(prompt).slice(-400) } : {}) },
+      turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: silence },
+    }
+    if (noise) input.noise_reduction = { type: 'near_field' }
+    const r = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+      method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ expires_after: { anchor: 'created_at', seconds: 600 }, session: { type: 'transcription', audio: { input } } }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const body = await r.text()
+    if (!r.ok) {
+      let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {}
+      throw userError(`OpenAI ${r.status}: ${scrubKey(msg)}`)
+    }
+    const j = JSON.parse(body)
+    const value = j.value || j.client_secret?.value || ''
+    if (!value) throw userError('OpenAI returned no client secret')
+    slog('stt_session', { ...meta, ms: Date.now() - t0, ok: true, expiresAt: j.expires_at || j.client_secret?.expires_at || 0 })
+    return { value, expiresAt: j.expires_at || j.client_secret?.expires_at || 0, model: usedModel, language: language || '', silenceMs: silence }
+  } catch (e) {
+    slog('stt_session', { ...meta, ms: Date.now() - t0, ok: false, error: scrubKey(e.message || e) })
     throw e
   }
 }
@@ -1274,7 +1318,7 @@ const server = http.createServer(async (req, res) => {
         if (!P) return send(res, 503, { starting: true })
         const k = await openaiKey()
         return send(res, 200, {
-          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', app: P.cfg.appName,
+          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', sttModel: process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe', app: P.cfg.appName,
           ...projectList(), problems: await problems(),
           serial: state.serial, devices: await listDevices(),
           agent: Boolean(agent?.ready), agentReason: agent?.reason || (state.serial ? '' : 'no device'),
@@ -1305,6 +1349,8 @@ const server = http.createServer(async (req, res) => {
         const { audio, mime, language, prompt, model } = await readBody(req)
         return send(res, 200, { text: await transcribe(audio, mime, language, prompt, model) })
       }
+      case '/api/stt/session':
+        return send(res, 200, await sttSession(await readBody(req)))
       case '/api/save': {
         // Crops + full screenshot + the assembled prompt, for a reference that outlives the tab.
         const { text, crops, screen } = await readBody(req)

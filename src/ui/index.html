@@ -117,6 +117,14 @@
   /* A segment being transcribed: a small spinning ring where its words will land. */
   .interim{display:inline-block;width:.95em;height:.95em;vertical-align:-.14em;margin:0 4px;border-radius:50%;
            border:2px solid #38bdf840;border-top-color:var(--accent2);animation:spin .75s linear infinite;color:transparent;overflow:hidden}
+  /* The same marker once words arrive for it (realtime deltas, the browser's live guess): the
+     words themselves, fainter than settled dictation, with a tiny ring after them while the
+     final transcript is still on its way. Still .interim, so nothing reads it into the prompt. */
+  .interim.live{display:inline;width:auto;height:auto;margin:0;border:none;border-radius:0;animation:none;overflow:visible;
+                vertical-align:baseline;color:#a4a9b8;opacity:.62}
+  .interim.live::after{content:"";display:inline-block;width:.6em;height:.6em;margin:0 4px;vertical-align:-.02em;border-radius:50%;
+                border:1.5px solid #38bdf840;border-top-color:var(--accent2);animation:spin .75s linear infinite}
+  [data-theme="light"] .interim.live{color:#6b7280}
   body.burst #ov, body.burst #marks{visibility:hidden}
 
   #keyrow{display:none;gap:8px;align-items:center;background:#171213;border-bottom:1px solid #3a2a20}
@@ -407,6 +415,22 @@
   .keyrow{display:flex;gap:8px}
   .keyrow input{flex:1 1 auto;height:32px}
   #keylist .grow{padding:6px 0}
+  /* Settings › Dictation: the provider is a radio list, each option with its one-line trade-off. */
+  .provlist{display:flex;flex-direction:column;gap:6px;padding:6px 0 14px;border-bottom:1px solid var(--line)}
+  .provlist button{display:flex;flex-direction:column;align-items:stretch;gap:4px;height:auto;padding:10px 12px;text-align:start;white-space:normal;
+                   background:none;border:1px solid var(--line2);border-radius:10px;color:var(--fg)}
+  .provlist .pn{display:flex;align-items:center;gap:8px;font-weight:560;font-size:13px;line-height:1.3}
+  .provlist .pn::before{content:"";flex:0 0 auto;width:10px;height:10px;border-radius:50%;border:2px solid var(--dim2)}
+  .provlist button.on{border-color:var(--accent2);background:color-mix(in srgb, var(--accent2) 9%, transparent)}
+  .provlist button.on .pn::before{border-color:var(--accent2);background:radial-gradient(circle, var(--accent2) 0 40%, transparent 46%)}
+  .provlist small{display:block;color:var(--dim2);font-weight:400;font-size:11.5px;line-height:1.5}
+  .provlist .tag{font:600 10px/1 var(--mono);padding:3px 6px;border-radius:5px;background:var(--panel2);color:var(--dim)}
+  .provlist .tag.na{display:none}
+  .provlist button.na .tag.na{display:inline}
+  #sttModel{max-width:280px}
+  .rangebox{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+  .rangebox input{width:150px;accent-color:var(--accent2)}
+  .rangebox output{min-width:56px;text-align:end;font:500 12px/1 var(--mono);color:var(--dim)}
   @media (max-width: 640px){ .mcard{flex-direction:column;height:calc(100vh - 32px)} .mtabs{flex:0 0 auto;flex-direction:row;overflow:auto;padding:10px} .mtitle{display:none} }
 
   /* ================= light theme ================= */
@@ -626,6 +650,7 @@
       <nav class="mtabs">
         <div class="mtitle" data-t="settings_lbl">הגדרות</div>
         <button data-tab="general" class="on" data-t="tab_general">כללי</button>
+        <button data-tab="dictation" data-t="tab_dict">הכתבה</button>
         <button data-tab="voice" data-t="tab_voice">קול ו-AI</button>
         <button data-tab="models" data-t="tab_models">מודלים</button>
         <button data-tab="prompt" data-t="tab_prompt">פרומפט</button>
@@ -642,10 +667,24 @@
             <div class="seg" id="langseg"><button data-lang="he">עברית</button><button data-lang="en">English</button></div></div>
           <div class="srow"><div><b data-t="s_dir">כיוון טקסט</b><small data-t="s_dir_note"></small></div><div class="seg" id="dirseg2"><button data-dir="rtl">RTL</button><button data-dir="ltr">LTR</button><button data-dir="auto">AUTO</button></div></div>
         </section>
-        <section data-tab="voice">
-          <h3 data-t="tab_voice">קול ו-AI</h3>
+        <section data-tab="dictation">
+          <h3 data-t="tab_dict">הכתבה</h3>
+          <p class="mnote" data-t="dict_note"></p>
+          <div class="provlist" id="provlist" role="radiogroup">
+            <button type="button" role="radio" data-prov="realtime"><span class="pn"><span data-t="prov_realtime"></span><span class="tag" data-t="prov_rec"></span></span><small data-t="prov_realtime_help"></small></button>
+            <button type="button" role="radio" data-prov="segments"><span class="pn"><span data-t="prov_segments"></span></span><small data-t="prov_segments_help"></small></button>
+            <button type="button" role="radio" data-prov="browser"><span class="pn"><span data-t="prov_browser"></span><span class="tag na" data-t="prov_na"></span></span><small data-t="prov_browser_help"></small></button>
+            <button type="button" role="radio" data-prov="hybrid"><span class="pn"><span data-t="prov_hybrid"></span><span class="tag na" data-t="prov_na"></span></span><small data-t="prov_hybrid_help"></small></button>
+          </div>
+          <div class="srow"><div><b data-t="s_stt_model">מודל תמלול</b><small data-t="s_stt_model_note"></small></div><select id="sttModel"></select></div>
           <div class="srow"><div><b data-t="s_stt_lang">שפת ההקלטה</b></div>
             <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
+          <div class="srow"><div><b data-t="s_pause">רגישות להפסקה</b><small data-t="s_pause_note"></small></div>
+            <div class="rangebox"><input type="range" id="sttPause" min="300" max="1500" step="50"><output id="sttPauseVal" dir="ltr"></output></div></div>
+          <label class="srow tog"><div><b data-t="s_noise">הפחתת רעשים</b><small data-t="s_noise_note"></small></div><input type="checkbox" id="sttNoise"></label>
+        </section>
+        <section data-tab="voice">
+          <h3 data-t="tab_voice">קול ו-AI</h3>
           <div class="srow"><div><b data-t="s_ai">מעורבות ה-AI</b><small data-t="ai_note"></small></div>
             <span class="seg aiseg" id="aiseg2"><button data-ai="clean" data-t="ai_clean"></button><button data-ai="full" data-t="ai_full"></button></span></div>
           <div class="srow col"><div><b data-t="s_key">מפתח OpenAI</b><small data-t="key_note"></small></div>
@@ -752,6 +791,18 @@ const I18N = {
     hint_draw: 'גרירה על המסך = ציור שנכנס לפרומפט כ-@סימון · Esc = בחירה',
     mark_label: 'סימון {0} · {1}', shape_pen: 'עט', shape_rect: 'מסגרת', shape_arrow: 'חץ',
     st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש', st_marks_hold: 'המסך השתנה, אבל נשאר קפוא כי ציירת עליו — הקשה באפליקציה או רענון ימשיכו',
+    tab_dict: 'הכתבה', dict_note: 'איך הדיבור הופך לטקסט. בכל אחת מהדרכים דיבור, הקלדה, אנטר ועוגנים נכנסים לטקסט בסדר שבו קרו.',
+    prov_realtime: 'OpenAI בזמן אמת', prov_rec: 'מומלץ', prov_na: 'לא זמין בדפדפן הזה',
+    prov_realtime_help: 'האיכות הגבוהה ביותר. המיקרופון זורם ישירות ל-OpenAI (WebRTC עם מפתח זמני — המפתח שלך לא יוצא מהמחשב), המילים זורמות פנימה באפור במקום שבו התחלת לדבר ומתייצבות לטקסט הסופי. עלות: תמחור התמלול של OpenAI. אם החיבור נכשל — עובר לבד ל"בכל הפסקה".',
+    prov_segments: 'OpenAI בכל הפסקה', prov_segments_help: 'ההתנהגות הקודמת: קטע נחתך בכל הפסקה ונשלח לתמלול. אותה איכות ואותה עלות, בלי טקסט חי — עיגול מסתובב עד שהקטע חוזר. האודיו עובר דרך השרת המקומי ל-OpenAI.',
+    prov_browser: 'זיהוי הדפדפן', prov_browser_help: 'חינם, מיידי ובלי מפתח, אבל איכות נמוכה יותר — בעיקר בעברית ובמונחים טכניים. פרטיות: ב-Chrome האודיו נשלח לשרתים של Google.',
+    prov_hybrid: 'היברידי', prov_hybrid_help: 'טקסט חי מהדפדפן מיד, ובכל הפסקה התמלול של OpenAI מחליף אותו. איכות OpenAI עם תצוגה מיידית; האודיו נשלח גם ל-Google (ב-Chrome) וגם ל-OpenAI.',
+    s_stt_model: 'מודל תמלול', s_stt_model_note: 'gpt-4o-transcribe — הכי מדויק · mini — מהיר וזול · whisper-1 — ישן, בלי טקסט זורם',
+    s_pause: 'רגישות להפסקה', s_pause_note: 'כמה שקט סוגר משפט. קצר = הטקסט מגיע מהר אבל משפטים נחתכים באמצע; ארוך = משפטים שלמים.',
+    s_noise: 'הפחתת רעשים', s_noise_note: 'בתמלול בזמן אמת בלבד: מסנן רעשי רקע למיקרופון קרוב (near-field).', ms_unit: '{0} מ״ש',
+    st_rt_connecting: 'מקליט — מתחבר לתמלול חי…', st_rt_live: 'מקליט — תמלול חי', st_rt_reconnect: 'החיבור לתמלול החי נפל — מתחבר מחדש…',
+    st_rt_fallback: 'התמלול החי לא זמין ({0}) — עבר לתמלול בכל הפסקה', st_br_fallback: 'זיהוי הדיבור של הדפדפן לא זמין ({0}) — עבר לתמלול בכל הפסקה',
+    st_rec_browser: 'מקליט — זיהוי הדפדפן', st_stt_next: 'ייכנס לתוקף מההקלטה הבאה', st_hybrid_nopreview: 'התצוגה החיה של הדפדפן נפלה ({0}) — ממשיך בתמלול בכל הפסקה',
   },
   en: {
     mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt',
@@ -818,6 +869,18 @@ const I18N = {
     hint_draw: 'drag on the screen = a drawing that enters the prompt as @mark · Esc = pick',
     mark_label: 'mark {0} · {1}', shape_pen: 'pen', shape_rect: 'box', shape_arrow: 'arrow',
     st_mark_added: 'mark {0} added — write what to do with it', st_mark_undone: 'mark {0} removed', st_screen_changed: 'screen changed — re-captured', st_marks_hold: 'the screen changed but stays still because you drew on it — a tap or refresh moves on',
+    tab_dict: 'Dictation', dict_note: 'How speech becomes text. Whichever you pick, speech, typing, Enter and anchors land in the text in the order they happened.',
+    prov_realtime: 'OpenAI realtime', prov_rec: 'recommended', prov_na: 'not available in this browser',
+    prov_realtime_help: 'Highest quality. The mic streams straight to OpenAI (WebRTC with a short-lived key — your key never leaves this Mac); words stream in, grey, where you started speaking and settle into the final text. Cost: OpenAI transcription pricing. If the connection fails it switches to "per pause" on its own.',
+    prov_segments: 'OpenAI per pause', prov_segments_help: 'The previous behaviour: a segment is cut at every pause and sent for transcription. Same quality and cost, no live text — a spinner until the segment comes back. Audio goes through the local server to OpenAI.',
+    prov_browser: 'Browser live', prov_browser_help: 'Free, instant, no key — but lower quality, especially in Hebrew and for technical terms. Privacy: in Chrome the audio is sent to Google.',
+    prov_hybrid: 'Hybrid', prov_hybrid_help: "The browser's live text at once, replaced at every pause by OpenAI's transcript. OpenAI quality with an instant preview; audio goes to both Google (in Chrome) and OpenAI.",
+    s_stt_model: 'Transcription model', s_stt_model_note: 'gpt-4o-transcribe — most accurate · mini — faster and cheaper · whisper-1 — older, no streaming text',
+    s_pause: 'Pause sensitivity', s_pause_note: 'How much silence closes a phrase. Short = text sooner but phrases cut mid-way; long = whole sentences.',
+    s_noise: 'Noise reduction', s_noise_note: 'Realtime only: filters background noise for a close microphone (near-field).', ms_unit: '{0} ms',
+    st_rt_connecting: 'recording — connecting live transcription…', st_rt_live: 'recording — live transcription', st_rt_reconnect: 'live transcription dropped — reconnecting…',
+    st_rt_fallback: 'live transcription unavailable ({0}) — switched to per pause', st_br_fallback: 'browser speech recognition unavailable ({0}) — switched to per pause',
+    st_rec_browser: 'recording — browser recognition', st_stt_next: 'applies from the next recording', st_hybrid_nopreview: "the browser's live preview stopped ({0}) — carrying on per pause",
   },
 }
 let lang = 'he'
@@ -2035,11 +2098,13 @@ function fillSelect(sel, values, current, defLabel) {
 async function loadModels() {
   let m = { stt: [], chat: [] }
   try { m = await (await fetch('/api/models')).json() } catch {}
-  fillSelect($('#mStt'), m.stt || [], modelFor('stt'), t('m_default', MODEL_DEFAULTS.stt))
+  sttModelList = m.stt || []
+  fillSelect($('#mStt'), sttModelList, modelFor('stt'), t('m_default', sttCfgModel))
+  fillSttModels()
   fillSelect($('#mClean'), m.chat || [], modelFor('clean'), t('m_default', MODEL_DEFAULTS.clean))
   fillSelect($('#mFull'), m.chat || [], modelFor('full'), t('m_default', MODEL_DEFAULTS.full))
 }
-for (const id of ['#mStt', '#mClean', '#mFull']) $(id).addEventListener('change', e => LS('emucomposer.model.' + e.target.dataset.m, e.target.value))
+for (const id of ['#mStt', '#mClean', '#mFull']) $(id).addEventListener('change', e => { LS('emucomposer.model.' + e.target.dataset.m, e.target.value); if (e.target.dataset.m === 'stt') fillSttModels() })
 function fillAgentModels() {
   const a = agentsCache.find(x => x.id === $('#agent').value)
   fillSelect($('#mAgent'), a?.models || [], LS('emucomposer.model.agent.' + (a?.id || '')) || '', t('m_agent_default'))
@@ -2136,6 +2201,7 @@ function loadDraft() {
   try {
     const d = JSON.parse(localStorage.getItem('emucomposer.draft') || 'null'); if (!d) return
     ed.innerHTML = d.html || ''; refs = new Map(d.refs || []); refN = d.refN || 0
+    for (const x of ed.querySelectorAll('.interim')) x.remove()   // a recording cut off by a reload: nothing is coming for these
     for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); const r = refOf(c); if (r?.platform && !c.dataset.platform) c.dataset.platform = r.platform }
     updateDual()
   } catch {}
@@ -2197,39 +2263,78 @@ $('#histlist').addEventListener('keydown', e => {
 })
 
 // ------------------------------------------------------------- dictation ----
-// Speech, typing, Enter and anchors interleave in the order they happened. A segment drops an
-// interim marker at the caret the moment speech starts, and its transcript later replaces that
-// marker. Any act in the text while it holds speech — an anchor or a mark, a typed key, Enter,
-// a paste — closes it on the spot (segBreak), so what was said before the act lands before it
-// and what is said after opens a new marker after it: "this element @chip should move down",
-// or a few Enters and then more speech a few lines lower. Otherwise segments are cut at
-// PAUSES (~450 ms of silence), never mid-syllable, with a hard cap for a monologue. The next
-// recorder starts BEFORE the previous one stops, so no word falls into the gap.
+// Speech, typing, Enter and anchors interleave in the order they happened. An utterance drops
+// an interim marker at the caret the moment speech starts, and its transcript later replaces
+// that marker. Any act in the text while it holds speech — an anchor or a mark, a typed key,
+// Enter, a paste — closes it on the spot (segBreak), so what was said before the act lands
+// before it and what is said after opens a new marker after it: "this element @chip should
+// move down", or a few Enters and then more speech a few lines lower.
+//
+// How speech becomes text is chosen in Settings › Dictation (sttPref.provider):
+//   realtime  (default) the mic streams to OpenAI's Realtime API over WebRTC with a short-lived
+//             key the server mints (POST /api/stt/session); each utterance's words show live
+//             in grey inside its marker and the final transcript replaces them. While the
+//             session connects, and whenever it fails, the per-pause recorder below does the
+//             work — a failure falls back to it for the rest of the recording and says so.
+//   segments  the per-pause recorder: segments cut at PAUSES (the pause setting of silence),
+//             never mid-syllable, with a hard cap for a monologue; one POST /api/transcribe
+//             each, primed with the previous tail. The next recorder starts BEFORE the
+//             previous one stops, so no word falls into the gap.
+//   browser   the browser's own SpeechRecognition, interim results live (Chrome: Google).
+//   hybrid    segments, with the browser's live guess shown in each marker until the
+//             segment's OpenAI transcript replaces it.
+// Whatever the provider, the meter (startMeter) owns the microphone and speech detection.
 let mediaRec = null, recOn = false, audioCtx = null, stream = null
-let seg = null, segN = 0, lastTranscript = ''
+let seg = null, segN = 0, lastTranscript = '', lastSpeechSeg = null
 let recStartAt = 0, segCutCount = 0
-const SEG_MIN_MS = 1200, SEG_MAX_MS = 15000, SILENCE_MS = 450, SPEECH_LEVEL = 0.06
+const SEG_MIN_MS = 1200, SEG_MAX_MS = 15000, SPEECH_LEVEL = 0.06
+let SILENCE_MS = 450   // the pause setting, read at each recording start
 // The level meter beside the mic button: 5 bars, tallest in the middle — a glance-readable
 // level, not a spectrum (there is only one RMS number, not per-band data).
 const vuBars = [...document.querySelectorAll('#vu i')]
 const VU_MAX = [5, 9, 13, 9, 5]
 
+const STT_PROVIDERS = ['realtime', 'segments', 'browser', 'hybrid']
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null
+const sttPref = {
+  get provider() { const v = LS('emucomposer.stt.provider'); return STT_PROVIDERS.includes(v) ? v : 'realtime' },
+  get silenceMs() { const v = Number(LS('emucomposer.stt.silenceMs')); return v >= 300 && v <= 1500 ? v : 450 },
+  get noise() { return LS('emucomposer.stt.noise') !== '0' },
+  get reconnect() { return LS('emucomposer.stt.reconnect') !== '0' },
+}
+let sttCfgModel = 'gpt-4o-transcribe'   // the project's cfg.stt.model, from /api/health
+const sttLang = () => sttOverride ?? sttLanguage
+const sttModelName = () => modelFor('stt') || sttCfgModel
+let sttActive = ''   // the provider running this recording ('' = not recording)
+let rt = null        // this recording's realtime session
+let br = null        // this recording's browser recognizer
+// The per-pause recorder runs for segments and hybrid, and for realtime until it is live.
+const usesSegments = () => sttActive === 'segments' || sttActive === 'hybrid' || (sttActive === 'realtime' && !rt?.live)
+
 async function toggleRec() {
   if (recOn) return stopRec()
   if (textLocked()) return
+  let want = sttPref.provider
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
-  recOn = true; recStartAt = Date.now(); segCutCount = 0
+  if ((want === 'browser' || want === 'hybrid') && !SpeechRec) {
+    uilog('provider_fallback', { from: want, to: 'segments', why: 'no SpeechRecognition in this browser' })
+    want = 'segments'
+  }
+  recOn = true; recStartAt = Date.now(); segCutCount = 0; SILENCE_MS = sttPref.silenceMs; sttActive = want
   const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(mt => MediaRecorder.isTypeSupported(mt)) || ''
   const track = stream.getAudioTracks()[0]
   uilog('rec', { on: true })
   uilog('rec_start', { mimeType: mime, sampleRate: track?.getSettings?.().sampleRate || null, deviceLabel: track?.label || '',
-    speechLevel: SPEECH_LEVEL, silenceMs: SILENCE_MS, segMinMs: SEG_MIN_MS, segMaxMs: SEG_MAX_MS })
+    speechLevel: SPEECH_LEVEL, silenceMs: SILENCE_MS, segMinMs: SEG_MIN_MS, segMaxMs: SEG_MAX_MS, provider: want })
   $('#rec').classList.add('on'); $('#vu').hidden = false; recTitle(); renderGuide()
-  setStatus(t('st_rec_hint'), 'busy')
+  setStatus(t(want === 'realtime' ? 'st_rt_connecting' : want === 'browser' ? 'st_rec_browser' : 'st_rec_hint'), 'busy')
   startMeter()
-  startSegment(mime)
+  if (want !== 'browser') startSegment(mime)
+  if (want === 'segments' || want === 'hybrid') uilog('stt_session', { provider: want, model: sttModelName(), ms: 0, ok: true })
+  if (want === 'realtime') rtStart()
+  if (want === 'browser' || want === 'hybrid') brStart()
 }
 function startSegment(mime) {
   if (!recOn) return
@@ -2238,20 +2343,35 @@ function startSegment(mime) {
   const s = seg = { n: ++segN, t0: Date.now(), lastLoud: Date.now(), hadSpeech: false, marker: null, rec, peak: 0, rmsSum: 0, rmsCount: 0, durMs: 0 }
   rec.ondataavailable = ev => {
     if (s.hadSpeech && ev.data.size > 1000) sendSegment(ev.data, s)
-    else { uilog('seg_skip', { segIdx: s.n, bytes: ev.data.size }); s.marker?.remove() }
+    else { uilog('seg_skip', { segIdx: s.n, bytes: ev.data.size }); s.marker?.remove(); s.done = true }
   }
-  rec.onstop = () => { if (!recOn && seg === s) stream?.getTracks().forEach(t => t.stop()) }
   rec.start()
 }
-// The marker goes in when speech starts, not when the segment is cut: an anchor, a key or an
-// Enter that comes while talking then lands after the words that led up to it.
-function placeSegMarker(s) {
+// A marker at the caret: a zero-width box with a spinner, where the words will land. It goes
+// in when speech STARTS, not when the utterance ends: an anchor, a key or an Enter that comes
+// while talking then lands after the words that led up to it.
+let markerN = 0
+function placeMarker() {
   const back = document.activeElement === $('#screen') ? $('#screen') : null   // use mode: the keyboard stays on the device
   restoreCaret()
-  document.execCommand('insertHTML', false, `<span class="interim" data-seg="${s.n}">&#8203;</span>`)
-  s.marker = ed.querySelector(`.interim[data-seg="${s.n}"]`)
-  caretAfter(s.marker)
+  const id = 'k' + (++markerN)
+  // Not editable (like a chip), so a key typed next to it can never land INSIDE it — the
+  // transcript replaces the whole marker, and whatever had been typed into it went with it.
+  document.execCommand('insertHTML', false, `<span class="interim" contenteditable="false" data-mk="${id}">&#8203;</span>`)
+  const el = ed.querySelector(`.interim[data-mk="${id}"]`)
+  // The caret goes right after the marker — not caretAfter(), whose step into a following text
+  // node is for the &nbsp; after a chip and, mid-sentence, skipped a letter of the next word.
+  if (el) { const r = document.createRange(); r.setStartAfter(el); r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); rememberCaret() }
   back?.focus({ preventScroll: true })
+  return el
+}
+function placeSegMarker(s) { s.marker = placeMarker(); lastSpeechSeg = s }
+// Words that are still being recognised, shown inside their marker (not undoable, not in the
+// prompt: the marker stays .interim until the final text replaces it through placeTranscript).
+function setLive(marker, text) {
+  if (!marker || !ed.contains(marker)) return
+  marker.classList.add('live')
+  marker.textContent = String(text || '').trim() || '​'
 }
 function cutSegment(reason = 'pause') {
   const s = seg
@@ -2259,20 +2379,32 @@ function cutSegment(reason = 'pause') {
   s.durMs = Date.now() - s.t0
   segCutCount++
   uilog('seg_cut', { segIdx: s.n, durMs: s.durMs, reason, speech: s.hadSpeech, peak: +s.peak.toFixed(3), avgRms: +(s.rmsCount ? s.rmsSum / s.rmsCount : 0).toFixed(3) })
-  if (s.hadSpeech && !s.marker) placeSegMarker(s)   // (a safety net: normally placed at onset)
-  if (recOn) startSegment()                         // overlap: the next one is already listening
+  if (s.hadSpeech && !s.marker) placeSegMarker(s)    // (a safety net: normally placed at onset)
+  if (recOn && usesSegments()) startSegment()        // overlap: the next one is already listening
+  else if (seg === s) seg = null                     // stopped, or handed over to the realtime session
   s.rec.stop()
 }
-// An act in the text while the open segment holds speech closes it here, before the act lands.
+// An act in the text while an utterance holds speech closes it here, before the act lands.
 function segBreak(why) {
-  if (!recOn || !seg?.hadSpeech || seg.rec.state !== 'recording') return
-  uilog('seg-break', { why, ms: Date.now() - seg.t0 })
-  seg.broken = true
-  cutSegment('break')   // not a natural pause or the max-length cap — 'why' above has the real cause
+  if (!recOn) return
+  if (usesSegments() && seg?.hadSpeech && seg.rec.state === 'recording') {
+    uilog('seg-break', { why, ms: Date.now() - seg.t0, provider: sttActive })
+    seg.broken = true
+    cutSegment('break')   // not a natural pause or the max-length cap — 'why' above has the real cause
+  }
+  if (rt?.live && rt.open) rtBreak(rt, why)
+  if (sttActive === 'browser' && br?.open) brSplit(br, why)
 }
 function stopRec() {
   recOn = false
-  if (seg?.rec.state === 'recording') cutSegment('stop')
+  // The microphone is released once everything still listening to it is done: the last
+  // segment recorder has stopped, and the realtime session has had its last words.
+  const st = stream, waits = []
+  if (seg?.rec.state === 'recording') { const r = seg.rec; waits.push(new Promise(ok => r.addEventListener('stop', ok, { once: true }))); cutSegment('stop') }
+  if (rt) { waits.push(rtStop(rt)); rt = null }
+  if (br) { brStop(br); br = null }
+  Promise.all(waits).then(() => st?.getTracks().forEach(tr => tr.stop()))
+  sttActive = ''
   uilog('rec', { on: false })
   uilog('rec_stop', { durMs: Date.now() - recStartAt, segments: segCutCount })
   $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle(); renderGuide()
@@ -2305,6 +2437,8 @@ function startMeter() {
       const len = now - seg.t0, quiet = now - seg.lastLoud
       if ((seg.hadSpeech && len > SEG_MIN_MS && quiet > SILENCE_MS) || len > SEG_MAX_MS) cutSegment(len > SEG_MAX_MS ? 'max' : 'pause')
     }
+    if (rt?.live) { uttTick(rt, loud, now); rtWatch(rt, loud, now) }
+    if (br && sttActive === 'browser') uttTick(br, loud, now)
     windowPeak = Math.max(windowPeak, rms)
     if (now - lastLevelAt >= 1000) {   // a compact level sample, at most once a second
       uilog('rec_level', { rms: +rms.toFixed(3), peak: +windowPeak.toFixed(3), silent: windowPeak <= SPEECH_LEVEL })
@@ -2318,33 +2452,47 @@ async function sendSegment(blob, s) {
   const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(blob) })
   uilog('seg_sent', { segIdx: s.n, bytes: blob.size, durMs: s.durMs })
   const tSend = Date.now()
+  // Hybrid: when OpenAI fails, the browser's guess in the marker is better than nothing.
+  const keepPreview = () => { const pv = s.preview ? [...s.preview.values()].join(' ').trim() : ''; s.done = true; if (pv) placeTranscript(s.marker, pv, s.broken); else s.marker?.remove() }
   try {
     const d = await (await fetch('/api/transcribe', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttOverride ?? sttLanguage, prompt: lastTranscript, model: modelFor('stt') }) })).json()
+      body: JSON.stringify({ audio: b64, mime: blob.type, language: sttLang(), prompt: lastTranscript, model: modelFor('stt') }) })).json()
     const ms = Date.now() - tSend
-    if (d.error) { uilog('seg_error', { segIdx: s.n, ms, message: String(d.error).slice(0, 200) }); setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
-    const t = (d.text || '').trim()
-    if (!t) { uilog('seg_empty', { segIdx: s.n, ms }); s.marker?.remove(); return }
-    uilog('seg_result', { segIdx: s.n, ms, chars: t.length, preview: t.slice(0, 60) })
-    lastTranscript = (lastTranscript + ' ' + t).slice(-600)
-    uilog('transcript', { text: t, ms: Date.now() - s.t0 })
+    if (d.error) { uilog('seg_error', { segIdx: s.n, ms, message: String(d.error).slice(0, 200) }); setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); keepPreview(); return }
+    const text = (d.text || '').trim()
+    if (!text) { uilog('seg_empty', { segIdx: s.n, ms }); s.done = true; s.marker?.remove(); return }
+    uilog('seg_result', { segIdx: s.n, ms, chars: text.length, preview: text.slice(0, 60) })
+    lastTranscript = (lastTranscript + ' ' + text).slice(-600)
+    uilog('transcript', { text, ms: Date.now() - s.t0 })
     await refineIdle   // a transcript that lands while the AI edits waits for its answer
-    placeTranscript(s.marker, t, s.broken)
-    if (recOn) setStatus(t('st_rec'), 'busy')
-  } catch (e) { uilog('seg_error', { segIdx: s.n, ms: Date.now() - tSend, message: String(e.message || e).slice(0, 200) }); setStatus(t('st_stt_fail', e.message), 'err'); s.marker?.remove() }
+    s.done = true
+    placeTranscript(s.marker, text, s.broken)
+    if (recOn && usesSegments()) setStatus(t('st_rec'), 'busy')
+  } catch (e) { uilog('seg_error', { segIdx: s.n, ms: Date.now() - tSend, message: String(e.message || e).slice(0, 200) }); setStatus(t('st_stt_fail', e.message), 'err'); keepPreview() }
 }
 // Replace the marker through the selection so the insert is undoable, then put the user's
 // caret back where it was.
 function placeTranscript(marker, text, broken = false) {
   const s = getSelection()
   const userRange = s.rangeCount && ed.contains(s.anchorNode) ? s.getRangeAt(0).cloneRange() : null
+  // A caret still sitting right after this marker is following the dictation: it ends up after
+  // the words, where the next utterance belongs. (Restoring it — a live Range — collapsed it to
+  // BEFORE the inserted text, so the next marker landed ahead of these words, or inside them.)
+  const follows = Boolean(userRange?.collapsed && marker && ed.contains(marker) && (() => {
+    const after = document.createRange(); after.setStartAfter(marker); after.collapse(true)
+    if (userRange.compareBoundaryPoints(Range.START_TO_START, after) < 0) return false
+    after.setEnd(userRange.startContainer, userRange.startOffset)
+    return [...after.cloneContents().childNodes].every(n => n.nodeType === 3 && !n.nodeValue.replace(/\u200b/g, ''))
+  })())
   const back = document.activeElement === $('#screen') ? $('#screen') : null
   ed.focus({ preventScroll: true })
   // The marker loses its spinner look first, then the text is typed over it: typed over as it
   // was, it copied the spinner's transparent colour and every transcript came out invisible;
-  // removed first, it left an empty line with no height and the text jumped a line up.
+  // removed first, it left an empty line with no height and the text jumped a line up. Every
+  // attribute goes (class, data-*, and a live marker's contenteditable=false, which would
+  // otherwise make the selection skip it).
   if (marker && ed.contains(marker)) {
-    marker.removeAttribute('class'); marker.removeAttribute('data-seg')
+    for (const a of [...marker.attributes]) marker.removeAttribute(a.name)
     const r = document.createRange(); r.selectNode(marker); s.removeAllRanges(); s.addRange(r)
   } else restoreCaret()
   // The character before, for the joining space — none at the start of a line (a range's text
@@ -2352,16 +2500,323 @@ function placeTranscript(marker, text, broken = false) {
   const head = document.createRange(); head.selectNodeContents(ed); head.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset)
   const first = marker && ed.contains(marker) && (!marker.previousSibling ? marker.parentNode !== ed : marker.previousSibling.nodeName === 'BR')
   const prev = first ? '' : head.toString().slice(-1)
-  // A segment an anchor or a keystroke cut is the middle of a sentence: no full stop there.
+  // An utterance an anchor or a keystroke cut is the middle of a sentence: no full stop there.
   if (broken) text = text.replace(/[.。]$/, '')
   // Dictated words are grey, typed ones white: the transcript goes in as a .said span (the
   // space after it stays outside, so typing on from there is white again).
   editVia = 'dictation'
   document.execCommand('insertHTML', false, (prev && !/\s/.test(prev) ? ' ' : '') + `<span class="said">${escapeHTML(text)}</span> `)
   editVia = 'typing'
-  if (userRange && !(marker && userRange.intersectsNode?.(marker))) { try { s.removeAllRanges(); s.addRange(userRange) } catch {} }
+  if (userRange && !follows && !(marker && userRange.intersectsNode?.(marker))) { try { s.removeAllRanges(); s.addRange(userRange) } catch {} }
   rememberCaret(); saveDraft()
   back?.focus({ preventScroll: true })
+}
+
+// ---- live utterances (realtime + browser) ----
+// An utterance opens where speech began — at the meter's onset, or where the caret is when
+// the recognizer reports speech the meter missed — shows its words live inside its marker,
+// and is replaced by its final text. Recognizer items (realtime item_ids, browser result
+// indexes) are matched to utterances strictly IN ORDER, so every delta and final lands in
+// the marker of the utterance it belongs to, never in "whatever is open now". Each utterance
+// has a way out — expiry, timeout, hang-up — so no marker is left spinning (✨ waits on them).
+function uttList(kind) { return { kind, utts: [], open: null, byKey: new Map(), n: 0, speaking: false, quietAt: 0 } }
+function uttOpen(L, why) {
+  const u = { idx: ++L.n, t0: Date.now(), lastLoud: Date.now(), key: null, heard: Boolean(L.speaking), closed: false, broken: false, live: '', why, marker: null }
+  u.marker = placeMarker()
+  L.utts.push(u); L.open = u
+  return u
+}
+// The next recognizer item belongs to the oldest utterance still waiting for one.
+function uttClaim(L, key) {
+  let u = L.byKey.get(key)
+  if (u) return u
+  u = L.utts.find(x => x.key == null) || uttOpen(L, 'recognizer')
+  u.key = key; u.keyAt = Date.now(); u.heard = true
+  L.byKey.set(key, u)
+  return u
+}
+function uttClose(L, u) { u.closed = true; u.closedAt ||= Date.now(); if (L.open === u) L.open = null }
+async function uttFinish(L, u, text) {
+  if (u.done) return
+  u.done = true
+  L.utts = L.utts.filter(x => x !== u); if (L.open === u) L.open = null
+  text = String(text || '').trim()
+  if (!text) { u.marker?.remove(); return }
+  lastTranscript = (lastTranscript + ' ' + text).slice(-600)
+  uilog('transcript', { text, ms: Date.now() - u.t0 })
+  await refineIdle   // a transcript that lands while the AI edits waits for its answer
+  placeTranscript(u.marker, text, u.broken)
+}
+function uttTick(L, loud, now) {
+  if (loud) { if (!L.open) uttOpen(L, 'onset'); L.open.lastLoud = now }
+  for (const u of [...L.utts]) {
+    // The meter heard something the recognizer never confirmed (a cough, a door): let it go.
+    if (u.key == null && !u.heard && now - u.lastLoud > SILENCE_MS + 1800) { uilog('utt_drop', { provider: L.kind, idx: u.idx, why: 'unheard' }); uttFinish(L, u, '') }
+    // Closed (by an act in the text) but never matched to an item, and the recognizer is quiet.
+    else if (u.key == null && u.closed && !L.speaking && now - Math.max(u.closedAt, L.quietAt) > 5000) { uilog('utt_drop', { provider: L.kind, idx: u.idx, why: 'unanswered' }); uttFinish(L, u, u.live) }
+    // Matched, but its final text never came.
+    else if (u.key != null && now - u.keyAt > 30000) { uilog('utt_drop', { provider: L.kind, idx: u.idx, why: 'no-final', chars: u.live.length }); uttFinish(L, u, u.live) }
+  }
+}
+
+// ---- realtime: OpenAI Realtime transcription over WebRTC ----
+// POST /api/stt/session mints a client secret for one transcription session (model, language,
+// server VAD at the pause setting, noise reduction — all fixed at mint time; nothing is ever
+// sent to update it). The page offers SDP to /v1/realtime/calls with it, sends the SAME mic
+// track the meter reads, and reads events off the "oai-events" data channel.
+function rtStart(reconnects = 0) {
+  const R = rt = Object.assign(uttList('realtime'), { t0: Date.now(), pc: null, dc: null, live: false, wasLive: false, closed: false, aborted: false, reconnects, model: sttModelName() })
+  rtConnect(R).catch(e => rtFailed(R, e))
+}
+async function rtConnect(R) {
+  const res = await fetch('/api/stt/session', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: modelFor('stt'), language: sttLang(), silenceMs: SILENCE_MS, noise: sttPref.noise, prompt: lastTranscript }) })
+  const d = await res.json().catch(() => ({ error: `session endpoint answered ${res.status}` }))
+  if (d.error) throw new Error(d.error)
+  if (R.aborted) return
+  R.model = d.model || R.model
+  const pc = R.pc = new RTCPeerConnection()
+  pc.addTrack(stream.getAudioTracks()[0], stream)
+  const dc = R.dc = pc.createDataChannel('oai-events')
+  const opened = new Promise((ok, bad) => { dc.onopen = ok; setTimeout(() => bad(new Error('the event channel did not open within 10 s')), 10000) })
+  opened.catch(() => {})   // awaited below; this only keeps an early failure from also reporting it unhandled
+  dc.onmessage = e => { let ev; try { ev = JSON.parse(e.data) } catch { return } rtEvent(R, ev) }
+  dc.onclose = () => rtLost(R, 'event channel closed')
+  pc.onconnectionstatechange = () => rtState(R)
+  const offer = await pc.createOffer()
+  await pc.setLocalDescription(offer)
+  const r = await fetch('https://api.openai.com/v1/realtime/calls', {
+    method: 'POST', body: offer.sdp, headers: { authorization: `Bearer ${d.value}`, 'content-type': 'application/sdp' },
+  })
+  const answer = await r.text()
+  if (!r.ok) { let m = answer; try { m = JSON.parse(answer).error?.message || answer } catch {} throw new Error(`OpenAI ${r.status}: ${String(m).slice(0, 160)}`) }
+  if (R.aborted) return rtClose(R, 'stop')
+  await pc.setRemoteDescription({ type: 'answer', sdp: answer })
+  await opened
+  if (R.aborted) return rtClose(R, 'stop')
+  R.live = R.wasLive = true
+  const ms = Date.now() - R.t0
+  uilog('rt_connect', { ms, transport: 'webrtc', model: R.model, reconnect: R.reconnects })
+  uilog('stt_session', { provider: 'realtime', model: R.model, ms, ok: true })
+  // Hand over: the per-pause recorder that held the fort while connecting is cut here, and
+  // what it heard is transcribed as usual; the session has everything from now on.
+  if (seg) cutSegment('handoff')
+  setStatus(t('st_rt_live'), 'busy')
+}
+const rtSend = (R, ev) => { try { if (R.dc?.readyState === 'open') { R.dc.send(JSON.stringify(ev)); return true } } catch {} return false }
+function rtEvent(R, e) {
+  const now = Date.now()
+  switch (e.type) {
+    case 'input_audio_buffer.speech_started': {
+      R.speaking = R.gotSpeech = true
+      const u = R.utts.find(x => x.key == null && !x.heard) || R.open || uttOpen(R, 'server')
+      u.heard = true
+      break
+    }
+    case 'input_audio_buffer.speech_stopped':
+      R.speaking = false; R.quietAt = now
+      break
+    case 'input_audio_buffer.committed': {
+      R.gotSpeech = true
+      const u = uttClaim(R, e.item_id)
+      u.committedAt = now; uttClose(R, u)
+      break
+    }
+    case 'conversation.item.input_audio_transcription.delta': {
+      const u = uttClaim(R, e.item_id)
+      if (!u.firstDeltaAt) u.firstDeltaAt = now
+      u.deltas = (u.deltas || 0) + 1
+      u.live += e.delta || ''
+      setLive(u.marker, u.live)
+      break
+    }
+    case 'conversation.item.input_audio_transcription.completed': {
+      const u = uttClaim(R, e.item_id), text = String(e.transcript ?? u.live).trim()
+      const end = u.committedAt || u.closedAt || now
+      // firstDeltaMs: from the utterance's onset to its first live words; finalMs: from the end
+      // of the utterance (its commit) to the final text; beforeCommit: words arrived while
+      // still speaking (true streaming) rather than after the pause closed it.
+      uilog('rt_utterance', { idx: u.idx, firstDeltaMs: u.firstDeltaAt ? u.firstDeltaAt - u.t0 : null, finalMs: now - end, durMs: end - u.t0,
+        deltas: u.deltas || 0, beforeCommit: Boolean(u.firstDeltaAt && u.committedAt && u.firstDeltaAt < u.committedAt), chars: text.length, preview: text.slice(0, 60), broken: u.broken })
+      uttFinish(R, u, text)
+      break
+    }
+    case 'conversation.item.input_audio_transcription.failed': {
+      const u = uttClaim(R, e.item_id)
+      uilog('rt_error', { type: 'transcription_failed', code: e.error?.code || '', message: String(e.error?.message || '').slice(0, 200), idx: u.idx })
+      uttFinish(R, u, u.live)
+      break
+    }
+    case 'error':
+      uilog('rt_error', { type: e.error?.type || 'error', code: e.error?.code || '', message: String(e.error?.message || '').slice(0, 200) })
+      break
+  }
+}
+// An act in the text mid-utterance: close the open utterance here. If the server is hearing
+// speech right now, commit its buffer by hand, so the words said so far become their own item
+// (placed before the act) and the rest opens a new marker after it. If the commit is refused,
+// nothing splits — the words simply stay anchored where the utterance began.
+function rtBreak(R, why) {
+  const u = R.open
+  const commit = R.speaking && rtSend(R, { type: 'input_audio_buffer.commit' })
+  uilog('seg-break', { why, ms: Date.now() - u.t0, provider: 'realtime', commit })
+  if (commit) u.broken = true
+  uttClose(R, u)
+}
+function rtState(R) {
+  const st = R.pc?.connectionState
+  if (!R.live) return
+  if (st === 'failed' || st === 'closed') return rtLost(R, `connection ${st}`)
+  // "disconnected" often heals by itself; only a lasting one counts (each reconnect is a new mint).
+  clearTimeout(R.discTimer)
+  if (st === 'disconnected') R.discTimer = setTimeout(() => { if (R.pc?.connectionState === 'disconnected') rtLost(R, 'disconnected for 5 s') }, 5000)
+}
+// Hang up. Whatever was already heard is kept: an utterance with live words is settled with
+// them, an empty marker is removed.
+function rtClose(R, reason) {
+  if (R.closed) return
+  R.closed = true; R.live = false
+  clearTimeout(R.discTimer)
+  if (R.wasLive) uilog('rt_disconnect', { reason, pending: R.utts.length })
+  for (const u of [...R.utts]) uttFinish(R, u, u.live)
+  try { R.dc?.close() } catch {}
+  try { R.pc?.close() } catch {}
+}
+function rtFailed(R, e) {
+  if (R.aborted || R.closed) return
+  const why = String(e?.message || e).slice(0, 200)
+  uilog('rt_error', { type: 'connect', message: why })
+  uilog('stt_session', { provider: 'realtime', model: R.model, ms: Date.now() - R.t0, ok: false, error: why })
+  rtClose(R, 'failed')
+  if (rt === R) rtFallback(why)
+}
+// A session that connected but reports no speech while the meter clearly hears some is broken
+// in a way no error event announces (audio not arriving, transcription not configured).
+function rtWatch(R, loud, now) {
+  if (R.gotSpeech) return
+  if (loud && R.lastTick) R.loudMs = (R.loudMs || 0) + (now - R.lastTick)
+  R.lastTick = now
+  if (R.loudMs > 3000) rtLost(R, 'no speech reported for 3 s of audible speech', false)
+}
+function rtLost(R, reason, retry = true) {
+  if (R.closed || rt !== R || !R.wasLive) return   // before it was live, rtFailed owns the failure
+  rtClose(R, reason)
+  if (!recOn) return
+  if (retry && R.reconnects < 1 && sttPref.reconnect) {
+    // The per-pause recorder takes over at once, so nothing said while reconnecting is lost.
+    setStatus(t('st_rt_reconnect'), 'busy')
+    rtStart(R.reconnects + 1)
+    if (!seg) startSegment()
+  } else rtFallback(reason)
+}
+function rtFallback(why) {
+  uilog('provider_fallback', { from: 'realtime', to: 'segments', why })
+  rt = null
+  if (!recOn) return
+  sttActive = 'segments'
+  if (!seg) startSegment()
+  setStatus(t('st_rt_fallback', why), 'err')
+}
+// Stop: the last words are still in flight on the audio track, so the mic keeps feeding the
+// session for 400 ms; then the turn is closed by hand — once the mic stops, the server hears no
+// silence and its VAD would never close it — and the session stays up (without the mic) until
+// the last transcripts are in, at most 10 s. An open utterance the server never heard and that
+// went quiet long ago was noise: it is dropped rather than committed (a commit of silence can
+// come back as an invented phrase).
+function rtStop(R) {
+  if (!R.live) { R.aborted = true; rtClose(R, 'stop'); return Promise.resolve() }
+  return new Promise(ok => setTimeout(() => {
+    const u = R.open, now = Date.now()
+    if (!R.closed && (R.speaking || (u && (u.heard || now - u.lastLoud < 1500)))) rtSend(R, { type: 'input_audio_buffer.commit' })
+    if (u) { uttClose(R, u); if (u.key == null && !u.heard && !R.speaking && now - u.lastLoud >= 1500) uttFinish(R, u, '') }
+    ok()
+    const until = Date.now() + 10000
+    const wait = () => { if (R.closed) return; if (!R.utts.length || Date.now() > until) rtClose(R, 'stop'); else setTimeout(wait, 250) }
+    wait()
+  }, 400))
+}
+
+// ---- browser: SpeechRecognition (webkitSpeechRecognition in Chrome) ----
+// Chrome sends this audio to Google. It ends on its own after a silence or a minute, so it is
+// restarted until the recording stops; each run's result indexes start again at 0, hence the
+// run number in each key.
+const BCP47 = { he: 'he-IL', en: 'en-US', es: 'es-ES', ar: 'ar-SA', ru: 'ru-RU', fr: 'fr-FR', de: 'de-DE' }
+function brStart() {
+  const B = br = Object.assign(uttList(sttActive === 'hybrid' ? 'hybrid' : 'browser'), { t0: Date.now(), run: 0, stopped: false, started: false, hyb: new Map() })
+  let r
+  try { r = B.rec = new SpeechRec() } catch (e) { return brFailed(B, e.message || 'SpeechRecognition failed') }
+  r.continuous = true; r.interimResults = true
+  r.lang = BCP47[sttLang()] || sttLang() || navigator.language || 'en-US'
+  r.onstart = () => { if (!B.started) { B.started = true; uilog('stt_session', { provider: B.kind, model: `browser:${r.lang}`, ms: Date.now() - B.t0, ok: true }) } }
+  r.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i], key = `${B.run}:${i}`
+      if (B.kind === 'hybrid') hybridPreview(B, key, res[0].transcript)
+      else brResult(B, key, res[0].transcript, res.isFinal)
+    }
+  }
+  r.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return   // ordinary: Chrome ends and is restarted
+    uilog('browser_error', { error: e.error, message: String(e.message || '').slice(0, 200) })
+    brFailed(B, e.error)
+  }
+  r.onend = () => {
+    if (B.stopped) return
+    B.run++
+    try { r.start() } catch (e) { brFailed(B, e.message || 'restart failed') }
+  }
+  try { r.start() } catch (e) { brFailed(B, e.message || 'start failed') }
+}
+function brResult(B, key, text, final) {
+  const known = B.byKey.has(key)
+  const u = uttClaim(B, key)
+  if (!known || final) uilog('browser_result', { idx: u.idx, final, chars: String(text).trim().length, ms: Date.now() - u.t0 })
+  if (final) uttFinish(B, u, text)
+  else { u.live = text; setLive(u.marker, text) }
+}
+// An act in the text: close the open utterance, and stop the recognizer so what it has heard
+// so far is finalised into that marker; it restarts by itself (onend) for what comes next.
+function brSplit(B, why) {
+  const u = B.open
+  uilog('seg-break', { why, ms: Date.now() - u.t0, provider: 'browser' })
+  u.broken = true
+  uttClose(B, u)
+  try { B.rec.stop() } catch {}
+}
+function brStop(B) {
+  B.stopped = true
+  try { B.rec?.stop() } catch {}
+  // Final results come in shortly after stop(); whatever is still pending then is settled.
+  setTimeout(() => { for (const u of [...B.utts]) uttFinish(B, u, u.live) }, 2500)
+}
+function brFailed(B, why) {
+  if (B.stopped) return
+  B.stopped = true
+  try { B.rec?.abort() } catch {}
+  for (const u of [...B.utts]) uttFinish(B, u, u.live)
+  if (br !== B) return
+  br = null
+  uilog('provider_fallback', { from: B.kind, to: 'segments', why })
+  uilog('stt_session', { provider: B.kind, model: 'browser', ms: Date.now() - B.t0, ok: false, error: String(why) })
+  if (!recOn) return
+  if (B.kind === 'hybrid') return setStatus(t('st_hybrid_nopreview', why), 'err')   // the segments carry on as they were
+  sttActive = 'segments'
+  if (!seg) startSegment()
+  setStatus(t('st_br_fallback', why), 'err')
+}
+// Hybrid: the browser's guess goes into the segment that was listening when that phrase began
+// (or the last one still waiting for OpenAI), and OpenAI's transcript replaces it.
+function hybridPreview(B, key, text) {
+  let s = B.hyb.get(key)
+  if (!s) {
+    s = seg?.marker ? seg : lastSpeechSeg && !lastSpeechSeg.done ? lastSpeechSeg : null
+    if (!s) return
+    B.hyb.set(key, s)
+    uilog('browser_result', { segIdx: s.n, final: false, chars: String(text).trim().length, ms: Date.now() - s.t0 })
+  }
+  if (s.done) return
+  ;(s.preview ||= new Map()).set(key, text)
+  setLive(s.marker, [...s.preview.values()].join(' '))
 }
 $('#rec').onclick = toggleRec
 // Typing, Enter, a paste or a delete in the text while speaking: the words so far go before it.
@@ -2486,6 +2941,7 @@ function openSettings(tab) {
   closeMenus()
   setTab(tab || LS('emucomposer.stab') || 'general')
   loadModels()
+  renderDictation()
   $('#optAnchorS').checked = anchorTaps
   $('#keylist').innerHTML = SHORTCUTS.filter(s => s.keys).map(s => `<div class="grow"><kbd dir="ltr">${escapeHTML(s.keys)}</kbd><span>${escapeHTML(t(s.t))}</span></div>`).join('')
     + MOUSE.map(([k, id]) => `<div class="grow"><kbd dir="ltr">${escapeHTML(k)}</kbd><span>${escapeHTML(t(id))}</span></div>`).join('')
@@ -2515,9 +2971,42 @@ applyTheme()
 $('#langseg').addEventListener('click', e => {
   const b = e.target.closest('[data-lang]'); if (!b) return
   lang = b.dataset.lang; try { localStorage.setItem('emucomposer.lang', lang) } catch {}
-  applyLang(); setStatus(t('ready'))
+  applyLang(); renderDictation(); setStatus(t('ready'))
 })
-$('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} })
+$('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} uilog('stt_setting', { key: 'language', value: sttOverride || 'auto' }) })
+// Settings › Dictation. Every choice applies from the next recording on.
+const STT_MODELS = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']
+let sttModelList = [], sttKey = false
+// The mic needs a key for every provider but the browser's own recognizer.
+function syncRecEnabled() { $('#rec').disabled = !sttKey && sttPref.provider !== 'browser'; recTitle() }
+function fillSttModels() {
+  // The same stored choice as Settings › Models › Dictation; "default" is the project's cfg.stt.model.
+  fillSelect($('#sttModel'), [...new Set([...STT_MODELS, ...sttModelList])], modelFor('stt'), t('m_default', sttCfgModel))
+}
+function renderDictation() {
+  const cur = sttPref.provider
+  for (const b of document.querySelectorAll('#provlist [data-prov]')) {
+    const na = (b.dataset.prov === 'browser' || b.dataset.prov === 'hybrid') && !SpeechRec
+    b.classList.toggle('na', na); b.disabled = na
+    b.classList.toggle('on', b.dataset.prov === cur); b.setAttribute('aria-checked', String(b.dataset.prov === cur))
+  }
+  $('#sttPause').value = sttPref.silenceMs; $('#sttPauseVal').textContent = t('ms_unit', sttPref.silenceMs)
+  $('#sttNoise').checked = sttPref.noise
+  fillSttModels()
+}
+const sttChanged = (key, value) => { uilog('stt_setting', { key, value }); if (recOn) setStatus(t('st_stt_next'), 'busy') }
+$('#provlist').addEventListener('click', e => {
+  const b = e.target.closest('[data-prov]'); if (!b || b.disabled) return
+  LS('emucomposer.stt.provider', b.dataset.prov); renderDictation(); syncRecEnabled(); sttChanged('provider', b.dataset.prov)
+})
+$('#sttModel').addEventListener('change', e => {
+  LS('emucomposer.model.stt', e.target.value)
+  fillSelect($('#mStt'), sttModelList, e.target.value, t('m_default', sttCfgModel))
+  sttChanged('model', e.target.value || 'default')
+})
+$('#sttPause').addEventListener('input', e => { $('#sttPauseVal').textContent = t('ms_unit', e.target.value) })
+$('#sttPause').addEventListener('change', e => { LS('emucomposer.stt.silenceMs', e.target.value); sttChanged('silenceMs', Number(e.target.value)) })
+$('#sttNoise').addEventListener('change', e => { LS('emucomposer.stt.noise', e.target.checked ? '1' : '0'); sttChanged('noise', e.target.checked) })
 $('#optNotes').addEventListener('change', e => { try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
 $('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) setDir(b.dataset.dir) })
 $('#keysave').onclick = async () => {
@@ -2526,7 +3015,7 @@ $('#keysave').onclick = async () => {
   try {
     const d = await (await fetch('/api/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })).json()
     if (d.error) throw new Error(d.error)
-    $('#apikey').value = ''; $('#rec').disabled = false; recTitle()
+    $('#apikey').value = ''; sttKey = true; syncRecEnabled()
     $('#keystate').innerHTML = escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
     setStatus(t('st_key_saved'), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
@@ -2709,7 +3198,8 @@ document.addEventListener('visibilitychange', () => {
 async function health() {
   try {
     const h = await (await fetch('/api/health')).json()
-    $('#rec').disabled = !h.stt
+    sttKey = Boolean(h.stt); syncRecEnabled()
+    if (h.sttModel) sttCfgModel = h.sttModel
     sttLanguage = h.language || ''
     if (h.app) document.title = `${h.app} · emu-composer`
     recTitle()

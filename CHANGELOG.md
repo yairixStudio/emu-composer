@@ -1,6 +1,23 @@
 # Changelog
 
 ## Unreleased
+- **Live dictation, and a choice of how it works.** Default provider "OpenAI realtime": the
+  mic streams over WebRTC to OpenAI's Realtime transcription (`/v1/realtime/calls`) with an
+  ephemeral client secret minted by the new `POST /api/stt/session`
+  (`/v1/realtime/client_secrets`, session type `transcription`, server VAD at the pause
+  setting, near-field noise reduction); deltas show in grey inside the utterance's marker and
+  the final transcript replaces them. The per-pause recorder covers the connect time and takes
+  over on any failure (`provider_fallback`). Settings › Dictation also offers "OpenAI per
+  pause", "Browser live" (`SpeechRecognition`) and "Hybrid", plus model, language, pause length
+  and noise reduction. Journal: `stt_session`, `rt_connect`, `rt_disconnect`, `rt_utterance`,
+  `rt_error`, `provider_fallback`, `browser_result`, `utt_drop`, `stt_setting`.
+- Fixed: a transcript that landed while the caret sat right after its marker put the caret
+  BEFORE the new words, so the next utterance was inserted ahead of them — or inside them
+  ("two o three n four e"). Markers are now non-editable, so a key typed beside one can no
+  longer land inside it and vanish with it, and the caret after a marker no longer skips a
+  letter of the next word. Stale markers are dropped when a draft is restored.
+- Fixed: the status line flashed "transcription failed" after every successful segment while
+  still recording (`t` shadowed by the transcript text in `sendSegment`).
 - **iOS Simulator.** Booted simulators join the device menu; picking one mirrors it and
   resolves references against the project's `ios` block (bundle id, Swift sources, string
   registry, version file). Screenshots come from `simctl`; the accessibility tree from a new

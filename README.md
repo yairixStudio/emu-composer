@@ -188,11 +188,27 @@ reference — click it to copy that reference alone, hover it to see the element
 and its block leaves the prompt. Drafts survive a reload; every copied prompt goes to a
 history.
 
-**Dictation** (`⌘⇧R`): segments are cut at pauses, not on a timer, so words are not split;
-an interim marker goes in at the caret the moment a segment is cut and the transcript
-replaces it, so text lands where the caret *was* even if you kept typing. Needs an OpenAI
-key, entered once in the page and stored at `~/.config/emu-composer/openai-key` (mode 600) —
-the page never receives it back.
+**Dictation** (`⌘⇧R`): a marker goes in at the caret the moment you start speaking and the
+transcript replaces it, so speech, typing, Enter and references land in the order they
+happened even if you kept typing. How speech becomes text is chosen in ⚙ › Dictation:
+
+- **OpenAI realtime** (default) — the mic streams to OpenAI's Realtime API over WebRTC; the
+  server mints a short-lived client secret per session (`POST /api/stt/session`), so the
+  permanent key never reaches the page. Words show in grey as they are recognised and settle
+  into the final transcript. Server VAD closes each phrase at the pause setting. If the
+  session cannot connect or drops, it falls back to per-pause for the rest of the recording
+  and says so.
+- **OpenAI per pause** — segments cut at pauses (not on a timer, so words are not split), one
+  `POST /api/transcribe` each.
+- **Browser live** — the browser's own `SpeechRecognition` (in Chrome, audio goes to Google);
+  no key needed.
+- **Hybrid** — per-pause OpenAI transcripts, with the browser's live guess shown until each
+  one lands.
+
+Also there: the model (`gpt-4o-transcribe` / `gpt-4o-mini-transcribe` / `whisper-1`, default
+from `stt.model`), the language, the pause length (300–1500 ms) and noise reduction. OpenAI
+providers need a key, entered once in the page and stored at
+`~/.config/emu-composer/openai-key` (mode 600) — the page never receives it back.
 
 ## Why it is fast: the on-device agent
 
