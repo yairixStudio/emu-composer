@@ -567,6 +567,27 @@
   #refine .dots i:nth-child(3){animation-delay:.3s}
   @keyframes dotpulse{0%,80%,100%{opacity:.25;transform:scale(.75)}40%{opacity:1;transform:scale(1)}}
   #editor.locked{opacity:.55;cursor:progress;user-select:none}
+  /* Activity: what is happening right now, one line per event under the text. */
+  #actlog{flex:0 0 auto;border-top:1px solid var(--line);padding:3px 26px 6px;font:11px/1.6 var(--mono);color:var(--dim)}
+  #actlog .alhead{display:flex;align-items:center;gap:8px;color:var(--dim2);font-size:10.5px;cursor:pointer;user-select:none;padding:2px 0}
+  #actlog .alhead .grow{flex:1 1 auto}
+  #actlog .alhead svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;transition:transform .15s}
+  #actlog.open .alhead svg{transform:rotate(180deg)}
+  #actlog .alhead button{background:none;border:none;padding:0 2px;color:var(--dim2);font:inherit;cursor:pointer}
+  #actlog .alhead button:hover{color:var(--fg)}
+  #allist{list-style:none;margin:0;padding:0;overflow-y:auto;max-height:6.4em}
+  #actlog.open #allist{max-height:34vh}
+  #actlog.off #allist{display:none}
+  #allist li{display:flex;gap:8px;align-items:center;white-space:nowrap;min-width:0}
+  #allist li time{color:var(--dim2);flex:0 0 auto;direction:ltr}
+  #allist li span{overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:start}
+  #allist li i{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--dim2)}
+  #allist li.wait i{width:5px;height:5px;background:none;border:1.5px solid #38bdf840;border-top-color:var(--accent2);animation:spin .8s linear infinite}
+  #allist li.wait span{color:var(--fg)}
+  #allist li.live i{background:var(--rec);animation:dotpulse 1.2s ease-in-out infinite}
+  #allist li.ok i{background:var(--ok)}
+  #allist li.warn i{background:var(--warn)}
+  #allist li.err i{background:var(--bad)} #allist li.err span{color:var(--bad)}
 </style>
 
 <aside id="guide" title="שיחות קודמות" data-t-title="history_lbl">
@@ -639,6 +660,10 @@
         <span class="splitbtn"><button id="copyAll" class="ic" data-t-title="copy_tip"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button><button class="chev" data-pop="copy" data-t-title="copy_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
       </div>
     </div>
+  </div>
+  <div id="actlog">
+    <div class="alhead" id="alhead"><span data-t="act_title">פעילות</span><span class="grow"></span><button type="button" id="alclear" data-t="act_clear">נקה</button><svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg></div>
+    <ol id="allist"></ol>
   </div>
   <span id="warn" hidden></span>
   <div id="pop" hidden></div>
@@ -758,7 +783,7 @@ const I18N = {
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
     ai_note: 'מה כפתור ✨ עושה. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד חזרות, מסדר ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. ההקלטה עצמה רק מתמללת. העוגנים נשמרים תמיד; ⌘Z מבטל.',
-    refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה', st_locked: 'ה-AI עורך את הטקסט — רגע, עוד לא אפשר להוסיף',
+    refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה', st_locked: 'ה-AI עורך את הטקסט — רגע, עוד לא אפשר להוסיף', act_title: 'פעילות', act_clear: 'נקה',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', notes: 'הערות לסוכן',
     history_lbl: 'שיחות קודמות', new_prompt: 'פרומפט חדש (הנוכחי נשמר ברשימה)', new_prompt_lbl: 'פרומפט חדש', guide_open: 'פתיחת רשימת השיחות', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
@@ -836,7 +861,7 @@ const I18N = {
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
     ai_note: 'What ✨ does. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges repeats, orders and sharpens it into a clear request, adding nothing you did not say. Recording itself only transcribes. Anchors are always kept; ⌘Z undoes.',
-    refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit', st_locked: 'the AI is editing the text — adding waits until it is done',
+    refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit', st_locked: 'the AI is editing the text — adding waits until it is done', act_title: 'Activity', act_clear: 'clear',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', notes: 'Agent notes',
     history_lbl: 'Previous prompts', new_prompt: 'New prompt (the current one is kept in the list)', new_prompt_lbl: 'New prompt', guide_open: 'Open the prompt list', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
@@ -889,7 +914,7 @@ const t = (k, ...a) => String(I18N[lang]?.[k] ?? I18N.en[k] ?? k).replace(/\{(\d
 function applyLang() {
   document.documentElement.lang = lang
   // Panels that are mostly prose follow the interface language's direction.
-  for (const id of ['#settings']) { const el = document.querySelector(id); if (el) el.dir = lang === 'he' ? 'rtl' : 'ltr' }
+  for (const id of ['#settings', '#actlog']) { const el = document.querySelector(id); if (el) el.dir = lang === 'he' ? 'rtl' : 'ltr' }
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t)
   for (const el of document.querySelectorAll('[data-t-title]')) el.title = t(el.dataset.tTitle)
   for (const el of document.querySelectorAll('[data-t-ph]')) el.dataset.ph = t(el.dataset.tPh)
@@ -915,7 +940,10 @@ let refN = 0
 // The page's half of the session journal (~/.config/emu-composer/logs/<day>.jsonl): what
 // was done here, batched every 1.5 s and flushed when the page goes away.
 const uiLogQ = []
-function uilog(ev, data = {}) { uiLogQ.push({ ev, at: Date.now(), mode: typeof mode === 'string' ? mode : '', ...data }) }
+function uilog(ev, data = {}) {
+  uiLogQ.push({ ev, at: Date.now(), mode: typeof mode === 'string' ? mode : '', ...data })
+  try { actEvent(ev, data) } catch {}   // (during start-up, before the activity view exists)
+}
 function flushUiLog(beacon = false) {
   if (!uiLogQ.length) return
   const body = JSON.stringify({ events: uiLogQ.splice(0) })
@@ -926,6 +954,137 @@ setInterval(flushUiLog, 1500)
 addEventListener('pagehide', () => flushUiLog(true))
 const setStatus = (t, c = '') => { $('#status').textContent = t; $('#status').className = c; if (c === 'err') uilog('status-error', { text: String(t) }) }
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+// ------------------------------------------------------------- activity ----
+// A line per event under the text, so it is clear what is happening while you work: the OpenAI
+// connection, audio sent and its answer awaited, the browser's own recognition, typing, Enter,
+// anchors being located in the code, shapes, captures, the AI edit. It shows the journal's
+// events (uilog → actEvent) plus the "started" moments the journal has no event for. A row that
+// is waiting (spinner) or live (pulse) is updated IN PLACE by its answer, with the time it took;
+// once settled, the same key opens a new row.
+const ACT_MAX = 200
+const actRows = new Map()   // key → { li, t0, state }
+const L2 = (he, en) => (lang === 'he' ? he : en)
+const fmtMs = ms => ms == null ? '?' : ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
+const clip = (s, n = 48) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
+const actOpen = key => { const r = actRows.get(key); return Boolean(r && (r.state === 'wait' || r.state === 'live') && r.li.isConnected) }
+// Numbers and times differ between two captures of the same screen; the rest must match to repeat.
+const actNorm = s => String(s).replace(/\d+(\.\d+)?(ms|s)\b/g, '').replace(/ ×\d+$/, '')
+function act(key, text, state = 'info') {
+  const list = document.getElementById('allist'); if (!list) return
+  let r = key ? actRows.get(key) : null
+  const open = actOpen(key)
+  // The same settled line again (the screen watch re-capturing an unchanged screen): count it
+  // on the last row instead of adding one.
+  const last = list.lastElementChild
+  if (!open && state !== 'wait' && state !== 'live' && last && last.className === state && last.dataset.norm === actNorm(text)) {
+    const n = Number(last.dataset.n || 1) + 1; last.dataset.n = n
+    last.querySelector('time').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false })
+    const span = last.querySelector('span'); span.textContent = `${text} ×${n}`; span.title = span.textContent
+    return
+  }
+  if (!open) {
+    const li = document.createElement('li')
+    li.innerHTML = '<time></time><i></i><span dir="auto"></span>'
+    li.querySelector('time').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false })
+    const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 8
+    list.appendChild(li)
+    while (list.children.length > ACT_MAX) list.firstChild.remove()
+    r = { li, t0: Date.now(), state }
+    if (key) actRows.set(key, r)
+    if (atEnd) list.scrollTop = list.scrollHeight
+  }
+  // A waiting row that settles says how long it waited, unless its text already carries a time.
+  // (Not for typing, a paste or Enter: their "wait" is only the debounce before the row settles.)
+  const took = open && state !== 'wait' && state !== 'live' && !/^(typing|paste|enter)$/.test(key) && !/\d(ms|s)\b/.test(text) ? ` · ${fmtMs(Date.now() - r.t0)}` : ''
+  // A waiting row that settles into a repeat of the line before it folds into that line.
+  const prev = r.li.previousElementSibling
+  if (open && state !== 'wait' && state !== 'live' && prev && prev.className === state && prev.dataset.norm === actNorm(text + took)) {
+    const n = Number(prev.dataset.n || 1) + 1; prev.dataset.n = n
+    prev.querySelector('time').textContent = r.li.querySelector('time').textContent
+    const ps = prev.querySelector('span'); ps.textContent = `${text + took} ×${n}`; ps.title = ps.textContent
+    r.li.remove(); actRows.set(key, { li: prev, t0: r.t0, state })
+    return
+  }
+  r.state = state; r.li.className = state; r.li.dataset.norm = actNorm(text + took); delete r.li.dataset.n
+  const span = r.li.querySelector('span'); span.textContent = text + took; span.title = text + took
+}
+const provName = p => (typeof t === 'function' && t('prov_' + p) !== 'prov_' + p ? t('prov_' + p) : p)
+const breakWhy = w => ({ anchor: L2('עוגן', 'an anchor'), mark: L2('צורה', 'a shape'), insertText: L2('הקלדה', 'typing'),
+  insertParagraph: L2('אנטר', 'Enter'), insertLineBreak: L2('אנטר', 'Enter'), insertFromPaste: L2('הדבקה', 'a paste'),
+  deleteContentBackward: L2('מחיקה', 'a delete'), deleteContentForward: L2('מחיקה', 'a delete') }[w] || w)
+function actEvent(ev, d) {
+  const n = d.segIdx
+  switch (ev) {
+    case 'rec_start': return act('rec', L2(`מקליט · ${d.deviceLabel || 'מיקרופון'}`, `recording · ${d.deviceLabel || 'microphone'}`), 'live')
+    case 'rec_stop': return act('rec', L2(`ההקלטה נעצרה · ${fmtMs(d.durMs)} · ${d.segments} קטעים`, `recording stopped · ${fmtMs(d.durMs)} · ${d.segments} segments`), 'ok')
+    case 'stt_session':
+      if (d.provider === 'realtime') return d.ok ? undefined : act('rt', L2(`החיבור ל-OpenAI נכשל: ${clip(d.error, 80)}`, `OpenAI connection failed: ${clip(d.error, 80)}`), 'err')
+      return act(null, d.ok ? L2(`תמלול: ${provName(d.provider)} · ${d.model}`, `dictation: ${provName(d.provider)} · ${d.model}`)
+        : L2(`${provName(d.provider)} לא עלה: ${clip(d.error, 80)}`, `${provName(d.provider)} failed: ${clip(d.error, 80)}`), d.ok ? 'ok' : 'err')
+    case 'rt_connect': return act('rt', L2(`מחובר ל-OpenAI Realtime (${d.model}) · ${fmtMs(d.ms)}`, `connected to OpenAI Realtime (${d.model}) · ${fmtMs(d.ms)}`), 'ok')
+    case 'rt_disconnect': return act(null, L2(`OpenAI Realtime התנתק (${d.reason})`, `OpenAI Realtime disconnected (${d.reason})`), 'info')
+    case 'rt_error': return act(null, L2(`שגיאה מ-OpenAI: ${clip(d.message || d.type, 90)}`, `OpenAI error: ${clip(d.message || d.type, 90)}`), 'err')
+    case 'provider_fallback': return act(null, L2(`עובר ל${provName(d.to)} — ${clip(d.why, 70)}`, `switching to ${provName(d.to)} — ${clip(d.why, 70)}`), 'warn')
+    case 'seg_cut': return d.speech ? act(`seg:${n}`, L2(`קטע ${n} נחתך (${d.reason}) · ${fmtMs(d.durMs)} אודיו`, `segment ${n} cut (${d.reason}) · ${fmtMs(d.durMs)} of audio`), 'wait') : undefined
+    case 'seg_skip': return act(`seg:${n}`, L2(`קטע ${n}: שקט, לא נשלח`, `segment ${n}: silence, not sent`), 'info')
+    case 'seg_sent': return act(`seg:${n}`, L2(`קטע ${n} נשלח ל-OpenAI (${sttModelName()}) · ${Math.round(d.bytes / 1024)}KB · ממתין לתשובה…`, `segment ${n} sent to OpenAI (${sttModelName()}) · ${Math.round(d.bytes / 1024)}KB · waiting for the answer…`), 'wait')
+    case 'seg_result': return act(`seg:${n}`, L2(`קטע ${n} תומלל · ${fmtMs(d.ms)} · "${clip(d.preview)}"`, `segment ${n} transcribed · ${fmtMs(d.ms)} · "${clip(d.preview)}"`), 'ok')
+    case 'seg_empty': return act(`seg:${n}`, L2(`קטע ${n}: לא זוהו מילים · ${fmtMs(d.ms)}`, `segment ${n}: no words · ${fmtMs(d.ms)}`), 'info')
+    case 'seg_error': return act(`seg:${n}`, L2(`קטע ${n} נכשל: ${clip(d.message, 80)}`, `segment ${n} failed: ${clip(d.message, 80)}`), 'err')
+    case 'rt_utterance': return act(`utt:realtime:${d.idx}`, L2(`משפט ${d.idx} · "${clip(d.preview)}" · מילים ראשונות אחרי ${fmtMs(d.firstDeltaMs)} · סופי ${fmtMs(d.finalMs)} אחרי ההפסקה`,
+      `utterance ${d.idx} · "${clip(d.preview)}" · first words after ${fmtMs(d.firstDeltaMs)} · final ${fmtMs(d.finalMs)} after the pause`), 'ok')
+    case 'utt_drop': return act(`utt:${d.provider}:${d.idx}`, L2(`משפט ${d.idx} בוטל (${d.why})`, `utterance ${d.idx} dropped (${d.why})`), 'warn')
+    case 'seg-break': return act(null, L2(`קטע הדיבור נסגר לפני ${breakWhy(d.why)}`, `speech closed before ${breakWhy(d.why)}`), 'info')
+    case 'text_edit':
+      // Only settles a row that typing/pasting opened: an anchor or a marker changing the text
+      // is not the user typing.
+      if (d.via === 'typing' && actOpen('typing')) return act('typing', d.delta < 0 ? L2(`מחיקה · ${d.delta} תווים`, `deleted · ${d.delta} chars`) : L2(`הקלדה · +${d.delta} תווים`, `typed · +${d.delta} chars`), 'ok')
+      if (d.via === 'paste' && actOpen('paste')) return act('paste', L2(`הודבק · +${d.delta} תווים`, `pasted · +${d.delta} chars`), 'ok')
+      return
+    case 'chip_remove': return act(null, L2(`עוגן הוסר · @${d.label}`, `anchor removed · @${d.label}`), 'info')
+    case 'mark_remove': return act(null, L2(`צורה #${d.n} הוסרה`, `shape #${d.n} removed`), 'info')
+    case 'mark': return act(null, L2(`צורה נוספה · ${d.shape} ${d.color || ''} #${d.n}${d.screen ? ` · מסך ${d.screen}` : ''}`, `shape added · ${d.shape} ${d.color || ''} #${d.n}${d.screen ? ` · screen ${d.screen}` : ''}`), 'ok')
+    case 'tool': return act(null, L2(`כלי: ${d.to}`, `tool: ${d.to}`), 'info')
+    case 'device-input': return act(null, L2(`${d.type} במכשיר${d.label ? ` על "${clip(d.label, 30)}"` : ''}`, `${d.type} on the device${d.label ? ` on "${clip(d.label, 30)}"` : ''}`), 'info')
+    case 'tap-to-frame': return act(null, L2(`המסך הגיב · ${fmtMs(d.ms)} (${d.via})`, `the screen answered · ${fmtMs(d.ms)} (${d.via})`), 'ok')
+    case 'touch-drag': return act(null, L2(`גרירה · ${d.moves} תנועות · ${fmtMs(d.ms)}`, `drag · ${d.moves} moves · ${fmtMs(d.ms)}`), 'ok')
+    case 'refine': return act('refine', L2(`נשלח ל-OpenAI לעריכה (${t('ai_' + d.level)} · ${modelFor(d.level) || 'ברירת מחדל'}) · ממתין לתשובה…`, `sent to OpenAI to edit (${t('ai_' + d.level)} · ${modelFor(d.level) || 'default'}) · waiting for the answer…`), 'wait')
+    case 'refine_done': return act('refine', L2(`ה-AI סיים לערוך · ${fmtMs(d.ms)} · ${d.chars} תווים`, `the AI edit is in · ${fmtMs(d.ms)} · ${d.chars} chars`), 'ok')
+    case 'refine_error': return act('refine', L2(`העריכה נכשלה: ${clip(d.message, 80)}`, `the edit failed: ${clip(d.message, 80)}`), 'err')
+    case 'copy': return act(null, L2(`הפרומפט הועתק · ${d.chars} תווים · ~${d.tokensEst} טוקנים`, `prompt copied · ${d.chars} chars · ~${d.tokensEst} tokens`), 'ok')
+    case 'run': return act(null, L2(`נשלח להרצה ב-${d.agent} · ~${d.tokensEst} טוקנים`, `sent to ${d.agent} · ~${d.tokensEst} tokens`), 'ok')
+    case 'save': return act(null, L2(`נשמר · ${d.file}`, `saved · ${d.file}`), 'ok')
+    case 'toggle': return act(null, L2(`שימוש ${d.use ? 'פעיל' : 'כבוי'} · איסוף ${d.collect ? 'פעיל' : 'כבוי'}`, `use ${d.use ? 'on' : 'off'} · collect ${d.collect ? 'on' : 'off'}`), 'info')
+    case 'keyboard': return act(null, d.to === 'app' ? L2('המקלדת עוברת למכשיר', 'the keyboard goes to the device') : L2('המקלדת חוזרת לטקסט', 'the keyboard is back on the text'), 'info')
+    case 'stt_setting': return act(null, L2(`הגדרת הכתבה · ${d.key} = ${d.value}`, `dictation setting · ${d.key} = ${d.value}`), 'info')
+    case 'ai-level': return act(null, L2(`רמת AI: ${t('ai_' + d.to)}`, `AI level: ${t('ai_' + d.to)}`), 'info')
+    case 'stream-error': return act('stream', L2(`הזרם החי: ${clip(d.message, 80)}`, `live stream: ${clip(d.message, 80)}`), 'err')
+    case 'status-error': return act(null, clip(d.text, 120), 'err')
+  }
+}
+// The header opens the list to a third of the window and closes it back to its last lines.
+function actInit() {
+  const box = $('#actlog'); if (!box) return
+  try { box.classList.toggle('open', localStorage.getItem('emucomposer.actlog') === 'open') } catch {}
+  $('#alhead').addEventListener('click', e => {
+    if (e.target.closest('#alclear')) { $('#allist').innerHTML = ''; actRows.clear(); return }
+    const on = box.classList.toggle('open')
+    try { localStorage.setItem('emucomposer.actlog', on ? 'open' : 'min') } catch {}
+    const l = $('#allist'); l.scrollTop = l.scrollHeight
+  })
+}
+// Typing and Enter show the moment they start; the debounced text_edit settles the row.
+let enterRun = { n: 0, at: 0, timer: null }
+function actTyping(type) {
+  if (type === 'insertParagraph' || type === 'insertLineBreak') {
+    enterRun.n = Date.now() - enterRun.at < 2500 ? enterRun.n + 1 : 1; enterRun.at = Date.now()
+    act('enter', L2(`ירידת שורה${enterRun.n > 1 ? ` ×${enterRun.n}` : ''}`, `new line${enterRun.n > 1 ? ` ×${enterRun.n}` : ''}`), 'live')
+    clearTimeout(enterRun.timer); enterRun.timer = setTimeout(() => act('enter', L2(`ירידת שורה${enterRun.n > 1 ? ` ×${enterRun.n}` : ''}`, `new line${enterRun.n > 1 ? ` ×${enterRun.n}` : ''}`), 'ok'), 2500)
+  } else if (type === 'insertFromPaste') act('paste', L2('מדביק…', 'pasting…'), 'wait')
+  else if (/^delete/.test(type)) act('typing', L2('מוחק…', 'deleting…'), 'wait')
+  else if (/^insert/.test(type)) act('typing', L2('מקליד…', 'typing…'), 'wait')
+}
 const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
 // ------------------------------------------------------------------ modes ---
@@ -1156,6 +1315,7 @@ async function capture({ fresh = false } = {}) {
   if (capturing && fresh) { await capturing.catch(() => {}); if (capturing) await capturing.catch(() => {}) }
   if (capturing) return capturing
   $('#busy').classList.add('show')
+  act('cap', L2('מצלם את המסך וקורא את עץ האלמנטים…', 'taking the screen and its element tree…'), 'wait')
   capturing = (async () => {
     try {
       const r = await fetch('/api/capture', { method: 'POST' })
@@ -1182,8 +1342,9 @@ async function capture({ fresh = false } = {}) {
       // Jem walks through screens on purpose: an anchor from an earlier screen is not stale there.
       if (mode !== 'jem') for (const c of ed.querySelectorAll('.chip')) c.classList.toggle("stale", refOf(c)?.captureId !== captureId)
       setStatus(t('st_elements', nodes.length, d.ms) + (/agent/.test(d.source) ? '' : t('st_slow')), 'ok')
+      act('cap', L2(`צילום מסך · ${nodes.length} אלמנטים · ${fmtMs(d.ms)}${ctx?.screen ? ` · ${ctx.screen}` : ''}`, `screen captured · ${nodes.length} elements · ${fmtMs(d.ms)}${ctx?.screen ? ` · ${ctx.screen}` : ''}`), 'ok')
       refreshExtras()
-    } catch (e) { setStatus(e.message, 'err'); markLost(e.message); health() }
+    } catch (e) { setStatus(e.message, 'err'); markLost(e.message); health(); act('cap', L2(`הצילום נכשל: ${clip(e.message, 80)}`, `capture failed: ${clip(e.message, 80)}`), 'err') }
     finally { $('#busy').classList.remove('show'); capturing = null }
   })()
   return capturing
@@ -1523,16 +1684,19 @@ async function insertRef(i, via = '') {
   caretAfter(el)
   updateDual()
   saveDraft()
+  act(`anc:${uid}`, L2(`עוגן @${label} · מאתר אותו בקוד…`, `anchor @${label} · locating it in the code…`), 'wait')
   try {
     const d = await (await fetch('/api/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ captureId, i }) })).json()
     if (d.error) throw new Error(d.error)
+    const src = (String(d.block || '').split('\n').find(l => /^(rendered|source|defined|file|code):/.test(l)) || '').replace(/^\w+:\s+/, '')
     // The server's title is authoritative: a textless container gets its inner text.
     const better = d.title && (/^[A-Z]\w*$/.test(label) || label === node.cls.split('.').pop()) ? d.title.slice(0, 34) : label
     if (better !== label) el.querySelector('bdi').textContent = better
     setRef(el, { ...ref, label: better, block: d.block, what: d.what, screen: d.screen })
     setStatus(t('st_resolving', better, d.what), 'ok')
+    act(`anc:${uid}`, L2(`עוגן @${better} · ${d.what || ''}${src ? ` → ${clip(src, 60)}` : ''}`, `anchor @${better} · ${d.what || ''}${src ? ` → ${clip(src, 60)}` : ''}`), 'ok')
     saveDraft()
-  } catch (e) { setStatus(e.message, 'err') }
+  } catch (e) { setStatus(e.message, 'err'); act(`anc:${uid}`, L2(`עוגן @${label}: ${clip(e.message, 80)}`, `anchor @${label}: ${clip(e.message, 80)}`), 'err') }
 }
 ed.addEventListener('mousedown', async e => {
   const chip = e.target.closest('.chip'); if (!chip) return
@@ -2365,7 +2529,7 @@ function placeMarker() {
   back?.focus({ preventScroll: true })
   return el
 }
-function placeSegMarker(s) { s.marker = placeMarker(); lastSpeechSeg = s }
+function placeSegMarker(s) { s.marker = placeMarker(); lastSpeechSeg = s; act(`seg:${s.n}`, L2(`שומע דיבור · קטע ${s.n}…`, `hearing speech · segment ${s.n}…`), 'live') }
 // Words that are still being recognised, shown inside their marker (not undoable, not in the
 // prompt: the marker stays .interim until the final text replaces it through placeTranscript).
 function setLive(marker, text) {
@@ -2524,6 +2688,8 @@ function uttOpen(L, why) {
   const u = { idx: ++L.n, t0: Date.now(), lastLoud: Date.now(), key: null, heard: Boolean(L.speaking), closed: false, broken: false, live: '', why, marker: null }
   u.marker = placeMarker()
   L.utts.push(u); L.open = u
+  act(`utt:${L.kind}:${u.idx}`, L.kind === 'realtime' ? L2(`שומע דיבור · משפט ${u.idx} זורם ל-OpenAI…`, `hearing speech · utterance ${u.idx} streaming to OpenAI…`)
+    : L2(`שומע דיבור · משפט ${u.idx} (זיהוי הדפדפן)…`, `hearing speech · utterance ${u.idx} (browser recognition)…`), 'live')
   return u
 }
 // The next recognizer item belongs to the oldest utterance still waiting for one.
@@ -2541,6 +2707,8 @@ async function uttFinish(L, u, text) {
   u.done = true
   L.utts = L.utts.filter(x => x !== u); if (L.open === u) L.open = null
   text = String(text || '').trim()
+  // (realtime rows are settled by rt_utterance, with its timings; this settles the others)
+  if (actOpen(`utt:${L.kind}:${u.idx}`)) act(`utt:${L.kind}:${u.idx}`, text ? L2(`משפט ${u.idx} · "${clip(text)}"`, `utterance ${u.idx} · "${clip(text)}"`) : L2(`משפט ${u.idx}: לא זוהו מילים`, `utterance ${u.idx}: no words`), text ? 'ok' : 'info')
   if (!text) { u.marker?.remove(); return }
   lastTranscript = (lastTranscript + ' ' + text).slice(-600)
   uilog('transcript', { text, ms: Date.now() - u.t0 })
@@ -2566,6 +2734,7 @@ function uttTick(L, loud, now) {
 // track the meter reads, and reads events off the "oai-events" data channel.
 function rtStart(reconnects = 0) {
   const R = rt = Object.assign(uttList('realtime'), { t0: Date.now(), pc: null, dc: null, live: false, wasLive: false, closed: false, aborted: false, reconnects, model: sttModelName() })
+  act('rt', L2(`מתחבר ל-OpenAI Realtime (${R.model})…`, `connecting to OpenAI Realtime (${R.model})…`), 'wait')
   rtConnect(R).catch(e => rtFailed(R, e))
 }
 async function rtConnect(R) {
@@ -2620,6 +2789,7 @@ function rtEvent(R, e) {
       R.gotSpeech = true
       const u = uttClaim(R, e.item_id)
       u.committedAt = now; uttClose(R, u)
+      act(`utt:realtime:${u.idx}`, L2(`משפט ${u.idx} הסתיים · ממתין לטקסט הסופי מ-OpenAI…`, `utterance ${u.idx} ended · waiting for OpenAI's final text…`), 'wait')
       break
     }
     case 'conversation.item.input_audio_transcription.delta': {
@@ -2628,6 +2798,7 @@ function rtEvent(R, e) {
       u.deltas = (u.deltas || 0) + 1
       u.live += e.delta || ''
       setLive(u.marker, u.live)
+      act(`utt:realtime:${u.idx}`, L2(`מתמלל בזמן אמת · "${clip(u.live.slice(-60))}"`, `transcribing live · "${clip(u.live.slice(-60))}"`), u.committedAt ? 'wait' : 'live')
       break
     }
     case 'conversation.item.input_audio_transcription.completed': {
@@ -2821,7 +2992,7 @@ function hybridPreview(B, key, text) {
 $('#rec').onclick = toggleRec
 // Typing, Enter, a paste or a delete in the text while speaking: the words so far go before it.
 // Only the user's own input — the markers and transcripts inserted here are not a break.
-ed.addEventListener('beforeinput', e => { if (e.isTrusted) { editVia = 'typing'; segBreak(e.inputType) } })
+ed.addEventListener('beforeinput', e => { if (e.isTrusted) { editVia = 'typing'; segBreak(e.inputType); actTyping(e.inputType) } })
 
 // ---------------------------------------------------------------- AI edit ---
 // Three levels of involvement: plain dictation, a light clean-up, or a full edit that reads
@@ -2888,6 +3059,7 @@ async function refineText(level = aiLevel) {
   // The text is locked while the AI works — its answer replaces all of it, so anything added
   // meanwhile would be lost. Anchors, marks and transcripts wait (see textLocked).
   refining = true; $('#refine').classList.add('busy'); uilog('refine', { level })
+  const tRefine = Date.now()
   let done; refineIdle = new Promise(ok => { done = ok })
   setStatus(t('st_refining', t('ai_' + level)), 'busy')
   ed.contentEditable = 'false'; ed.classList.add('locked')
@@ -2906,7 +3078,8 @@ async function refineText(level = aiLevel) {
     for (const c of ed.querySelectorAll('.chip')) refOf(c)
     rememberCaret(); saveDraft(); syncMarks(); updateDual()
     setStatus(t('st_refined', t('ai_' + level)), 'ok')
-  } catch (e) { setStatus(e.message, 'err') }
+    uilog('refine_done', { level, ms: Date.now() - tRefine, chars: d.text.length })
+  } catch (e) { setStatus(e.message, 'err'); uilog('refine_error', { level, ms: Date.now() - tRefine, message: String(e.message || e).slice(0, 200) }) }
   finally { refining = false; $('#refine').classList.remove('busy'); ed.contentEditable = 'true'; ed.classList.remove('locked'); done() }
 }
 // At the end of a recording the last segments are still being transcribed; wait until their
@@ -3405,6 +3578,7 @@ function connectEvents() {
   }
   sse.onerror = () => { setTimeout(connectEvents, 3000) }
 }
+actInit()
 connectEvents()
 // The last device chosen by hand is remembered per project and re-selected when it is back.
 $('#device').addEventListener('change', async e => {
