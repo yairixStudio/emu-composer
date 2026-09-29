@@ -194,19 +194,28 @@ happened even if you kept typing. How speech becomes text is chosen in ⚙ › D
 
 - **OpenAI realtime** (default) — the mic streams to OpenAI's Realtime API over WebRTC; the
   server mints a short-lived client secret per session (`POST /api/stt/session`), so the
-  permanent key never reaches the page. Words show in grey as they are recognised and settle
-  into the final transcript. Server VAD closes each phrase at the pause setting. If the
-  session cannot connect or drops, it falls back to per-pause for the rest of the recording
+  permanent key never reaches the page. With `gpt-live-transcribe` (the default live model)
+  the words appear, grey, WHILE you speak and OpenAI's final text replaces them at each pause
+  (about $1 per recorded hour). The page owns the turns: it commits at each pause (the pause
+  setting) and, after an anchor or a keystroke mid-sentence, at the next gap between words.
+  The session is connected ahead of time — on page load, when the text gains focus, when the
+  pointer reaches the mic — with no microphone on it (no audio is sent while idle) and closed after
+  5 idle minutes; a recording just puts the mic on it. Audio said before it is up is buffered
+  and fed in. If it cannot connect it falls back to per-pause for the rest of the recording
   and says so.
 - **OpenAI per pause** — segments cut at pauses (not on a timer, so words are not split), one
   `POST /api/transcribe` each.
 - **Browser live** — the browser's own `SpeechRecognition` (in Chrome, audio goes to Google);
   no key needed.
-- **Hybrid** — per-pause OpenAI transcripts, with the browser's live guess shown until each
-  one lands.
+- **Hybrid** — the browser's live guess at once, replaced at each pause by the final text of
+  an OpenAI realtime session running the transcription model (committed turns, cheaper than
+  `gpt-live-transcribe`).
 
-Also there: the model (`gpt-4o-transcribe` / `gpt-4o-mini-transcribe` / `whisper-1`, default
-from `stt.model`), the language, the pause length (300–1500 ms) and noise reduction. OpenAI
+Also there: the live model (`gpt-live-transcribe`, or a committed-turn model — text only
+after each pause), its delay (`minimal` … `xhigh`, default `medium`), the transcription model
+for per-pause and hybrid (`gpt-transcribe` / `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` /
+`whisper-1`, default from `stt.model`), the language, the pause length (300–1500 ms) and noise
+reduction. A transcript with no letters or digits (a breath read as ".") is dropped. OpenAI
 providers need a key, entered once in the page and stored at
 `~/.config/emu-composer/openai-key` (mode 600) — the page never receives it back.
 

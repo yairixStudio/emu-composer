@@ -427,7 +427,7 @@
   .provlist .tag{font:600 10px/1 var(--mono);padding:3px 6px;border-radius:5px;background:var(--panel2);color:var(--dim)}
   .provlist .tag.na{display:none}
   .provlist button.na .tag.na{display:inline}
-  #sttModel{max-width:280px}
+  #sttModel, #sttLiveModel{max-width:280px}
   .rangebox{display:flex;align-items:center;gap:10px;flex:0 0 auto}
   .rangebox input{width:150px;accent-color:var(--accent2)}
   .rangebox output{min-width:56px;text-align:end;font:500 12px/1 var(--mono);color:var(--dim)}
@@ -701,6 +701,9 @@
             <button type="button" role="radio" data-prov="browser"><span class="pn"><span data-t="prov_browser"></span><span class="tag na" data-t="prov_na"></span></span><small data-t="prov_browser_help"></small></button>
             <button type="button" role="radio" data-prov="hybrid"><span class="pn"><span data-t="prov_hybrid"></span><span class="tag na" data-t="prov_na"></span></span><small data-t="prov_hybrid_help"></small></button>
           </div>
+          <div class="srow"><div><b data-t="s_live_model">מודל חי</b><small data-t="s_live_model_note"></small></div><select id="sttLiveModel"></select></div>
+          <div class="srow"><div><b data-t="s_delay">השהיית הטקסט החי</b><small data-t="s_delay_note"></small></div>
+            <select id="sttDelay" dir="ltr"><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option></select></div>
           <div class="srow"><div><b data-t="s_stt_model">מודל תמלול</b><small data-t="s_stt_model_note"></small></div><select id="sttModel"></select></div>
           <div class="srow"><div><b data-t="s_stt_lang">שפת ההקלטה</b></div>
             <select id="sttlang"><option value="">auto</option><option value="he">עברית</option><option value="en">English</option><option value="es">Español</option><option value="ar">العربية</option><option value="ru">Русский</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
@@ -818,14 +821,16 @@ const I18N = {
     st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש', st_marks_hold: 'המסך השתנה, אבל נשאר קפוא כי ציירת עליו — הקשה באפליקציה או רענון ימשיכו',
     tab_dict: 'הכתבה', dict_note: 'איך הדיבור הופך לטקסט. בכל אחת מהדרכים דיבור, הקלדה, אנטר ועוגנים נכנסים לטקסט בסדר שבו קרו.',
     prov_realtime: 'OpenAI בזמן אמת', prov_rec: 'מומלץ', prov_na: 'לא זמין בדפדפן הזה',
-    prov_realtime_help: 'האיכות הגבוהה ביותר. המיקרופון זורם ישירות ל-OpenAI (WebRTC עם מפתח זמני — המפתח שלך לא יוצא מהמחשב), המילים זורמות פנימה באפור במקום שבו התחלת לדבר ומתייצבות לטקסט הסופי. עלות: תמחור התמלול של OpenAI. אם החיבור נכשל — עובר לבד ל"בכל הפסקה".',
+    prov_realtime_help: 'המילים מופיעות תוך כדי דיבור (\u2068gpt-live-transcribe\u2069): המיקרופון זורם ישירות ל-OpenAI (WebRTC עם מפתח זמני — המפתח שלך לא יוצא מהמחשב), המילים גדלות באפור במקום שבו התחלת לדבר, ובכל הפסקה הטקסט הסופי של OpenAI מחליף אותן. החיבור מוכן מראש, בלי מיקרופון (שום אודיו לא נשלח בהמתנה; נסגר אחרי 5 דקות בלי שימוש), כך שההקלטה מתחילה מיד. עלות: כ-1$ לשעת הקלטה. אם החיבור נכשל — עובר לבד ל"בכל הפסקה".',
     prov_segments: 'OpenAI בכל הפסקה', prov_segments_help: 'ההתנהגות הקודמת: קטע נחתך בכל הפסקה ונשלח לתמלול. אותה איכות ואותה עלות, בלי טקסט חי — עיגול מסתובב עד שהקטע חוזר. האודיו עובר דרך השרת המקומי ל-OpenAI.',
     prov_browser: 'זיהוי הדפדפן', prov_browser_help: 'חינם, מיידי ובלי מפתח, אבל איכות נמוכה יותר — בעיקר בעברית ובמונחים טכניים. פרטיות: ב-Chrome האודיו נשלח לשרתים של Google.',
-    prov_hybrid: 'היברידי', prov_hybrid_help: 'טקסט חי מהדפדפן מיד, ובכל הפסקה התמלול של OpenAI מחליף אותו. איכות OpenAI עם תצוגה מיידית; האודיו נשלח גם ל-Google (ב-Chrome) וגם ל-OpenAI.',
-    s_stt_model: 'מודל תמלול', s_stt_model_note: 'gpt-4o-transcribe — הכי מדויק · mini — מהיר וזול · whisper-1 — ישן, בלי טקסט זורם',
+    prov_hybrid: 'היברידי', prov_hybrid_help: 'הניחוש של הדפדפן מופיע מיד באפור, ובכל הפסקה הטקסט הסופי מחיבור OpenAI בזמן אמת (מודל התמלול למטה) מחליף אותו. זול בערך פי 3 מ"בזמן אמת"; האודיו נשלח גם ל-Google (ב-Chrome) וגם ל-OpenAI.',
+    s_stt_model: 'מודל תמלול', s_stt_model_note: 'ל"בכל הפסקה" ולטקסט הסופי של "היברידי". \u2068gpt-transcribe\u2069 — הכי מדויק · \u2068gpt-4o-transcribe\u2069 · mini — זול · \u2068whisper-1\u2069 — ישן',
+    s_live_model: 'מודל חי', s_live_model_note: 'ל"OpenAI בזמן אמת". \u2068gpt-live-transcribe\u2069 — מילים תוך כדי דיבור · האחרים — טקסט רק אחרי כל הפסקה',
+    s_delay: 'השהיית הטקסט החי', s_delay_note: '\u2068gpt-live-transcribe\u2069 בלבד: נמוך = המילים מגיעות מהר יותר, גבוה = טקסט סופי מדויק יותר. \u2068medium\u2069 ≈ שנייה וחצי.',
     s_pause: 'רגישות להפסקה', s_pause_note: 'כמה שקט סוגר משפט. קצר = הטקסט מגיע מהר אבל משפטים נחתכים באמצע; ארוך = משפטים שלמים.',
-    s_noise: 'הפחתת רעשים', s_noise_note: 'בתמלול בזמן אמת בלבד: מסנן רעשי רקע למיקרופון קרוב (near-field).', ms_unit: '{0} מ״ש',
-    st_rt_connecting: 'מקליט — מתחבר לתמלול חי…', st_rt_live: 'מקליט — תמלול חי', st_rt_reconnect: 'החיבור לתמלול החי נפל — מתחבר מחדש…',
+    s_noise: 'הפחתת רעשים', s_noise_note: 'בזמן אמת ובהיברידי: מסנן רעשי רקע למיקרופון קרוב (near-field).', ms_unit: '{0} מ״ש',
+    st_rt_connecting: 'מקליט — מתחבר לתמלול חי (מה שנאמר נשמר)…', st_rt_live: 'מקליט — תמלול חי', st_rt_reconnect: 'החיבור לתמלול החי נפל — מתחבר מחדש…',
     st_rt_fallback: 'התמלול החי לא זמין ({0}) — עבר לתמלול בכל הפסקה', st_br_fallback: 'זיהוי הדיבור של הדפדפן לא זמין ({0}) — עבר לתמלול בכל הפסקה',
     st_rec_browser: 'מקליט — זיהוי הדפדפן', st_stt_next: 'ייכנס לתוקף מההקלטה הבאה', st_hybrid_nopreview: 'התצוגה החיה של הדפדפן נפלה ({0}) — ממשיך בתמלול בכל הפסקה',
   },
@@ -896,14 +901,16 @@ const I18N = {
     st_mark_added: 'mark {0} added — write what to do with it', st_mark_undone: 'mark {0} removed', st_screen_changed: 'screen changed — re-captured', st_marks_hold: 'the screen changed but stays still because you drew on it — a tap or refresh moves on',
     tab_dict: 'Dictation', dict_note: 'How speech becomes text. Whichever you pick, speech, typing, Enter and anchors land in the text in the order they happened.',
     prov_realtime: 'OpenAI realtime', prov_rec: 'recommended', prov_na: 'not available in this browser',
-    prov_realtime_help: 'Highest quality. The mic streams straight to OpenAI (WebRTC with a short-lived key — your key never leaves this Mac); words stream in, grey, where you started speaking and settle into the final text. Cost: OpenAI transcription pricing. If the connection fails it switches to "per pause" on its own.',
+    prov_realtime_help: 'Words appear while you speak (gpt-live-transcribe): the mic streams straight to OpenAI (WebRTC with a short-lived key — your key never leaves this Mac), the words grow, grey, where you started speaking, and at each pause OpenAI\'s final text replaces them. The connection is made ahead of time with no mic on it (no audio is sent while idle; it closes after 5 idle minutes), so recording starts at once. Cost: about $1 per hour recorded. If the connection fails it switches to "per pause" on its own.',
     prov_segments: 'OpenAI per pause', prov_segments_help: 'The previous behaviour: a segment is cut at every pause and sent for transcription. Same quality and cost, no live text — a spinner until the segment comes back. Audio goes through the local server to OpenAI.',
     prov_browser: 'Browser live', prov_browser_help: 'Free, instant, no key — but lower quality, especially in Hebrew and for technical terms. Privacy: in Chrome the audio is sent to Google.',
-    prov_hybrid: 'Hybrid', prov_hybrid_help: "The browser's live text at once, replaced at every pause by OpenAI's transcript. OpenAI quality with an instant preview; audio goes to both Google (in Chrome) and OpenAI.",
-    s_stt_model: 'Transcription model', s_stt_model_note: 'gpt-4o-transcribe — most accurate · mini — faster and cheaper · whisper-1 — older, no streaming text',
+    prov_hybrid: 'Hybrid', prov_hybrid_help: "The browser's guess appears at once, grey, and at each pause the final text of an OpenAI realtime session (the transcription model below) replaces it. About a third of the cost of realtime; audio goes to both Google (in Chrome) and OpenAI.",
+    s_stt_model: 'Transcription model', s_stt_model_note: 'For "per pause" and the final text of "hybrid". gpt-transcribe — most accurate · gpt-4o-transcribe · mini — cheaper · whisper-1 — older',
+    s_live_model: 'Live model', s_live_model_note: 'For "OpenAI realtime". gpt-live-transcribe — words while you speak · the others — text only after each pause',
+    s_delay: 'Live text delay', s_delay_note: 'gpt-live-transcribe only: lower = words sooner, higher = a more accurate final text. medium ≈ 1.5 s.',
     s_pause: 'Pause sensitivity', s_pause_note: 'How much silence closes a phrase. Short = text sooner but phrases cut mid-way; long = whole sentences.',
-    s_noise: 'Noise reduction', s_noise_note: 'Realtime only: filters background noise for a close microphone (near-field).', ms_unit: '{0} ms',
-    st_rt_connecting: 'recording — connecting live transcription…', st_rt_live: 'recording — live transcription', st_rt_reconnect: 'live transcription dropped — reconnecting…',
+    s_noise: 'Noise reduction', s_noise_note: 'Realtime and hybrid: filters background noise for a close microphone (near-field).', ms_unit: '{0} ms',
+    st_rt_connecting: 'recording — connecting live transcription (what you say is kept)…', st_rt_live: 'recording — live transcription', st_rt_reconnect: 'live transcription dropped — reconnecting…',
     st_rt_fallback: 'live transcription unavailable ({0}) — switched to per pause', st_br_fallback: 'browser speech recognition unavailable ({0}) — switched to per pause',
     st_rec_browser: 'recording — browser recognition', st_stt_next: 'applies from the next recording', st_hybrid_nopreview: "the browser's live preview stopped ({0}) — carrying on per pause",
   },
@@ -1473,6 +1480,10 @@ $('#screen').addEventListener('mousedown', e => {
   // preventDefault also keeps the focus where it was — in jem that is the text's caret.
   e.preventDefault(); if (mode === 'use') $('#screen').focus()
   down = { ...toDisplay(e.clientX, e.clientY), t: Date.now(), cx: e.clientX, cy: e.clientY, i: mode === 'jem' ? hitTest(e.clientX, e.clientY) : -1, shift: e.shiftKey }
+  // The label is taken NOW: `i` indexes the element list of this moment, and a capture that
+  // lands before the release replaces that list — labelFor(i) then named whatever sits at that
+  // index on the new screen ("T-Mobile, three bars." for a tap chipped as "Drag handle").
+  down.label = down.i >= 0 ? labelFor(down.i) : ''
   // Direct touch (the iOS simulator through simbridge): the finger goes down now and follows
   // the pointer. A press that starts on the screen's edge carries that edge, which is how the
   // system reads its own gestures — back from the left, home from the bottom.
@@ -1508,7 +1519,7 @@ function touchUp(p) {
   const d = down; down = null; touchMove = null
   input({ type: 'touch', p: 'up', ...(p || d.last || { x: d.x, y: d.y }) })
   uilog('touch-drag', { moves: d.moves || 0, ms: Date.now() - d.t, mode })
-  if (d.jem) { uilog('device-input', { type: 'drag', label: d.i >= 0 ? labelFor(d.i) : '' }); recaptureSoon(450) }
+  if (d.jem) { uilog('device-input', { type: 'drag', label: d.label || '' }); recaptureSoon(450) }
 }
 addEventListener('blur', () => touchUp())
 document.addEventListener('visibilitychange', () => { if (document.hidden) touchUp() })
@@ -1528,12 +1539,14 @@ addEventListener('mouseup', async e => {
   // from before the tap. ⇧-click taps only. While the picture is a live frame after an
   // earlier action, the element tree is from the screen BEFORE it: capture first, then
   // anchor what is actually under the cursor, then tap (costs a capture only in that case).
+  let label = d.label || ''
   if (mode === 'jem' && cmd.type === 'tap' && anchorTaps && !d.shift) {
     let i = d.i
-    if (screenStale) { await capture({ fresh: true }); i = hitAt(d.x, d.y) }
+    // The index is re-resolved against the fresh list, and so is the label the journal gets.
+    if (screenStale) { await capture({ fresh: true }); i = hitAt(d.x, d.y); label = i >= 0 ? labelFor(i) : '' }
     if (i >= 0) insertRef(i, 'tap')
   }
-  if (mode === 'jem') uilog('device-input', { type: cmd.type, label: d.i >= 0 ? labelFor(d.i) : '', anchored: cmd.type === 'tap' && anchorTaps && !d.shift })
+  if (mode === 'jem') uilog('device-input', { type: cmd.type, label, anchored: cmd.type === 'tap' && anchorTaps && !d.shift })
   input(cmd).then(() => { if (mode === 'jem') recaptureSoon(450) })
 })
 // Jem shows a still capture, so every action on the device is followed by a fresh one.
@@ -2260,15 +2273,15 @@ function fillSelect(sel, values, current, defLabel) {
   if (current && !values.includes(current)) sel.insertAdjacentHTML('beforeend', `<option value="${escapeHTML(current)}" selected>${escapeHTML(current)}</option>`)
 }
 async function loadModels() {
-  let m = { stt: [], chat: [] }
+  let m = { stt: [], live: [], chat: [] }
   try { m = await (await fetch('/api/models')).json() } catch {}
-  sttModelList = m.stt || []
+  sttModelList = m.stt || []; liveModelList = m.live || []
   fillSelect($('#mStt'), sttModelList, modelFor('stt'), t('m_default', sttCfgModel))
   fillSttModels()
   fillSelect($('#mClean'), m.chat || [], modelFor('clean'), t('m_default', MODEL_DEFAULTS.clean))
   fillSelect($('#mFull'), m.chat || [], modelFor('full'), t('m_default', MODEL_DEFAULTS.full))
 }
-for (const id of ['#mStt', '#mClean', '#mFull']) $(id).addEventListener('change', e => { LS('emucomposer.model.' + e.target.dataset.m, e.target.value); if (e.target.dataset.m === 'stt') fillSttModels() })
+for (const id of ['#mStt', '#mClean', '#mFull']) $(id).addEventListener('change', e => { LS('emucomposer.model.' + e.target.dataset.m, e.target.value); if (e.target.dataset.m === 'stt') { fillSttModels(); rtInvalidate() } })
 function fillAgentModels() {
   const a = agentsCache.find(x => x.id === $('#agent').value)
   fillSelect($('#mAgent'), a?.models || [], LS('emucomposer.model.agent.' + (a?.id || '')) || '', t('m_agent_default'))
@@ -2436,17 +2449,21 @@ $('#histlist').addEventListener('keydown', e => {
 //
 // How speech becomes text is chosen in Settings › Dictation (sttPref.provider):
 //   realtime  (default) the mic streams to OpenAI's Realtime API over WebRTC with a short-lived
-//             key the server mints (POST /api/stt/session); each utterance's words show live
-//             in grey inside its marker and the final transcript replaces them. While the
-//             session connects, and whenever it fails, the per-pause recorder below does the
-//             work — a failure falls back to it for the rest of the recording and says so.
+//             key the server mints (POST /api/stt/session). With gpt-live-transcribe (the
+//             default live model) the words arrive WHILE speaking: they grow, grey, inside the
+//             utterance's marker and OpenAI's final text replaces them at each pause. The page
+//             owns the turns — it commits the audio at each pause (the meter below) and at a
+//             gap between words after an anchor or a keystroke. The session is connected
+//             AHEAD of time (rtWarm: page load, focus, mic hover) with no microphone on it, so
+//             a recording starts at once; audio said before it is up is buffered and fed in.
+//             If it cannot connect, the per-pause recorder below takes over and says so.
 //   segments  the per-pause recorder: segments cut at PAUSES (the pause setting of silence),
 //             never mid-syllable, with a hard cap for a monologue; one POST /api/transcribe
 //             each, primed with the previous tail. The next recorder starts BEFORE the
 //             previous one stops, so no word falls into the gap.
 //   browser   the browser's own SpeechRecognition, interim results live (Chrome: Google).
-//   hybrid    segments, with the browser's live guess shown in each marker until the
-//             segment's OpenAI transcript replaces it.
+//   hybrid    the browser's live guess shown at once, grey, and replaced at each pause by the
+//             realtime session's final text (the transcription model, committed turns).
 // Whatever the provider, the meter (startMeter) owns the microphone and speech detection.
 let mediaRec = null, recOn = false, audioCtx = null, stream = null
 let seg = null, segN = 0, lastTranscript = '', lastSpeechSeg = null
@@ -2459,46 +2476,55 @@ const vuBars = [...document.querySelectorAll('#vu i')]
 const VU_MAX = [5, 9, 13, 9, 5]
 
 const STT_PROVIDERS = ['realtime', 'segments', 'browser', 'hybrid']
+const RT_DELAYS = ['minimal', 'low', 'medium', 'high', 'xhigh']
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null
 const sttPref = {
   get provider() { const v = LS('emucomposer.stt.provider'); return STT_PROVIDERS.includes(v) ? v : 'realtime' },
   get silenceMs() { const v = Number(LS('emucomposer.stt.silenceMs')); return v >= 300 && v <= 1500 ? v : 450 },
   get noise() { return LS('emucomposer.stt.noise') !== '0' },
   get reconnect() { return LS('emucomposer.stt.reconnect') !== '0' },
+  // gpt-live-transcribe's latency/accuracy knob: medium ≈ 1.4 s to the first words
+  get delay() { const v = LS('emucomposer.stt.delay'); return RT_DELAYS.includes(v) ? v : 'medium' },
 }
-let sttCfgModel = 'gpt-4o-transcribe'   // the project's cfg.stt.model, from /api/health
+let sttCfgModel = 'gpt-4o-transcribe'        // the project's cfg.stt.model, from /api/health
+let sttLiveCfgModel = 'gpt-live-transcribe'  // the server's live default, from /api/health
 const sttLang = () => sttOverride ?? sttLanguage
 const sttModelName = () => modelFor('stt') || sttCfgModel
+const liveModelName = () => LS('emucomposer.stt.liveModel') || sttLiveCfgModel
 let sttActive = ''   // the provider running this recording ('' = not recording)
-let rt = null        // this recording's realtime session
+let rt = null        // the realtime session feeding this recording
 let br = null        // this recording's browser recognizer
-// The per-pause recorder runs for segments and hybrid, and for realtime until it is live.
-const usesSegments = () => sttActive === 'segments' || sttActive === 'hybrid' || (sttActive === 'realtime' && !rt?.live)
+// The per-pause recorder runs for segments, and for hybrid once its realtime session failed.
+const usesSegments = () => sttActive === 'segments' || (sttActive === 'hybrid' && !rt)
+const micTrack = () => stream?.getAudioTracks()[0] || null
+const pickMime = () => ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(mt => MediaRecorder.isTypeSupported(mt)) || ''
 
 async function toggleRec() {
   if (recOn) return stopRec()
   if (textLocked()) return
   let want = sttPref.provider
+  // Before the mic prompt: if nothing is warm yet, every millisecond of connecting counts.
+  if (want === 'realtime' || want === 'hybrid') rtWarm('record')
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
-  if ((want === 'browser' || want === 'hybrid') && !SpeechRec) {
+  if (want === 'browser' && !SpeechRec) {
     uilog('provider_fallback', { from: want, to: 'segments', why: 'no SpeechRecognition in this browser' })
     want = 'segments'
   }
+  if (want === 'hybrid' && !SpeechRec) uilog('provider_fallback', { from: want, to: 'hybrid (no live preview)', why: 'no SpeechRecognition in this browser' })
   recOn = true; recStartAt = Date.now(); segCutCount = 0; SILENCE_MS = sttPref.silenceMs; sttActive = want
-  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(mt => MediaRecorder.isTypeSupported(mt)) || ''
-  const track = stream.getAudioTracks()[0]
+  const mime = pickMime()
+  const track = micTrack()
   uilog('rec', { on: true })
   uilog('rec_start', { mimeType: mime, sampleRate: track?.getSettings?.().sampleRate || null, deviceLabel: track?.label || '',
     speechLevel: SPEECH_LEVEL, silenceMs: SILENCE_MS, segMinMs: SEG_MIN_MS, segMaxMs: SEG_MAX_MS, provider: want })
   $('#rec').classList.add('on'); $('#vu').hidden = false; recTitle(); renderGuide()
-  setStatus(t(want === 'realtime' ? 'st_rt_connecting' : want === 'browser' ? 'st_rec_browser' : 'st_rec_hint'), 'busy')
+  setStatus(t(want === 'browser' ? 'st_rec_browser' : 'st_rec_hint'), 'busy')
   startMeter()
-  if (want !== 'browser') startSegment(mime)
-  if (want === 'segments' || want === 'hybrid') uilog('stt_session', { provider: want, model: sttModelName(), ms: 0, ok: true })
-  if (want === 'realtime') rtStart()
-  if (want === 'browser' || want === 'hybrid') brStart()
+  if (want === 'segments') { startSegment(mime); uilog('stt_session', { provider: want, model: sttModelName(), ms: 0, ok: true }) }
+  if (want === 'realtime' || want === 'hybrid') rtAttach(want, mime)
+  if (want === 'browser' || (want === 'hybrid' && SpeechRec)) brStart()
 }
 function startSegment(mime) {
   if (!recOn) return
@@ -2556,7 +2582,7 @@ function segBreak(why) {
     seg.broken = true
     cutSegment('break')   // not a natural pause or the max-length cap — 'why' above has the real cause
   }
-  if (rt?.live && rt.open) rtBreak(rt, why)
+  if (rt?.open) rtBreak(rt, why)
   if (sttActive === 'browser' && br?.open) brSplit(br, why)
 }
 function stopRec() {
@@ -2565,7 +2591,7 @@ function stopRec() {
   // segment recorder has stopped, and the realtime session has had its last words.
   const st = stream, waits = []
   if (seg?.rec.state === 'recording') { const r = seg.rec; waits.push(new Promise(ok => r.addEventListener('stop', ok, { once: true }))); cutSegment('stop') }
-  if (rt) { waits.push(rtStop(rt)); rt = null }
+  if (rt) { waits.push(rtDetach(rt)); rt = null }
   if (br) { brStop(br); br = null }
   Promise.all(waits).then(() => st?.getTracks().forEach(tr => tr.stop()))
   sttActive = ''
@@ -2601,7 +2627,7 @@ function startMeter() {
       const len = now - seg.t0, quiet = now - seg.lastLoud
       if ((seg.hadSpeech && len > SEG_MIN_MS && quiet > SILENCE_MS) || len > SEG_MAX_MS) cutSegment(len > SEG_MAX_MS ? 'max' : 'pause')
     }
-    if (rt?.live) { uttTick(rt, loud, now); rtWatch(rt, loud, now) }
+    if (rt) rtTick(rt, loud, now)
     if (br && sttActive === 'browser') uttTick(br, loud, now)
     windowPeak = Math.max(windowPeak, rms)
     if (now - lastLevelAt >= 1000) {   // a compact level sample, at most once a second
@@ -2624,7 +2650,8 @@ async function sendSegment(blob, s) {
     const ms = Date.now() - tSend
     if (d.error) { uilog('seg_error', { segIdx: s.n, ms, message: String(d.error).slice(0, 200) }); setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); keepPreview(); return }
     const text = (d.text || '').trim()
-    if (!text) { uilog('seg_empty', { segIdx: s.n, ms }); s.done = true; s.marker?.remove(); return }
+    // A lone "." is what a breath or a click transcribes to: no letters, no digits, no text.
+    if (!hasWords(text)) { uilog('seg_empty', { segIdx: s.n, ms, ...(text ? { why: 'no-words', text: text.slice(0, 20) } : {}) }); s.done = true; s.marker?.remove(); return }
     uilog('seg_result', { segIdx: s.n, ms, chars: text.length, preview: text.slice(0, 60) })
     lastTranscript = (lastTranscript + ' ' + text).slice(-600)
     uilog('transcript', { text, ms: Date.now() - s.t0 })
@@ -2676,6 +2703,26 @@ function placeTranscript(marker, text, broken = false) {
   back?.focus({ preventScroll: true })
 }
 
+// <dictation-pure> Pure helpers (test/dictation.test.mjs runs this block on its own).
+// A transcript worth placing has a letter or a digit: a lone "." is a breath or a click.
+const hasWords = s => /[\p{L}\p{N}]/u.test(String(s || ''))
+const normWords = s => String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+// Why a final transcript is not placed ('' = place it). prevText is given only for the
+// utterance right after a break commit: a remainder that merely repeats the END of the words
+// before the break is the other half of a word the cut went through ("…האייטם הזה." then
+// "זה."), compared character-wise because Hebrew glues ה/ו/ב/ל/ש onto the next word. A short
+// answer that is not such a repeat ("כן." after "…לעמוד של פלייסר.") always stays.
+function dictJunk(text, prevText) {
+  if (!String(text || '').trim()) return 'empty'
+  if (!hasWords(text)) return 'no-words'
+  if (prevText != null) {
+    const a = normWords(prevText), b = normWords(text)
+    if (b && b.split(' ').length <= 3 && a.length > b.length && a.endsWith(b)) return 'dup-tail'
+  }
+  return ''
+}
+// </dictation-pure>
+
 // ---- live utterances (realtime + browser) ----
 // An utterance opens where speech began — at the meter's onset, or where the caret is when
 // the recognizer reports speech the meter missed — shows its words live inside its marker,
@@ -2685,33 +2732,46 @@ function placeTranscript(marker, text, broken = false) {
 // has a way out — expiry, timeout, hang-up — so no marker is left spinning (✨ waits on them).
 function uttList(kind) { return { kind, utts: [], open: null, byKey: new Map(), n: 0, speaking: false, quietAt: 0 } }
 function uttOpen(L, why) {
-  const u = { idx: ++L.n, t0: Date.now(), lastLoud: Date.now(), key: null, heard: Boolean(L.speaking), closed: false, broken: false, live: '', why, marker: null }
+  const u = { idx: ++L.n, t0: Date.now(), lastLoud: Date.now(), key: null, heard: Boolean(L.speaking), closed: false, broken: false, live: '', why, marker: null, loudMs: 0, deltas: 0 }
   u.marker = placeMarker()
   L.utts.push(u); L.open = u
   act(`utt:${L.kind}:${u.idx}`, L.kind === 'realtime' ? L2(`שומע דיבור · משפט ${u.idx} זורם ל-OpenAI…`, `hearing speech · utterance ${u.idx} streaming to OpenAI…`)
     : L2(`שומע דיבור · משפט ${u.idx} (זיהוי הדפדפן)…`, `hearing speech · utterance ${u.idx} (browser recognition)…`), 'live')
   return u
 }
-// The next recognizer item belongs to the oldest utterance still waiting for one.
-function uttClaim(L, key) {
+// The next recognizer item belongs to the oldest utterance still waiting for one. With
+// open=false (a warm realtime session no recording is using) an unknown item opens nothing.
+function uttClaim(L, key, open = true) {
   let u = L.byKey.get(key)
   if (u) return u
-  u = L.utts.find(x => x.key == null) || uttOpen(L, 'recognizer')
+  u = L.utts.find(x => x.key == null)
+  if (!u) { if (!open) return null; u = uttOpen(L, 'recognizer') }
   u.key = key; u.keyAt = Date.now(); u.heard = true
   L.byKey.set(key, u)
   return u
 }
 function uttClose(L, u) { u.closed = true; u.closedAt ||= Date.now(); if (L.open === u) L.open = null }
-async function uttFinish(L, u, text) {
+async function uttFinish(L, u, text, force = false) {
   if (u.done) return
-  u.done = true
+  text = String(text || '').trim().replace(/^[\s.,;:!?…]+/u, '')   // a carried-over breath comes back as a leading "."
+  const prev = u.afterBreak
+  // A remainder right after a break waits for the words before the break (finals from two
+  // turns may arrive in either order), to be compared with them.
+  if (prev && !prev.done && !force && text) { u.held = text; clearTimeout(u.holdTimer); u.holdTimer = setTimeout(() => uttFinish(L, u, u.held, true), 4000); return }
+  u.done = true; clearTimeout(u.holdTimer)
   L.utts = L.utts.filter(x => x !== u); if (L.open === u) L.open = null
-  text = String(text || '').trim()
+  const junk = dictJunk(text, prev ? prev.finalText || '' : null)
   // (realtime rows are settled by rt_utterance, with its timings; this settles the others)
-  if (actOpen(`utt:${L.kind}:${u.idx}`)) act(`utt:${L.kind}:${u.idx}`, text ? L2(`משפט ${u.idx} · "${clip(text)}"`, `utterance ${u.idx} · "${clip(text)}"`) : L2(`משפט ${u.idx}: לא זוהו מילים`, `utterance ${u.idx}: no words`), text ? 'ok' : 'info')
-  if (!text) { u.marker?.remove(); return }
-  lastTranscript = (lastTranscript + ' ' + text).slice(-600)
-  uilog('transcript', { text, ms: Date.now() - u.t0 })
+  if (actOpen(`utt:${L.kind}:${u.idx}`)) act(`utt:${L.kind}:${u.idx}`, !junk ? L2(`משפט ${u.idx} · "${clip(text)}"`, `utterance ${u.idx} · "${clip(text)}"`) : L2(`משפט ${u.idx}: לא זוהו מילים`, `utterance ${u.idx}: no words`), !junk ? 'ok' : 'info')
+  if (junk) { if (text) uilog('utt_drop', { provider: L.kind, idx: u.idx, why: junk, text: text.slice(0, 40) }); u.marker?.remove() }
+  else {
+    u.finalText = text
+    lastTranscript = (lastTranscript + ' ' + text).slice(-600)
+    uilog('transcript', { text, ms: Date.now() - u.t0 })
+  }
+  for (const f of [...L.utts]) if (f.afterBreak === u && f.held != null) uttFinish(L, f, f.held, true)
+  if (L.stale && !L.utts.length && !L.inUse) rtClose(L, L.stale)
+  if (junk) return
   await refineIdle   // a transcript that lands while the AI edits waits for its answer
   placeTranscript(u.marker, text, u.broken)
 }
@@ -2729,23 +2789,60 @@ function uttTick(L, loud, now) {
 
 // ---- realtime: OpenAI Realtime transcription over WebRTC ----
 // POST /api/stt/session mints a client secret for one transcription session (model, language,
-// server VAD at the pause setting, noise reduction — all fixed at mint time; nothing is ever
-// sent to update it). The page offers SDP to /v1/realtime/calls with it, sends the SAME mic
-// track the meter reads, and reads events off the "oai-events" data channel.
-function rtStart(reconnects = 0) {
-  const R = rt = Object.assign(uttList('realtime'), { t0: Date.now(), pc: null, dc: null, live: false, wasLive: false, closed: false, aborted: false, reconnects, model: sttModelName() })
+// noise reduction, gpt-live-transcribe's delay — fixed at mint; turn_detection is null, the
+// page commits). The page offers SDP to /v1/realtime/calls with it and reads events off the
+// "oai-events" data channel.
+//
+// Warm: the session is set up BEFORE anyone records — page load, the text gaining focus, the
+// pointer on the mic — on an audio transceiver with NO track. No audio flows, so nothing is
+// billed; a recording puts the mic on with replaceTrack() and takes it off again at stop, and
+// the next recording reuses the same session. It is closed after RT_IDLE_MS without use, and
+// never reused past RT_MAX_AGE_MS (OpenAI ends a session at 60 minutes). (2026-09-29: minting
+// and connecting at the record click cost 0.9 s + 1.7 s, and the per-pause stretch that
+// covered them came back 8.8 s later as nonsense.)
+//
+// Turns: an utterance opens at the meter's onset and is committed after the pause setting of
+// quiet; one with too little speech in it (a click, a breath) is dropped instead of committed.
+// An act in the text (anchor, key, mark) closes the utterance where it is, but its commit
+// waits for a gap between words (RT_GAP_MS of quiet, at most RT_GAP_MAX_MS): committing at
+// the click cut a word in two — the data channel overtakes the audio still in flight — and
+// each half was transcribed ("…האייטם הזה." + "זה.").
+const RT_IDLE_MS = 5 * 60e3, RT_MAX_AGE_MS = 50 * 60e3
+const RT_MIN_LOUD_MS = 120, RT_GAP_MS = 150, RT_GAP_MAX_MS = 1200, RT_ACK_MS = 5000
+let rtw = null   // the warm session (connected or connecting); `rt` is the one a recording uses
+const rtAll = new Set()   // every session not yet closed (a retired one may still owe transcripts)
+// A warm-up that failed (bad key, no network, OpenAI down) is not retried on every keystroke
+// and focus for a minute; a recording, a reconnect, a settings change or a new key still try.
+let rtWarmBlockedUntil = 0
+const RT_WARM_FORCED = new Set(['record', 'reconnect', 'settings', 'key'])
+const rtIsSpeech = u => (u.loudMs || 0) >= RT_MIN_LOUD_MS || hasWords(u.live)
+const rtModelFor = prov => prov === 'hybrid' ? sttModelName() : liveModelName()
+const rtSig = prov => JSON.stringify({ prov, model: rtModelFor(prov), lang: sttLang(), noise: sttPref.noise, delay: sttPref.delay })
+function rtWarm(reason) {
+  const prov = recOn && (sttActive === 'realtime' || sttActive === 'hybrid') ? sttActive : sttPref.provider
+  if ((prov !== 'realtime' && prov !== 'hybrid') || !sttKey) return null
+  const sig = rtSig(prov)
+  if (rtw && !rtw.closed && !rtw.inUse && (rtw.sig !== sig || Date.now() - rtw.t0 > RT_MAX_AGE_MS)) rtRetire(rtw, rtw.sig !== sig ? 'settings' : 'age')
+  if (rtw && !rtw.closed) { rtw.activityAt = Date.now(); return rtw }
+  if (document.hidden && reason !== 'record' && reason !== 'reconnect') return null
+  if (!RT_WARM_FORCED.has(reason) && Date.now() < rtWarmBlockedUntil) return null
+  const R = rtw = Object.assign(uttList(prov), { t0: Date.now(), sig, prov, model: rtModelFor(prov), reason, pc: null, dc: null, sender: null,
+    live: false, wasLive: false, closed: false, inUse: false, activityAt: Date.now(), commitQ: [], reconnects: 0, gen: 0, pend: null })
+  rtAll.add(R)
   act('rt', L2(`מתחבר ל-OpenAI Realtime (${R.model})…`, `connecting to OpenAI Realtime (${R.model})…`), 'wait')
   rtConnect(R).catch(e => rtFailed(R, e))
+  return R
 }
 async function rtConnect(R) {
   const res = await fetch('/api/stt/session', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: modelFor('stt'), language: sttLang(), silenceMs: SILENCE_MS, noise: sttPref.noise, prompt: lastTranscript }) })
+    body: JSON.stringify({ model: R.model, language: sttLang(), noise: sttPref.noise, delay: sttPref.delay, prompt: lastTranscript }) })
   const d = await res.json().catch(() => ({ error: `session endpoint answered ${res.status}` }))
   if (d.error) throw new Error(d.error)
-  if (R.aborted) return
-  R.model = d.model || R.model
+  if (R.closed) return
+  R.mintMs = Date.now() - R.t0; R.model = d.model || R.model; R.streams = Boolean(d.live)
   const pc = R.pc = new RTCPeerConnection()
-  pc.addTrack(stream.getAudioTracks()[0], stream)
+  // No microphone yet: a track-less audio transceiver. replaceTrack() puts the mic on it.
+  R.sender = pc.addTransceiver('audio', { direction: 'sendrecv' }).sender
   const dc = R.dc = pc.createDataChannel('oai-events')
   const opened = new Promise((ok, bad) => { dc.onopen = ok; setTimeout(() => bad(new Error('the event channel did not open within 10 s')), 10000) })
   opened.catch(() => {})   // awaited below; this only keeps an early failure from also reporting it unhandled
@@ -2759,80 +2856,201 @@ async function rtConnect(R) {
   })
   const answer = await r.text()
   if (!r.ok) { let m = answer; try { m = JSON.parse(answer).error?.message || answer } catch {} throw new Error(`OpenAI ${r.status}: ${String(m).slice(0, 160)}`) }
-  if (R.aborted) return rtClose(R, 'stop')
+  if (R.closed) return
   await pc.setRemoteDescription({ type: 'answer', sdp: answer })
   await opened
-  if (R.aborted) return rtClose(R, 'stop')
+  if (R.closed) return
   R.live = R.wasLive = true
   const ms = Date.now() - R.t0
-  uilog('rt_connect', { ms, transport: 'webrtc', model: R.model, reconnect: R.reconnects })
-  uilog('stt_session', { provider: 'realtime', model: R.model, ms, ok: true })
-  // Hand over: the per-pause recorder that held the fort while connecting is cut here, and
-  // what it heard is transcribed as usual; the session has everything from now on.
-  if (seg) cutSegment('handoff')
-  setStatus(t('st_rt_live'), 'busy')
+  uilog('rt_prewarm', { reason: R.reason, ok: true, ms, mintMs: R.mintMs, connectMs: ms - R.mintMs, model: R.model, streams: R.streams, inUse: R.inUse, reconnect: R.reconnects })
+  uilog('rt_connect', { ms, transport: 'webrtc', model: R.model, reconnect: R.reconnects, warm: !R.inUse })
+  rtReady(R)
+}
+function rtReady(R) {
+  if (R.waitFrom) {
+    uilog('rt_ready_at_record', { ready: false, waitMs: Date.now() - R.waitFrom, ok: true, buffered: Boolean(R.pend) })
+    uilog('stt_session', { provider: R.prov, model: R.model, ms: Date.now() - R.waitFrom, ok: true })
+    R.waitFrom = 0
+  }
+  if (R.pend) pendFlush(R)
+  else if (R.inUse && micTrack()) R.sender.replaceTrack(micTrack()).catch(e => rtLost(R, 'replaceTrack: ' + e.message))
+  if (R.inUse && rt === R) setStatus(t('st_rt_live'), 'busy')
+}
+// A recording starts: the warm session gets the mic (or, if it is still connecting, the audio
+// is buffered for it).
+function rtAttach(prov, mime, reconnects = 0) {
+  const R = rtWarm(reconnects ? 'reconnect' : 'record')
+  if (!R) return rtFallback('no realtime session (no key?)')
+  if (reconnects) R.reconnects = reconnects
+  if (R.detachTimer) rtDetachNow(R, false)
+  rt = R; R.inUse = true; R.activityAt = Date.now(); R.gen++
+  R.lastTick = 0; R.lastLoud = Date.now(); R.breakWait = null; R.lastBreakU = null
+  if (R.live && !R.pend) {
+    R.sender.replaceTrack(micTrack()).catch(e => rtLost(R, 'replaceTrack: ' + e.message))
+    uilog('rt_ready_at_record', { ready: true, waitMs: 0, ageMs: Date.now() - R.t0 })
+    uilog('stt_session', { provider: prov, model: R.model, ms: 0, ok: true, warm: true })
+    setStatus(t('st_rt_live'), 'busy')
+  } else {
+    R.waitFrom ||= Date.now()
+    pendStart(R, mime)
+    setStatus(t('st_rt_connecting'), 'busy')
+  }
+}
+// A recording stops: the last words are still on their way, so the mic keeps feeding the
+// session for 400 ms; then the open turn is committed by hand, the mic comes off the track and
+// the session stays warm — the transcripts still in flight keep arriving into their markers.
+function rtDetach(R) { return new Promise(ok => { R.detachDone = ok; R.detachTimer = setTimeout(() => rtDetachNow(R, true), 400) }) }
+function rtDetachNow(R, dropTrack) {
+  clearTimeout(R.detachTimer); R.detachTimer = null
+  if (R.breakWait) { const b = R.breakWait; R.breakWait = null; rtCommitUtt(R, b, 'stop') }
+  const u = R.open
+  if (u) { uttClose(R, u); if (rtIsSpeech(u)) rtCommitUtt(R, u, 'stop'); else rtDropUtt(R, u, 'noise') }
+  if (dropTrack) {
+    R.inUse = false; R.activityAt = Date.now()
+    if (R.pend) pendStopCapture(R.pend)   // all of it is captured; it goes in once the session is up
+    try { R.sender?.replaceTrack(null).catch(() => {}) } catch {}
+    // Audio still in flight when the mic came off lands after the commit: drop it, or it
+    // would lead the next recording's first turn.
+    setTimeout(() => { if (!R.inUse && R.live && !R.pend) rtSend(R, { type: 'input_audio_buffer.clear' }) }, 600)
+    if (R.stale && !R.utts.length) rtClose(R, R.stale)
+  }
+  R.detachDone?.(); R.detachDone = null
+}
+// Settings changed or too old: close it once its last transcripts are in (a warm replacement
+// is set up meanwhile by whoever asks next).
+function rtRetire(R, why) {
+  if (rtw === R) rtw = null
+  if (R.utts.length || R.inUse) R.stale = why; else rtClose(R, why)
 }
 const rtSend = (R, ev) => { try { if (R.dc?.readyState === 'open') { R.dc.send(JSON.stringify(ev)); return true } } catch {} return false }
+function rtCommitUtt(R, u, why) {
+  u.commitWhy = why; u.commitAt = R.lastCutAt = Date.now()
+  if (/^(break|max)/.test(why)) R.lastBreakU = u   // the next utterance may hold the other half of a cut word
+  if (R.pend) { R.pend.ops.push({ commit: u }); u.queued = true }
+  else rtSendCommit(R, u)
+}
+function rtSendCommit(R, u) {
+  if (!rtSend(R, { type: 'input_audio_buffer.commit' })) return uttFinish(R, u, u.live, true)
+  u.commitSentAt = Date.now(); R.commitQ.push(u)
+}
+// Too little speech to be words: not committed (a commit of a breath comes back as "." or an
+// invented phrase), its marker goes. Its audio stays in the buffer and rides along with the
+// next turn; an item it had claimed passes to whoever commits next.
+function rtDropUtt(R, u, why) {
+  R.lastCutAt = Date.now()
+  if (u.key != null && R.byKey.get(u.key) === u) R.byKey.delete(u.key)
+  uilog('utt_drop', { provider: R.kind, idx: u.idx, why, loudMs: Math.round(u.loudMs || 0) })
+  u.done = true; R.utts = R.utts.filter(x => x !== u); if (R.open === u) R.open = null
+  u.marker?.remove()
+}
+// An act in the text mid-utterance: the utterance ends here (its words land before the act),
+// and its commit waits for the next gap between words (rtTick).
+function rtBreak(R, why) {
+  const u = R.open
+  if (!u) return
+  uttClose(R, u)
+  const ms = Date.now() - u.t0
+  if (!rtIsSpeech(u)) { uilog('seg-break', { why, ms, provider: R.kind, commit: false, idx: u.idx }); return rtDropUtt(R, u, 'noise-at-break') }
+  u.broken = true; u.breakAt = Date.now(); R.breakWait = u
+  uilog('seg-break', { why, ms, provider: R.kind, commit: 'at-gap', idx: u.idx })
+}
+// The meter's frame, for the session a recording uses: turn-taking and the ways out.
+function rtTick(R, loud, now) {
+  const dt = R.lastTick ? Math.min(100, now - R.lastTick) : 0
+  R.lastTick = now
+  if (loud) R.lastLoud = now
+  for (const x of R.utts) {
+    if (x.commitSentAt && !x.ackAt && now - x.commitSentAt > RT_ACK_MS) return rtLost(R, 'a commit went unanswered for 5 s')
+    if (x.ackAt && now - x.ackAt > 30000) { uilog('utt_drop', { provider: R.kind, idx: x.idx, why: 'no-final', chars: x.live.length }); uttFinish(R, x, x.live, true); break }
+  }
+  const b = R.breakWait
+  if (b) {
+    const capped = now - b.breakAt >= RT_GAP_MAX_MS
+    if (!capped && (loud || now - R.lastLoud < RT_GAP_MS)) { if (loud) b.loudMs += dt; return }   // the words up to the gap are still its
+    R.breakWait = null
+    rtCommitUtt(R, b, (b.broken ? 'break' : 'max') + (capped ? '-cap' : ''))
+  }
+  // A long quiet with nothing open: the buffer holds only silence (and any dropped click) —
+  // clear it once, so a thinking pause does not lead the next turn (a committed-turn model
+  // can invent a phrase from a long silence; server VAD used to leave silence out).
+  if (loud) R.quietCleared = false
+  // (Not while the recognizer is still producing words the meter did not hear as loud.)
+  else if (!R.open && !R.quietCleared && R.live && !R.pend && now - R.lastLoud > 3000 && now - (R.lastCutAt || 0) > 3000 && now - (R.lastDeltaAt || 0) > 2000) {
+    R.quietCleared = true
+    rtSend(R, { type: 'input_audio_buffer.clear' })
+  }
+  if (loud && !R.open) {
+    const u = uttOpen(R, 'onset')
+    if (R.lastBreakU && now - R.lastBreakU.commitAt < 1500) u.afterBreak = R.lastBreakU
+  }
+  if (loud) R.lastBreakU = null
+  const u = R.open
+  if (!u) return
+  if (loud) { u.lastLoud = now; u.loudMs += dt }
+  if (!loud && now - u.lastLoud > SILENCE_MS) {
+    uttClose(R, u)
+    if (rtIsSpeech(u)) rtCommitUtt(R, u, 'pause'); else rtDropUtt(R, u, 'noise')
+  } else if (now - u.t0 > SEG_MAX_MS && rtIsSpeech(u)) {
+    // A monologue: settle what was said so far, at the next gap between words.
+    uttClose(R, u); u.breakAt = now; R.breakWait = u
+  }
+}
 function rtEvent(R, e) {
   const now = Date.now()
   switch (e.type) {
-    case 'input_audio_buffer.speech_started': {
-      R.speaking = R.gotSpeech = true
-      const u = R.utts.find(x => x.key == null && !x.heard) || R.open || uttOpen(R, 'server')
-      u.heard = true
-      break
-    }
-    case 'input_audio_buffer.speech_stopped':
-      R.speaking = false; R.quietAt = now
-      break
     case 'input_audio_buffer.committed': {
-      R.gotSpeech = true
-      const u = uttClaim(R, e.item_id)
-      u.committedAt = now; uttClose(R, u)
+      // Commits are acknowledged in the order they were sent.
+      const u = R.commitQ.shift()
+      if (!u) { uilog('rt_error', { type: 'unexpected_commit', item: e.item_id }); break }
+      u.ackAt = now
+      const other = R.byKey.get(e.item_id)
+      if (other && other !== u) {   // a delta credited this item to a later utterance: it is this one's
+        other.key = null; u.live = other.live; other.live = ''; setLive(other.marker, ''); setLive(u.marker, u.live)
+      }
+      if (u.key == null) { u.key = e.item_id; u.keyAt = now; u.keyVia = 'committed' }
+      else if (u.key !== e.item_id) uilog('rt_key_mismatch', { idx: u.idx, deltaItem: u.key, committedItem: e.item_id })
+      R.byKey.set(e.item_id, u)
       act(`utt:realtime:${u.idx}`, L2(`משפט ${u.idx} הסתיים · ממתין לטקסט הסופי מ-OpenAI…`, `utterance ${u.idx} ended · waiting for OpenAI's final text…`), 'wait')
       break
     }
     case 'conversation.item.input_audio_transcription.delta': {
-      const u = uttClaim(R, e.item_id)
+      const u = uttClaim(R, e.item_id, R.inUse)
+      if (!u) break
+      u.keyVia ||= 'delta'
       if (!u.firstDeltaAt) u.firstDeltaAt = now
-      u.deltas = (u.deltas || 0) + 1
+      u.deltas++; R.lastDeltaAt = now
       u.live += e.delta || ''
       setLive(u.marker, u.live)
       act(`utt:realtime:${u.idx}`, L2(`מתמלל בזמן אמת · "${clip(u.live.slice(-60))}"`, `transcribing live · "${clip(u.live.slice(-60))}"`), u.committedAt ? 'wait' : 'live')
       break
     }
     case 'conversation.item.input_audio_transcription.completed': {
-      const u = uttClaim(R, e.item_id), text = String(e.transcript ?? u.live).trim()
-      const end = u.committedAt || u.closedAt || now
-      // firstDeltaMs: from the utterance's onset to its first live words; finalMs: from the end
-      // of the utterance (its commit) to the final text; beforeCommit: words arrived while
-      // still speaking (true streaming) rather than after the pause closed it.
-      uilog('rt_utterance', { idx: u.idx, firstDeltaMs: u.firstDeltaAt ? u.firstDeltaAt - u.t0 : null, finalMs: now - end, durMs: end - u.t0,
-        deltas: u.deltas || 0, beforeCommit: Boolean(u.firstDeltaAt && u.committedAt && u.firstDeltaAt < u.committedAt), chars: text.length, preview: text.slice(0, 60), broken: u.broken })
+      const u = R.byKey.get(e.item_id) || uttClaim(R, e.item_id, R.inUse)
+      if (!u) break
+      const text = String(e.transcript ?? u.live).trim()
+      // firstDeltaMs: onset → first live words; commitMs: onset → the page's commit; finalMs:
+      // commit sent → final text; beforeCommit: words arrived while still speaking.
+      uilog('rt_utterance', { idx: u.idx, item: e.item_id, keyVia: u.keyVia || '', firstDeltaMs: u.firstDeltaAt ? u.firstDeltaAt - u.t0 : null,
+        commitMs: u.commitAt ? u.commitAt - u.t0 : null, finalMs: u.commitSentAt ? now - u.commitSentAt : null, durMs: (u.commitAt || now) - u.t0,
+        deltas: u.deltas, beforeCommit: Boolean(u.firstDeltaAt && u.commitAt && u.firstDeltaAt < u.commitAt), why: u.commitWhy || '', queued: Boolean(u.queued),
+        loudMs: Math.round(u.loudMs || 0), chars: text.length, preview: text.slice(0, 60), broken: u.broken })
       uttFinish(R, u, text)
       break
     }
     case 'conversation.item.input_audio_transcription.failed': {
-      const u = uttClaim(R, e.item_id)
-      uilog('rt_error', { type: 'transcription_failed', code: e.error?.code || '', message: String(e.error?.message || '').slice(0, 200), idx: u.idx })
-      uttFinish(R, u, u.live)
+      const u = R.byKey.get(e.item_id) || uttClaim(R, e.item_id, R.inUse)
+      uilog('rt_error', { type: 'transcription_failed', code: e.error?.code || '', message: String(e.error?.message || '').slice(0, 200), idx: u?.idx })
+      if (u) uttFinish(R, u, u.live, true)
       break
     }
-    case 'error':
-      uilog('rt_error', { type: e.error?.type || 'error', code: e.error?.code || '', message: String(e.error?.message || '').slice(0, 200) })
+    case 'error': {
+      const code = e.error?.code || '', msg = String(e.error?.message || ''), evId = e.error?.event_id || ''
+      uilog('rt_error', { type: e.error?.type || 'error', code, event: evId, message: msg.slice(0, 200) })
+      if (evId.startsWith('pre_')) rtAppendRejected(R, msg)
+      else if (/commit|buffer too small/i.test(code + ' ' + msg)) { const u = R.commitQ.shift(); if (u) uttFinish(R, u, u.live, true) }
       break
+    }
   }
-}
-// An act in the text mid-utterance: close the open utterance here. If the server is hearing
-// speech right now, commit its buffer by hand, so the words said so far become their own item
-// (placed before the act) and the rest opens a new marker after it. If the commit is refused,
-// nothing splits — the words simply stay anchored where the utterance began.
-function rtBreak(R, why) {
-  const u = R.open
-  const commit = R.speaking && rtSend(R, { type: 'input_audio_buffer.commit' })
-  uilog('seg-break', { why, ms: Date.now() - u.t0, provider: 'realtime', commit })
-  if (commit) u.broken = true
-  uttClose(R, u)
 }
 function rtState(R) {
   const st = R.pc?.connectionState
@@ -2846,67 +3064,194 @@ function rtState(R) {
 // them, an empty marker is removed.
 function rtClose(R, reason) {
   if (R.closed) return
-  R.closed = true; R.live = false
-  clearTimeout(R.discTimer)
-  if (R.wasLive) uilog('rt_disconnect', { reason, pending: R.utts.length })
-  for (const u of [...R.utts]) uttFinish(R, u, u.live)
+  R.closed = true; R.live = false; rtAll.delete(R)
+  clearTimeout(R.discTimer); clearTimeout(R.detachTimer); R.detachDone?.()
+  if (rtw === R) rtw = null
+  if (R.wasLive) uilog('rt_disconnect', { reason, pending: R.utts.length, ageMs: Date.now() - R.t0 })
+  if (R.pend) pendStopCapture(R.pend)
+  for (const u of [...R.utts]) uttFinish(R, u, u.held ?? u.live, true)
   try { R.dc?.close() } catch {}
   try { R.pc?.close() } catch {}
 }
+// It never connected.
 function rtFailed(R, e) {
-  if (R.aborted || R.closed) return
+  if (R.closed) return
   const why = String(e?.message || e).slice(0, 200)
+  uilog('rt_prewarm', { reason: R.reason, ok: false, ms: Date.now() - R.t0, model: R.model, error: why })
+  if (!R.inUse) rtWarmBlockedUntil = Date.now() + 60000
   uilog('rt_error', { type: 'connect', message: why })
-  uilog('stt_session', { provider: 'realtime', model: R.model, ms: Date.now() - R.t0, ok: false, error: why })
+  if (R.waitFrom) { uilog('rt_ready_at_record', { ready: false, waitMs: Date.now() - R.waitFrom, ok: false }); uilog('stt_session', { provider: R.prov, model: R.model, ms: Date.now() - R.waitFrom, ok: false, error: why }); R.waitFrom = 0 }
+  pendRecover(R, 'connect failed')   // the buffered audio → the per-pause path, before the markers go
   rtClose(R, 'failed')
   if (rt === R) rtFallback(why)
 }
-// A session that connected but reports no speech while the meter clearly hears some is broken
-// in a way no error event announces (audio not arriving, transcription not configured).
-function rtWatch(R, loud, now) {
-  if (R.gotSpeech) return
-  if (loud && R.lastTick) R.loudMs = (R.loudMs || 0) + (now - R.lastTick)
-  R.lastTick = now
-  if (R.loudMs > 3000) rtLost(R, 'no speech reported for 3 s of audible speech', false)
-}
+// It was up and went away.
 function rtLost(R, reason, retry = true) {
-  if (R.closed || rt !== R || !R.wasLive) return   // before it was live, rtFailed owns the failure
+  if (R.closed) return
+  const using = R.inUse && rt === R
   rtClose(R, reason)
+  if (!using) return            // a warm session that dropped: the next trigger warms a new one
+  rt = null
   if (!recOn) return
   if (retry && R.reconnects < 1 && sttPref.reconnect) {
-    // The per-pause recorder takes over at once, so nothing said while reconnecting is lost.
     setStatus(t('st_rt_reconnect'), 'busy')
-    rtStart(R.reconnects + 1)
-    if (!seg) startSegment()
+    rtAttach(sttActive, pickMime(), R.reconnects + 1)   // audio is buffered while it connects
   } else rtFallback(reason)
 }
 function rtFallback(why) {
-  uilog('provider_fallback', { from: 'realtime', to: 'segments', why })
+  const from = sttActive
   rt = null
   if (!recOn) return
-  sttActive = 'segments'
+  uilog('provider_fallback', { from, to: from === 'hybrid' ? 'hybrid per pause' : 'segments', why })
+  if (from !== 'hybrid') sttActive = 'segments'
   if (!seg) startSegment()
   setStatus(t('st_rt_fallback', why), 'err')
 }
-// Stop: the last words are still in flight on the audio track, so the mic keeps feeding the
-// session for 400 ms; then the turn is closed by hand — once the mic stops, the server hears no
-// silence and its VAD would never close it — and the session stays up (without the mic) until
-// the last transcripts are in, at most 10 s. An open utterance the server never heard and that
-// went quiet long ago was noise: it is dropped rather than committed (a commit of silence can
-// come back as an invented phrase).
-function rtStop(R) {
-  if (!R.live) { R.aborted = true; rtClose(R, 'stop'); return Promise.resolve() }
-  return new Promise(ok => setTimeout(() => {
-    const u = R.open, now = Date.now()
-    if (!R.closed && (R.speaking || (u && (u.heard || now - u.lastLoud < 1500)))) rtSend(R, { type: 'input_audio_buffer.commit' })
-    if (u) { uttClose(R, u); if (u.key == null && !u.heard && !R.speaking && now - u.lastLoud >= 1500) uttFinish(R, u, '') }
-    ok()
-    const until = Date.now() + 10000
-    const wait = () => { if (R.closed) return; if (!R.utts.length || Date.now() > until) rtClose(R, 'stop'); else setTimeout(wait, 250) }
-    wait()
-  }, 400))
+// Idle: nothing recorded for RT_IDLE_MS → hang up, so nothing stays open for nobody. The same
+// sweep settles a committed turn whose final never came while no recording was running (the
+// meter's own check only runs while recording), so no marker spins on.
+setInterval(() => {
+  const now = Date.now()
+  for (const S of [...rtAll]) for (const x of [...S.utts]) if (x.commitSentAt && now - x.commitSentAt > 30000) { uilog('utt_drop', { provider: S.kind, idx: x.idx, why: 'no-final', chars: x.live.length }); uttFinish(S, x, x.live, true) }
+  const R = rtw
+  if (R && !R.closed && !R.inUse && !R.utts.length && !R.pend && now - R.activityAt > RT_IDLE_MS) {
+    uilog('rt_idle_close', { idleMs: now - R.activityAt, ageMs: now - R.t0 })
+    rtClose(R, 'idle')
+  }
+}, 15000)
+addEventListener('pagehide', () => { if (rtw) rtClose(rtw, 'pagehide') })
+// Settings that are fixed at mint (model, language, noise, delay) retire the warm session;
+// a new one is warmed shortly after, so the next recording still starts at once.
+let rtRewarmTimer = null
+function rtInvalidate() {
+  if (rtw && !rtw.inUse) rtRetire(rtw, 'settings')
+  clearTimeout(rtRewarmTimer); rtRewarmTimer = setTimeout(() => rtWarm('settings'), 1000)
 }
 
+// ---- audio before the session is up ----
+// Said before the session is connected (a cold start, a reconnect) the audio is kept, in
+// order: PCM16 at 24 kHz from an AudioWorklet, with any commit made meanwhile queued between
+// the chunks it follows. On connect it goes in as input_audio_buffer.append (event_id pre_…),
+// the queued commits after it, and then the mic goes onto the track — the words said while
+// connecting are part of the same turn as what follows, not a separate guess. A MediaRecorder
+// of the same stretch is the safety net: if the session never connects, or OpenAI refuses the
+// appends, that stretch goes through the per-pause path instead of being lost.
+const PCM_WORKLET = URL.createObjectURL(new Blob([`
+class Pcm16 extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Int16Array(2400); this.n = 0
+    this.port.onmessage = e => { if (e.data === 'flush') { this.emit(); this.port.postMessage('flushed') } } }
+  emit() { if (this.n) { this.port.postMessage(this.buf.slice(0, this.n)); this.n = 0 } }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0]
+    if (ch) for (let i = 0; i < ch.length; i++) { const s = Math.max(-1, Math.min(1, ch[i])); this.buf[this.n++] = s < 0 ? s * 32768 : s * 32767; if (this.n === this.buf.length) this.emit() }
+    return true
+  }
+}
+registerProcessor('pcm16', Pcm16)`], { type: 'text/javascript' }))
+function b64of(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s) }
+async function pendStart(R, mime) {
+  const Pd = R.pend ||= { ops: [], blobs: [], t0: Date.now(), samples: 0, n: 0, capturing: false }
+  if (Pd.capturing) pendStopCapture(Pd)   // a new recording on a session that is still connecting
+  const cap = Pd.cap = { rec: null, ctx: null, node: null }
+  Pd.capturing = true
+  try {
+    const rec = cap.rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined), parts = []
+    rec.ondataavailable = e => { if (e.data.size) parts.push(e.data) }
+    rec.onstop = () => { if (parts.length) Pd.blobs.push({ blob: new Blob(parts, { type: rec.mimeType }), t0: cap.t0, durMs: Date.now() - cap.t0 }) }
+    cap.t0 = Date.now(); rec.start()
+  } catch {}
+  try {
+    const ctx = cap.ctx = new AudioContext({ sampleRate: 24000 })
+    await ctx.audioWorklet.addModule(PCM_WORKLET)
+    if (Pd.cap !== cap || !Pd.capturing) return
+    const node = cap.node = new AudioWorkletNode(ctx, 'pcm16', { numberOfInputs: 1, numberOfOutputs: 0 })
+    node.port.onmessage = e => {
+      if (e.data === 'flushed') { cap.flushed?.(); cap.flushed = null }
+      else if (e.data instanceof Int16Array) { Pd.ops.push({ pcm: e.data }); Pd.samples += e.data.length }
+    }
+    ctx.createMediaStreamSource(stream).connect(node)
+  } catch (e) { Pd.error = String(e.message || e); uilog('rt_buffer_error', { message: Pd.error.slice(0, 200) }) }
+}
+// The worklet hands over what it holds (< 100 ms), so nothing captured stays behind.
+function pendPull(Pd) {
+  const cap = Pd.cap
+  if (!Pd.capturing || !cap?.node) return Promise.resolve()
+  return new Promise(ok => { cap.flushed = ok; cap.node.port.postMessage('flush'); setTimeout(ok, 150) })
+}
+function pendStopCapture(Pd) {
+  if (!Pd.capturing) return
+  Pd.capturing = false
+  const cap = Pd.cap
+  try { cap.node?.disconnect() } catch {}
+  cap.ctx?.close().catch(() => {})
+  try { if (cap.rec?.state === 'recording') cap.rec.stop() } catch {}
+}
+async function pendFlush(R) {
+  const Pd = R.pend
+  if (!Pd || Pd.flushing) return
+  Pd.flushing = true
+  let sent = 0, commits = 0
+  for (let round = 0; round < 50 && !R.closed; round++) {
+    await pendPull(Pd)
+    if (!Pd.ops.length) break
+    while (Pd.ops.length && !R.closed) {
+      if (Pd.ops[0].pcm) {   // consecutive chunks go together, up to half a second per event
+        const parts = []; let len = 0
+        while (Pd.ops[0]?.pcm && len < 12000) { const p = Pd.ops.shift().pcm; parts.push(p); len += p.length }
+        const all = new Int16Array(len); let o = 0; for (const p of parts) { all.set(p, o); o += p.length }
+        rtSend(R, { type: 'input_audio_buffer.append', event_id: `pre_${R.gen}_${++Pd.n}`, audio: b64of(new Uint8Array(all.buffer)) })
+        sent += len
+      } else { rtSendCommit(R, Pd.ops.shift().commit); commits++ }
+      while (R.dc?.readyState === 'open' && R.dc.bufferedAmount > 65536) await sleep(5)
+    }
+    if (!Pd.capturing) break
+  }
+  if (R.closed) return
+  // Nothing captured is left: the mic goes onto the track, from here the audio flows as RTP.
+  const live = Pd.capturing
+  pendStopCapture(Pd)
+  R.pend = null
+  if (live && R.inUse && micTrack()) R.sender.replaceTrack(micTrack()).catch(e => rtLost(R, 'replaceTrack: ' + e.message))
+  uilog('rt_buffer_flush', { ms: Date.now() - Pd.t0, audioMs: Math.round(sent / 24), events: Pd.n, commits, micOn: live && R.inUse })
+  if (R.waitFrom) { uilog('rt_ready_at_record', { ready: false, waitMs: Date.now() - R.waitFrom, ok: true, buffered: true }); R.waitFrom = 0 }
+  // The safety recording is kept until OpenAI has had a few seconds to refuse the appends.
+  R.pendSent = Pd
+  setTimeout(() => { if (R.pendSent === Pd) R.pendSent = null }, 4000)
+  if (R.stale && !R.utts.length && !R.inUse) rtClose(R, R.stale)
+}
+function rtAppendRejected(R, msg) {
+  if (R.appendRejected) return
+  R.appendRejected = true
+  const Pd = R.pendSent || R.pend
+  if (Pd) { R.pendSent = null; if (R.pend === Pd) R.pend = null; pendRecover(R, 'appends refused: ' + msg.slice(0, 80), Pd) }
+}
+// The buffered stretch goes to the per-pause path, into markers ahead of the realtime ones.
+function pendRecover(R, why, Pd = R.pend) {
+  if (!Pd) return
+  const first = R.utts.find(u => u.marker && ed.contains(u.marker))?.marker
+  const send = () => {
+    for (const b of Pd.blobs.splice(0)) {
+      let marker = null
+      if (first && ed.contains(first)) { marker = document.createElement('span'); marker.className = 'interim'; marker.contentEditable = 'false'; marker.textContent = '​'; first.before(marker) }
+      else marker = placeMarker()
+      uilog('rt_buffer_recover', { why, bytes: b.blob.size, durMs: b.durMs })
+      sendSegment(b.blob, { n: 'pre', t0: b.t0, durMs: b.durMs, marker, broken: false })
+    }
+  }
+  // MediaRecorder hands over its data on stop, asynchronously (its onstop files the blob first).
+  const rec = Pd.cap?.rec, recording = rec && rec.state !== 'inactive'
+  if (recording) rec.addEventListener('stop', () => setTimeout(send), { once: true })
+  pendStopCapture(Pd)
+  if (!recording) setTimeout(send)
+}
+// Warm-up triggers: the page is loaded (health), the text gains focus, the pointer reaches the
+// mic, the window comes back. Each only bumps the idle clock when a session is already warm.
+ed.addEventListener('focus', () => rtWarm('focus'))
+ed.addEventListener('keydown', () => rtWarm('typing'))
+$('#rec').addEventListener('pointerenter', () => rtWarm('hover'))
+$('#rec').addEventListener('focus', () => rtWarm('hover'))
+addEventListener('focus', () => rtWarm('window'))
+document.addEventListener('visibilitychange', () => { if (!document.hidden) rtWarm('visible') })
 // ---- browser: SpeechRecognition (webkitSpeechRecognition in Chrome) ----
 // Chrome sends this audio to Google. It ends on its own after a silence or a minute, so it is
 // restarted until the recording stops; each run's result indexes start again at 0, hence the
@@ -2975,14 +3320,32 @@ function brFailed(B, why) {
   if (!seg) startSegment()
   setStatus(t('st_br_fallback', why), 'err')
 }
-// Hybrid: the browser's guess goes into the segment that was listening when that phrase began
-// (or the last one still waiting for OpenAI), and OpenAI's transcript replaces it.
+// Hybrid: the browser's guess is shown, grey, in the utterance that was listening when that
+// phrase began, until the realtime session's final text replaces it. A phrase the browser runs
+// on past the end of its utterance continues, with only its new words, in the next one. Once
+// OpenAI's own words for an utterance arrive they are shown instead. With the realtime session
+// down (per-pause fallback) the guess goes into the per-pause segment, as before.
 function hybridPreview(B, key, text) {
-  let s = B.hyb.get(key)
+  const R = rt
+  if (R) {
+    let m = B.hyb.get(key)
+    if (!m || m.u?.done) {
+      const u = R.open || [...R.utts].reverse().find(x => !x.done)
+      if (!u) return
+      m = { u, base: m ? m.len : 0, len: 0 }
+      B.hyb.set(key, m)
+      uilog('browser_result', { idx: u.idx, final: false, chars: String(text).trim().length, ms: Date.now() - u.t0 })
+    }
+    m.len = text.length
+    ;(m.u.preview ||= new Map()).set(key, text.slice(m.base))
+    if (!m.u.live) setLive(m.u.marker, [...m.u.preview.values()].join(' '))
+    return
+  }
+  let s = B.hyb.get(key)?.seg
   if (!s) {
     s = seg?.marker ? seg : lastSpeechSeg && !lastSpeechSeg.done ? lastSpeechSeg : null
     if (!s) return
-    B.hyb.set(key, s)
+    B.hyb.set(key, { seg: s })
     uilog('browser_result', { segIdx: s.n, final: false, chars: String(text).trim().length, ms: Date.now() - s.t0 })
   }
   if (s.done) return
@@ -3146,15 +3509,17 @@ $('#langseg').addEventListener('click', e => {
   lang = b.dataset.lang; try { localStorage.setItem('emucomposer.lang', lang) } catch {}
   applyLang(); renderDictation(); setStatus(t('ready'))
 })
-$('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} uilog('stt_setting', { key: 'language', value: sttOverride || 'auto' }) })
+$('#sttlang').addEventListener('change', e => { sttOverride = e.target.value; try { localStorage.setItem('emucomposer.sttLang', sttOverride) } catch {} uilog('stt_setting', { key: 'language', value: sttOverride || 'auto' }); rtInvalidate() })
 // Settings › Dictation. Every choice applies from the next recording on.
-const STT_MODELS = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']
-let sttModelList = [], sttKey = false
+const STT_MODELS = ['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']
+const LIVE_MODELS = ['gpt-live-transcribe', 'gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe']
+let sttModelList = [], liveModelList = [], sttKey = false
 // The mic needs a key for every provider but the browser's own recognizer.
 function syncRecEnabled() { $('#rec').disabled = !sttKey && sttPref.provider !== 'browser'; recTitle() }
 function fillSttModels() {
   // The same stored choice as Settings › Models › Dictation; "default" is the project's cfg.stt.model.
   fillSelect($('#sttModel'), [...new Set([...STT_MODELS, ...sttModelList])], modelFor('stt'), t('m_default', sttCfgModel))
+  fillSelect($('#sttLiveModel'), [...new Set([...LIVE_MODELS, ...liveModelList])], LS('emucomposer.stt.liveModel') || '', t('m_default', sttLiveCfgModel))
 }
 function renderDictation() {
   const cur = sttPref.provider
@@ -3165,21 +3530,24 @@ function renderDictation() {
   }
   $('#sttPause').value = sttPref.silenceMs; $('#sttPauseVal').textContent = t('ms_unit', sttPref.silenceMs)
   $('#sttNoise').checked = sttPref.noise
+  $('#sttDelay').value = sttPref.delay
   fillSttModels()
 }
 const sttChanged = (key, value) => { uilog('stt_setting', { key, value }); if (recOn) setStatus(t('st_stt_next'), 'busy') }
 $('#provlist').addEventListener('click', e => {
   const b = e.target.closest('[data-prov]'); if (!b || b.disabled) return
-  LS('emucomposer.stt.provider', b.dataset.prov); renderDictation(); syncRecEnabled(); sttChanged('provider', b.dataset.prov)
+  LS('emucomposer.stt.provider', b.dataset.prov); renderDictation(); syncRecEnabled(); sttChanged('provider', b.dataset.prov); rtInvalidate()
 })
 $('#sttModel').addEventListener('change', e => {
   LS('emucomposer.model.stt', e.target.value)
   fillSelect($('#mStt'), sttModelList, e.target.value, t('m_default', sttCfgModel))
-  sttChanged('model', e.target.value || 'default')
+  sttChanged('model', e.target.value || 'default'); rtInvalidate()
 })
+$('#sttLiveModel').addEventListener('change', e => { LS('emucomposer.stt.liveModel', e.target.value); sttChanged('liveModel', e.target.value || 'default'); rtInvalidate() })
+$('#sttDelay').addEventListener('change', e => { LS('emucomposer.stt.delay', e.target.value); sttChanged('delay', e.target.value); rtInvalidate() })
 $('#sttPause').addEventListener('input', e => { $('#sttPauseVal').textContent = t('ms_unit', e.target.value) })
 $('#sttPause').addEventListener('change', e => { LS('emucomposer.stt.silenceMs', e.target.value); sttChanged('silenceMs', Number(e.target.value)) })
-$('#sttNoise').addEventListener('change', e => { LS('emucomposer.stt.noise', e.target.checked ? '1' : '0'); sttChanged('noise', e.target.checked) })
+$('#sttNoise').addEventListener('change', e => { LS('emucomposer.stt.noise', e.target.checked ? '1' : '0'); sttChanged('noise', e.target.checked); rtInvalidate() })
 $('#optNotes').addEventListener('change', e => { try { localStorage.setItem('emucomposer.notes', e.target.checked ? '1' : '0') } catch {} })
 $('#dirseg2').addEventListener('click', e => { const b = e.target.closest('[data-dir]'); if (b) setDir(b.dataset.dir) })
 $('#keysave').onclick = async () => {
@@ -3188,7 +3556,7 @@ $('#keysave').onclick = async () => {
   try {
     const d = await (await fetch('/api/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })).json()
     if (d.error) throw new Error(d.error)
-    $('#apikey').value = ''; sttKey = true; syncRecEnabled()
+    $('#apikey').value = ''; sttKey = true; syncRecEnabled(); rtWarm('key')
     $('#keystate').innerHTML = escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(d.hint) + '</bdi>'
     setStatus(t('st_key_saved'), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
@@ -3368,12 +3736,17 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden || !still()) return
   if (!nodes.length || pendingCapture) { pendingCapture = false; capture() }
 })
+let healthWarmed = false
 async function health() {
   try {
     const h = await (await fetch('/api/health')).json()
     sttKey = Boolean(h.stt); syncRecEnabled()
     if (h.sttModel) sttCfgModel = h.sttModel
+    if (h.sttLiveModel) sttLiveCfgModel = h.sttLiveModel
     sttLanguage = h.language || ''
+    // The page is open with a key: warm the live session now (once — later polls must not
+    // bring back a session the idle timer closed).
+    if (sttKey && !healthWarmed) { healthWarmed = true; rtWarm('load') }
     if (h.app) document.title = `${h.app} · emu-composer`
     recTitle()
     $('#keystate').innerHTML = h.stt ? escapeHTML(t('key_set')) + '<bdi dir="ltr">' + escapeHTML(h.hint) + '</bdi>' : escapeHTML(t('key_needed'))

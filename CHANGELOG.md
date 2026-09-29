@@ -1,6 +1,41 @@
 # Changelog
 
 ## Unreleased
+- **Dictation: words while you speak, a session that is ready before you are.** Measured on
+  the first real recording (2026-09-29): with `gpt-4o-transcribe` the first delta of every
+  utterance came only once it ended (`firstDeltaMs` ≈ `durMs`, 10 of 10). The realtime
+  provider now defaults to `gpt-live-transcribe` (deltas stream during speech; `delay`
+  setting, default `medium`), minted with `turn_detection: null` for every model — the page
+  commits each turn itself on its meter (pause setting), and a turn with too little speech in
+  it (a click, a breath) is dropped instead of committed. Settings › Dictation gains "Live
+  model" and "Live text delay"; the transcription model list gains `gpt-transcribe`
+  (`/api/models` returns live models separately; a live-only model sent to `/api/transcribe`
+  is swapped for `gpt-transcribe`). Hybrid is now the browser's live guess replaced by the
+  final of an OpenAI realtime session on the transcription model, not per-pause uploads.
+- **Warm realtime session.** The client secret is minted and the WebRTC connection made ahead
+  of time (page load, focus, mic hover, window focus) on a track-less audio transceiver; a
+  recording `replaceTrack`s the mic on and off and the next recording reuses the session;
+  closed after 5 idle minutes, never reused past 50. Audio said while it still connects is
+  buffered (AudioWorklet PCM16 24 kHz) and fed in as `input_audio_buffer.append` with any
+  commits made meanwhile in order — no more per-pause handoff at the start (it cost 8.8 s and
+  came back as nonsense); per-pause is only the fallback when the session cannot connect or
+  refuses the appends. Journal: `rt_prewarm {reason, ok, ms, mintMs, connectMs}`,
+  `rt_ready_at_record {ready, waitMs}`, `rt_buffer_flush`, `rt_buffer_recover`,
+  `rt_idle_close`; `rt_utterance` gains `item`, `keyVia`, `commitMs`, `why`, `queued`,
+  `loudMs`.
+- Fixed: an anchor tapped mid-sentence left junk transcripts ("זה." after "…האייטם הזה.", a
+  lone "."). The commit was sent at the click while server VAD was still mid-turn: the data
+  channel overtakes the audio in flight, the cut went through a word, the server then
+  committed the rest itself and each half was transcribed; and it committed whenever server
+  VAD said "speaking", even for an utterance holding no words. Now the break closes the text
+  at the click but commits at the next gap between words (150 ms of quiet, at most 1.2 s),
+  only when the utterance holds speech; transcripts with no letters or digits are dropped
+  (every provider); and a remainder right after a break that only repeats the end of the
+  previous utterance is dropped (character-wise, for Hebrew prefixes; a short answer that is
+  not such a repeat stays). `test/dictation.test.mjs`.
+- Fixed (journal): `device-input` named a different element than the chip after a tap on a
+  stale screen ("T-Mobile, three bars." for "Drag handle") — the pre-capture index was read
+  against the post-capture element list. The tap itself and the chip were right.
 - **Live dictation, and a choice of how it works.** Default provider "OpenAI realtime": the
   mic streams over WebRTC to OpenAI's Realtime transcription (`/v1/realtime/calls`) with an
   ephemeral client secret minted by the new `POST /api/stt/session`

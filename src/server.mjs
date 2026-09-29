@@ -940,7 +940,9 @@ const scrubKey = s => String(s).replace(/sk-[A-Za-z0-9_*-]{4,}/g, 'sk-***').repl
 
 async function transcribe(audioB64, mime, language, prompt, model) {
   const bytes = Buffer.from(audioB64, 'base64').length
-  const usedModel = model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe'
+  let usedModel = model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe'
+  // gpt-live-transcribe exists only as a realtime session; a file goes to its batch sibling.
+  if (/^gpt-live-transcribe/.test(usedModel)) usedModel = 'gpt-transcribe'
   const t0 = Date.now()
   try {
     const key = await openaiKey()
@@ -972,27 +974,38 @@ async function transcribe(audioB64, mime, language, prompt, model) {
 }
 
 // Live dictation: the page streams the microphone straight to OpenAI's Realtime API over
-// WebRTC, so the words come back while the user is still talking. The page never sees the
-// permanent key — it gets a short-lived client secret (ek_…) minted here for ONE
-// transcription session, configured entirely at mint time (a transcription session rejects
-// the realtime-style session.update, so the page never sends one). Server VAD cuts the
-// utterances at the same pause length the per-pause recorder uses.
-const RT_MODELS = /^(gpt-4o-transcribe|gpt-4o-mini-transcribe|whisper-1)(-\d{4}-\d\d-\d\d)?$/
-async function sttSession({ model, language, silenceMs, noise = true, prompt } = {}) {
-  const usedModel = model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe'
-  const silence = Math.max(200, Math.min(2000, Math.round(Number(silenceMs) || 450)))
+// WebRTC. The page never sees the permanent key — it gets a short-lived client secret (ek_…)
+// minted here for ONE transcription session, configured entirely at mint time (a
+// transcription session rejects the realtime-style session.update, so the page never sends
+// one). The page owns the turns: turn_detection is null and it commits the audio buffer
+// itself at each pause (its own meter, the same pause setting as the per-pause recorder) and
+// at a gap between words after an anchor or a keystroke. That is what gpt-live-transcribe
+// requires (it refuses server VAD), and it keeps a manual commit from racing a server VAD
+// that is still mid-turn — the race that split "הזה" into "הזה." + "זה." on 2026-09-29.
+//   gpt-live-transcribe  words stream in WHILE speaking (deltas before the commit); `delay`
+//                        trades how soon they come against the final's accuracy
+//   gpt-transcribe, gpt-4o-transcribe, -mini, whisper-1
+//                        text only after each commit (the 2026-09-29 journal: first delta
+//                        ≈ the utterance's length, every time)
+const RT_MODELS = /^(gpt-live-transcribe|gpt-transcribe|gpt-4o-transcribe|gpt-4o-mini-transcribe|whisper-1)(-\d{4}-\d\d-\d\d)?$/
+const RT_LIVE = /^gpt-live-transcribe/                 // streams during speech
+const RT_LANGS_ARRAY = /^(gpt-live-transcribe|gpt-transcribe)/   // the 2026 models take `languages: [...]`
+const RT_DELAYS = ['minimal', 'low', 'medium', 'high', 'xhigh']
+const liveDefault = () => process.env.EMU_COMPOSER_STT_LIVE_MODEL || P.cfg.stt.liveModel || 'gpt-live-transcribe'
+async function sttSession({ model, language, noise = true, prompt, delay } = {}) {
+  const usedModel = model || liveDefault()
   const t0 = Date.now()
-  const meta = { provider: 'realtime', model: usedModel, language: language || '', silenceMs: silence, noise: Boolean(noise) }
+  const live = RT_LIVE.test(usedModel)
+  const meta = { provider: 'realtime', model: usedModel, language: language || '', noise: Boolean(noise), live, ...(live && RT_DELAYS.includes(delay) ? { delay } : {}) }
   try {
-    // gpt-live-transcribe and friends take no server VAD; the realtime provider is built on it.
-    if (!RT_MODELS.test(usedModel)) throw userError(`${usedModel} is not supported for live dictation (use gpt-4o-transcribe, gpt-4o-mini-transcribe or whisper-1)`)
+    if (!RT_MODELS.test(usedModel)) throw userError(`${usedModel} is not supported for live dictation (use gpt-live-transcribe, gpt-transcribe, gpt-4o-transcribe, gpt-4o-mini-transcribe or whisper-1)`)
     const key = await openaiKey()
     if (!key) throw userError('no OpenAI key — add one with the "מפתח API" button')
-    const input = {
-      format: { type: 'audio/pcm', rate: 24000 },
-      transcription: { model: usedModel, ...(language ? { language } : {}), ...(prompt ? { prompt: String(prompt).slice(-400) } : {}) },
-      turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: silence },
-    }
+    const transcription = { model: usedModel }
+    if (language) { if (RT_LANGS_ARRAY.test(usedModel)) transcription.languages = [language]; else transcription.language = language }
+    if (prompt) transcription.prompt = String(prompt).slice(-400)
+    if (meta.delay) transcription.delay = meta.delay
+    const input = { format: { type: 'audio/pcm', rate: 24000 }, transcription, turn_detection: null }
     if (noise) input.noise_reduction = { type: 'near_field' }
     const r = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
@@ -1007,8 +1020,9 @@ async function sttSession({ model, language, silenceMs, noise = true, prompt } =
     const j = JSON.parse(body)
     const value = j.value || j.client_secret?.value || ''
     if (!value) throw userError('OpenAI returned no client secret')
-    slog('stt_session', { ...meta, ms: Date.now() - t0, ok: true, expiresAt: j.expires_at || j.client_secret?.expires_at || 0 })
-    return { value, expiresAt: j.expires_at || j.client_secret?.expires_at || 0, model: usedModel, language: language || '', silenceMs: silence }
+    const expiresAt = j.expires_at || j.client_secret?.expires_at || 0
+    slog('stt_session', { ...meta, ms: Date.now() - t0, ok: true, expiresAt })
+    return { value, expiresAt, model: usedModel, language: language || '', live, delay: meta.delay || '' }
   } catch (e) {
     slog('stt_session', { ...meta, ms: Date.now() - t0, ok: false, error: scrubKey(e.message || e) })
     throw e
@@ -1068,13 +1082,14 @@ let modelCache = null, modelAt = 0
 async function listModels() {
   if (modelCache && Date.now() - modelAt < 600000) return modelCache
   const key = await openaiKey()
-  if (!key) return { stt: [], chat: [] }
+  if (!key) return { stt: [], live: [], chat: [] }
   const r = await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) })
   if (!r.ok) throw userError(`OpenAI ${r.status} listing models`)
   const ids = (await r.json()).data.map(m => m.id).sort()
-  const stt = ids.filter(i => /transcribe|whisper/.test(i) && !/diarize|realtime/.test(i))
+  const stt = ids.filter(i => /transcribe|whisper/.test(i) && !/diarize|realtime|live/.test(i))
+  const live = ids.filter(i => RT_MODELS.test(i))
   const chat = ids.filter(i => /^(gpt-[45]|o[34])/.test(i) && !/audio|realtime|tts|transcribe|search|image|embedding|codex|instruct|\d{4}-\d\d-\d\d/.test(i))
-  modelCache = { stt, chat }; modelAt = Date.now()
+  modelCache = { stt, live, chat }; modelAt = Date.now()
   return modelCache
 }
 
@@ -1318,7 +1333,7 @@ const server = http.createServer(async (req, res) => {
         if (!P) return send(res, 503, { starting: true })
         const k = await openaiKey()
         return send(res, 200, {
-          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', sttModel: process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe', app: P.cfg.appName,
+          stt: Boolean(k), hint: k ? `…${k.slice(-4)}` : '', language: P.cfg.stt.language || '', sttModel: process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe', sttLiveModel: liveDefault(), app: P.cfg.appName,
           ...projectList(), problems: await problems(),
           serial: state.serial, devices: await listDevices(),
           agent: Boolean(agent?.ready), agentReason: agent?.reason || (state.serial ? '' : 'no device'),
