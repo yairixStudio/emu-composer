@@ -180,7 +180,9 @@
 
   /* ================= polish: one quiet visual system ================= */
   :root{--bg:#0b0c10;--panel:#101217;--panel2:#161920;--line:#1d2129;--line2:#282d37;--fg:#e9ebf1;--dim:#8b91a3;--dim2:#5b6273;--r:8px;
-        --violet:#a78bfa;--violet-soft:#a78bfa1f}
+        --violet:#a78bfa;--violet-soft:#a78bfa1f;
+        /* history sidebar: a touch darker than the canvas, not the (lighter) panel colour */
+        --sidebar-bg:color-mix(in srgb, var(--bg), #000 4%)}
   body{font-size:13px}
   button{height:30px;padding:0 12px;border-radius:var(--r);font-weight:520;letter-spacing:.005em;border-color:var(--line2)}
   button.ghost{color:var(--dim)}
@@ -214,7 +216,7 @@
   #agentpill{width:8px;height:8px;padding:0;border-radius:50%;border:none;background:var(--dim2);margin-inline-start:8px;align-self:center}
   #agentpill.on{background:var(--ok)} #agentpill.bad{background:#f8717199}
 
-  #right > .row:first-child{border-bottom:1px solid var(--line);padding:8px 12px;gap:4px}
+  #right > .row:first-child{border-bottom:none;padding:0 26px;gap:16px;height:48px}
   #status{margin-inline-start:0;margin-inline-end:auto;font:500 11.5px/1.3 -apple-system,system-ui,sans-serif;color:var(--dim2)}
   #editor{padding:22px 26px 64px;font-size:15px;line-height:1.85}
   #editor:empty::before{font-size:13.5px;line-height:1.7}
@@ -281,7 +283,7 @@
   /* ================= layout: guide | device | text, in every mode ================= */
   body{--gw:290px;--rw:460px}
   body.collect #guide, body.use #guide, body.jem #guide{display:flex;flex-direction:column;flex:0 0 var(--gw);width:var(--gw);min-width:0;
-    gap:16px;padding:22px;overflow:auto;background:var(--panel);border:none}
+    gap:16px;padding:22px;overflow:auto;background:var(--sidebar-bg);border:none}
   body.guide-off #guide, body.guide-off .split[data-side="guide"]{display:none}
   #guide[data-mode="collect"] h2::before{background:var(--accent)}
   #guide[data-mode="use"] h2::before{background:var(--accent2)}
@@ -293,13 +295,6 @@
   #left, body.jem #left{flex:1 1 auto;min-width:280px;padding:10px 14px 12px;gap:8px;border:none;display:flex;flex-direction:column}
   body.collect #right, body.use #right, body.jem #right{flex:0 0 var(--rw);width:var(--rw);min-width:0}
   #topbar{gap:6px;justify-content:center;flex-wrap:wrap}
-  #agentpill{margin-inline-start:4px}
-  /* repo + emulator: a caption for the mirrored screen right below it — text and a chevron
-     only, no box, no background, sitting directly on the panel. */
-  #targetbar{gap:10px;justify-content:center;padding-top:2px;padding-bottom:2px}
-  #targetbar .dd{background:none;border-color:transparent;padding:0 2px;height:24px;color:var(--dim2)}
-  #targetbar .dd:hover:not(:disabled){background:var(--panel2);border-color:transparent;color:var(--fg)}
-  #targetbar .dd.open{border-color:transparent}
   /* two independent on/off switches replacing the old 3-way mode selector */
   .togs{display:flex;align-items:center;gap:14px}
   .swtoggle{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;color:var(--dim);font:600 11.5px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
@@ -351,14 +346,26 @@
   }
 
   /* ================= header · footer · settings modal ================= */
-  #rhead{gap:2px;padding:8px 10px;flex-wrap:nowrap}
-  #rhead #status{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #rhead #ctx{flex:1 1 auto;min-width:0;margin:0 8px;max-width:none;text-align:end;font:500 11px/1.3 var(--mono);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* approximate token count of the full prompt (text + every chip's block) — a quiet, secondary
-     readout beside the context line, never competing with the text itself */
-  #tokest{flex:0 0 auto;color:var(--dim2);font:500 11px/1.3 var(--mono);white-space:nowrap;margin-inline-start:8px}
-  #tokest[hidden]{display:none}
-  #rhead button.ic{width:28px;height:28px}
+  /* Composer context header: ONLY project · device (a dot on it IS the connection state — no
+     agent pill, no tokens, no settings, no status). Generous spacing, same horizontal padding
+     as the text box below it so the two align; minimal text + chevron, no box. */
+  #rhead{flex-wrap:nowrap}
+  #rhead .dd{background:none;border-color:transparent;padding:0 2px;height:28px;max-width:170px;min-width:0;color:var(--dim2)}
+  #rhead .dd:hover:not(:disabled){background:var(--panel2);border-color:transparent;color:var(--fg)}
+  #rhead .dd.open{border-color:transparent}
+  #rhead #agentpill{flex:0 0 auto;margin-inline-start:-8px}
+  /* Transient status (copy/save confirmations, errors) plus the screen context — kept out of the
+     header above so it never restates which device is connected. */
+  #substatus{gap:8px;padding:0 26px 7px;min-height:0}
+  #substatus #ctx{flex:0 1 auto;min-width:0;font:500 11px/1.3 var(--mono);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #substatus #status{margin:0;flex:1 1 auto;min-width:0;font-size:11px;text-align:end;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* the token estimate now lives in the text box's own toolbar, right before download/copy —
+     a quiet counter beside the send-style actions, never competing with the text itself */
+  #edact #tokest{flex:0 0 auto;color:var(--dim2);font:500 11px/1.3 var(--mono);white-space:nowrap;margin-inline-end:4px}
+  #edact #tokest[hidden]{display:none}
+  /* settings: a footer row at the bottom of the history sidebar, ChatGPT-style (ID beats
+     .newprompt's own margin, which is meant for the top button, not this one) */
+  #settingsbtn.sidefoot{margin:0 8px 8px;flex:0 0 auto}
   #foot{display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:nowrap;min-width:0}
   #foot .runwrap{min-width:0}
   #foot .runwrap .dd{min-width:0;max-width:130px}
@@ -404,7 +411,8 @@
 
   /* ================= light theme ================= */
   :root[data-theme="light"]{--bg:#f5f6f8;--panel:#ffffff;--panel2:#f1f3f6;--line:#e6e9ee;--line2:#d9dde4;--fg:#16181d;--dim:#5d6473;--dim2:#8b92a1;
-    --violet-soft:#7c3aed14;color-scheme:light}
+    --violet-soft:#7c3aed14;color-scheme:light;
+    --sidebar-bg:color-mix(in srgb, var(--bg), var(--fg) 4%)}
   :root[data-theme="dark"]{color-scheme:dark}
   [data-theme="light"] body{background:var(--bg)}
   [data-theme="light"] button:hover:not(:disabled){background:#eceff3;border-color:#cdd2da}
@@ -444,14 +452,22 @@
   #edact button:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
   #edact #rec.on{background:var(--rec);color:#fff}
   body.collect #guide, body.use #guide, body.jem #guide{padding:0;gap:0}
-  .ghead{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 10px 16px;font:600 12.5px/1 inherit;color:var(--dim)}
-  #histlist{display:flex;flex-direction:column;gap:2px;padding:0 8px 16px;overflow:auto}
-  #histlist .hitem{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;padding:10px 10px;border:none;border-radius:9px;
-       background:none;text-align:start;cursor:pointer;white-space:normal}
-  #histlist .hitem:hover{background:var(--panel2)}
-  #histlist .hitem .p{font:450 12.5px/1.45 inherit;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  #histlist .hitem .t{font:500 10.5px/1 inherit;color:var(--dim2)}
-  .hempty{padding:14px 16px;color:var(--dim2);font-size:12px;line-height:1.6}
+  /* ---- history sidebar: a plain, quiet list — one "New prompt" row, hairline, grouped rows */
+  .newprompt{display:flex;align-items:center;gap:9px;margin:8px 8px 0;padding:0 10px;height:38px;flex:0 0 auto;
+             border:1px solid var(--line2);border-radius:9px;background:none;color:var(--fg);font:520 12.5px/1 inherit;justify-content:flex-start}
+  .newprompt svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+  .newprompt:hover{background:var(--panel2)}
+  #guide .sidediv{flex:0 0 1px;margin:10px 0 2px;background:var(--line)}
+  #histlist{display:flex;flex-direction:column;gap:0;padding:0 8px 16px;overflow:auto}
+  .hgrouplbl{padding:12px 8px 4px;font:650 10px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--dim2)}
+  #histlist .hitem{display:flex;align-items:center;gap:6px;height:38px;min-height:38px;padding:0 8px;border:none;border-radius:8px;
+       background:none;text-align:start;cursor:pointer;outline:none}
+  #histlist .hitem:hover, #histlist .hitem:focus-visible{background:var(--panel2)}
+  #histlist .hitem .p{flex:1 1 auto;min-width:0;font:450 12.5px/1.4 inherit;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #histlist .hitem .hcopy{flex:0 0 auto;width:26px;height:26px;padding:0;opacity:0;transition:opacity .1s}
+  #histlist .hitem .hcopy svg{width:14px;height:14px}
+  #histlist .hitem:hover .hcopy, #histlist .hitem:focus-within .hcopy{opacity:1}
+  .hempty{flex:1 1 auto;display:flex;align-items:center;padding:0 16px;color:var(--dim2);font-size:12px}
   @media (max-width: 860px){ #guideOpen{display:none!important} }
 
   #runAgent{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:var(--r);background:transparent;border-color:var(--line2);color:var(--fg)}
@@ -519,9 +535,12 @@
   #editor.locked{opacity:.55;cursor:progress;user-select:none}
 </style>
 
-<aside id="guide">
-  <div class="ghead"><span data-t="history_lbl">שיחות קודמות</span><button id="newPrompt" class="ghost ic" data-t-title="new_prompt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+<aside id="guide" title="שיחות קודמות" data-t-title="history_lbl">
+  <button id="newPrompt" class="newprompt" data-t-title="new_prompt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-t="new_prompt_lbl">פרומפט חדש</span></button>
+  <div class="sidediv"></div>
   <div id="histlist"></div>
+  <div class="sidediv"></div>
+  <button id="settingsbtn" class="newprompt sidefoot" data-t-title="settings_title"><svg viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span data-t="settings_lbl">הגדרות</span></button>
 </aside>
 
 <div class="split" data-side="guide" data-t-title="split_tip"></div>
@@ -534,13 +553,6 @@
       <label class="swtoggle"><input type="checkbox" id="togCollect" checked><span class="swtrack"></span><span class="swlbl" data-t="mode_collect">איסוף</span></label>
     </div>
     <span id="modehint" hidden></span>
-  </div>
-  <!-- The device/project picker is a caption for the mirrored screen below it, not a composer
-       control — it sits right above the device it names, minimal text + chevron only. -->
-  <div class="bar" id="targetbar">
-    <select id="project" data-t-title="project_title"></select>
-    <select id="device" data-t-title="device_title"></select>
-    <span id="agentpill" class="pill" title="on-device agent"></span>
   </div>
   <div id="problems"></div>
   <div id="stage">
@@ -567,12 +579,16 @@
 <div class="split" data-side="right" data-t-title="split_tip"></div>
 
 <div id="right">
+  <!-- Context header: ONLY which project/device — the dot IS the connection state, no agent
+       pill, no "connected to …" text, no tokens, no settings (those moved out — see below). -->
   <div class="row" id="rhead">
-    <span id="status" data-t="ready">מוכן</span>
-    <span id="ctx"></span>
-    <span id="tokest" hidden></span>
-    <button id="settingsbtn" class="ghost ic" data-t-title="settings_title"><svg viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <select id="project" data-t-title="project_title"></select>
+    <select id="device" data-t-title="device_title"></select>
+    <span id="agentpill" class="pill" title="on-device agent"></span>
   </div>
+  <!-- Transient messages (copy/save confirmations, errors) and the screen context — kept out of
+       the header above so it never restates which device is connected. -->
+  <div class="row" id="substatus"><span id="ctx"></span><span id="status" data-t="ready">מוכן</span></div>
 
   <div id="edwrap">
     <div id="edscroll">
@@ -583,6 +599,7 @@
         <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span class="dots"><i></i><i></i><i></i></span></button>
         <span class="sp"></span>
         <span class="splitbtn" id="runWrap" hidden><button id="runAgent" class="ic" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none"/></svg></button><button class="chev" data-pop="run" data-t-title="run_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
+        <span id="tokest" hidden></span>
         <button id="save" class="ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
         <span class="splitbtn"><button id="copyAll" class="ic" data-t-title="copy_tip"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button><button class="chev" data-pop="copy" data-t-title="copy_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
       </div>
@@ -694,7 +711,8 @@ const I18N = {
     refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה', st_locked: 'ה-AI עורך את הטקסט — רגע, עוד לא אפשר להוסיף',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
     settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', notes: 'הערות לסוכן',
-    history_lbl: 'שיחות קודמות', new_prompt: 'פרומפט חדש (הנוכחי נשמר ברשימה)', guide_open: 'פתיחת רשימת השיחות', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
+    history_lbl: 'שיחות קודמות', new_prompt: 'פרומפט חדש (הנוכחי נשמר ברשימה)', new_prompt_lbl: 'פרומפט חדש', guide_open: 'פתיחת רשימת השיחות', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
+    hist_today: 'היום', hist_yesterday: 'אתמול', hist_week: '7 הימים האחרונים', hist_older: 'ישן יותר', hist_copy_tip: 'העתקת הפרומפט הזה',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
     device_title: 'איזה מכשיר לשקף. נקודה ירוקה = האפליקציה של הפרויקט הפעיל מותקנת בו', device_none: 'אין מכשיר מחובר', headless: 'ללא חלון', device_many: '{0} מכשירים — בחר את זה שהמסך ישקף',
@@ -711,12 +729,12 @@ const I18N = {
     tok_est: '≈{0} טוקנים',
     st_resolving: '@{0} — {1}', st_chip_copied: 'הרפרנס "{0}" הועתק', st_copied: 'הועתק — {0} רפרנסים, {1} תווים',
     btn_copied: 'הועתק ✓ {0} רפרנסים', st_copy_blocked: 'ההעתקה נחסמה — סמן והעתק ידנית', st_orphans: 'אזהרה: {0} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד',
-    st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'עדיין אין שיחות. כל פרומפט שמועתק, מורץ או נשמר יופיע כאן.',
+    st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'אין שיחות קודמות עדיין',
     st_hist_restored: 'שוחזר מההיסטוריה (⌥-קליק מעתיק בלי לשחזר)', st_pasted: 'הודבק — {0} רפרנסים שוחזרו כתגים',
     st_copied_sel: 'הועתק עם {0} רפרנסים מלאים', st_cut_sel: 'נגזר עם {0} רפרנסים מלאים', st_copied_plain: 'הועתק', st_cut_plain: 'נגזר',
     st_mic: 'אין גישה למיקרופון: {0}', st_rec: 'מקליט…', st_rec_hint: 'מקליט… (מקטע נחתך בהפסקה)', st_rec_done: 'ההקלטה הסתיימה', st_stt_fail: 'תמלול נכשל: {0}',
     st_key_missing: 'לא הוזן מפתח', st_key_saved: 'המפתח נשמר — תמלול פעיל', key_needed: 'צריך מפתח OpenAI — פתח את ההגדרות ⚙', key_set: 'מפתח שמור: ',
-    st_switching: 'עובר ל-{0}…', st_mirroring: 'משקף את {0}', st_connected: 'מחובר ל-{0}', st_agent_starting: 'מפעיל את הסוכן…', st_agent_on: 'הסוכן פעיל',
+    st_switching: 'עובר ל-{0}…', st_agent_starting: 'מפעיל את הסוכן…', st_agent_on: 'הסוכן פעיל',
     warn_mismatch: '⚠︎ הבילד המותקן אינו הגרסה שבריפו — ייתכן שהאפליקציה שרצה לא מכילה את השינויים ב-HEAD',
     no_device_state: 'אין מכשיר מחובר (adb get-state: {0})', agent_on_tip: 'סוכן על המכשיר: לכידות מהירות, פריימים JPEG, קלט Unicode', agent_off_tip: 'הסוכן כבוי — {0} (לחץ לניסיון חוזר)',
     tool_pick: 'בחירה', tool_pen: 'עט', tool_rect: 'מסגרת', tool_arrow: 'חץ', undo_mark: 'בטל סימון',
@@ -759,7 +777,8 @@ const I18N = {
     refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit', st_locked: 'the AI is editing the text — adding waits until it is done',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
     settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', notes: 'Agent notes',
-    history_lbl: 'Previous prompts', new_prompt: 'New prompt (the current one is kept in the list)', guide_open: 'Open the prompt list', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
+    history_lbl: 'Previous prompts', new_prompt: 'New prompt (the current one is kept in the list)', new_prompt_lbl: 'New prompt', guide_open: 'Open the prompt list', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
+    hist_today: 'Today', hist_yesterday: 'Yesterday', hist_week: 'Previous 7 days', hist_older: 'Older', hist_copy_tip: 'Copy this prompt',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
     device_title: 'Which device to mirror. Green dot = the active project\'s app is installed on it', device_none: 'No device attached', headless: 'no window', device_many: '{0} devices — pick the one to mirror',
@@ -776,12 +795,12 @@ const I18N = {
     tok_est: '≈{0} tokens',
     st_resolving: '@{0} — {1}', st_chip_copied: 'reference "{0}" copied', st_copied: 'copied — {0} references, {1} chars',
     btn_copied: 'Copied ✓ {0} references', st_copy_blocked: 'clipboard blocked — select and copy by hand', st_orphans: 'warning: {0} chips without reference data — copied as plain text',
-    st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No prompts yet. Every prompt you copy, run or save lands here.',
+    st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No prompts yet',
     st_hist_restored: 'restored from history (⌥-click copies without restoring)', st_pasted: 'pasted — {0} references restored as chips',
     st_copied_sel: 'copied with {0} full references', st_cut_sel: 'cut with {0} full references', st_copied_plain: 'copied', st_cut_plain: 'cut',
     st_mic: 'no microphone access: {0}', st_rec: 'recording…', st_rec_hint: 'recording… (segments cut at pauses)', st_rec_done: 'recording stopped', st_stt_fail: 'transcription failed: {0}',
     st_key_missing: 'no key entered', st_key_saved: 'key saved — dictation is on', key_needed: 'an OpenAI key is needed — open settings ⚙', key_set: 'key stored: ',
-    st_switching: 'switching to {0}…', st_mirroring: 'mirroring {0}', st_connected: 'connected to {0}', st_agent_starting: 'starting the agent…', st_agent_on: 'agent is on',
+    st_switching: 'switching to {0}…', st_agent_starting: 'starting the agent…', st_agent_on: 'agent is on',
     warn_mismatch: "⚠︎ the installed build is not the version the repo declares — the running app may not contain HEAD's changes",
     no_device_state: 'no device attached (adb get-state: {0})', agent_on_tip: 'on-device agent: fast dumps, JPEG frames, Unicode input', agent_off_tip: 'agent off — {0} (click to retry)',
     tool_pick: 'Pick', tool_pen: 'Pen', tool_rect: 'Box', tool_arrow: 'Arrow', undo_mark: 'Undo mark',
@@ -1880,14 +1899,16 @@ function fmtCount(n) {
 let tokEstTimer = null
 function scheduleTokEst() { clearTimeout(tokEstTimer); tokEstTimer = setTimeout(updateTokEst, 150) }
 function updateTokEst() {
+  // The box itself is empty (no text, no chips) — show nothing, not a count for the boilerplate
+  // serialize() would still emit (screen context, headings).
+  if (!ed.textContent.trim() && !ed.querySelector('.chip')) { $('#tokest').hidden = true; return }
   // serialize() also writes the shared `orphans` counter that copy/run read right after their
   // own call — save and restore it so this periodic, read-only estimate can never race them.
   const savedOrphans = orphans
   const { text } = serialize()
   orphans = savedOrphans
-  const has = Boolean(text && text.trim())
-  $('#tokest').hidden = !has
-  if (has) $('#tokest').textContent = t('tok_est', fmtCount(estimateTokens(text)))
+  $('#tokest').hidden = false
+  $('#tokest').textContent = t('tok_est', fmtCount(estimateTokens(text)))
 }
 // Covers typing, chip insertion and chip/mark removal in one place — every one of them mutates
 // the editor's DOM, so nothing needs its own call site.
@@ -2069,31 +2090,50 @@ function pushHistory(text) {
   } catch {}
 }
 // The side panel is the list of previous prompts: every copy, run, save and clear lands here.
-const relTime = at => {
-  const s = (Date.now() - at) / 1000, he = lang === 'he'
-  if (s < 60) return he ? 'עכשיו' : 'now'
-  if (s < 3600) return he ? `לפני ${Math.round(s / 60)} ד׳` : `${Math.round(s / 60)} min ago`
-  const d = new Date(at), today = new Date()
-  return d.toDateString() === today.toDateString() ? d.toLocaleTimeString(he ? 'he-IL' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString(he ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short' })
+// Grouped like a chat sidebar: Today / Yesterday / Previous 7 days / Older, by calendar day —
+// every entry has a timestamp (pushHistory always sets `at`), so this never falls back to plain
+// dividers.
+function histGroupKey(at) {
+  const dayStart = ts => { const d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() }
+  const days = Math.round((dayStart(Date.now()) - dayStart(at)) / 86400000)
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days <= 7 ? 'week' : 'older'
 }
+const COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg>'
 function renderHistory() {
   let h = []; try { h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]') } catch {}
   $('#guide').dir = lang === 'he' ? 'rtl' : 'ltr'
-  $('#histlist').innerHTML = h.map((x, i) => {
-    const task = (x.text.split('\n# ')[0] || '').replace(/^# Task[^\n]*\n/, '').replace(/@(ui|ios|android|mark)\d+/g, '·').trim()
-    const refs = (x.text.match(/^### @/gm) || []).length
-    return `<button class="hitem" data-i="${i}"><span class="p">${escapeHTML(task.slice(0, 180) || '—')}</span><span class="t">${relTime(x.at)}${refs ? ` · ${refs} ${lang === 'he' ? 'עוגנים' : 'anchors'}` : ''}</span></button>`
-  }).join('') || `<div class="hempty">${escapeHTML(t('hist_empty'))}</div>`
+  if (!h.length) { $('#histlist').innerHTML = `<div class="hempty">${escapeHTML(t('hist_empty'))}</div>`; return }
+  const groups = { today: [], yesterday: [], week: [], older: [] }
+  h.forEach((x, i) => groups[histGroupKey(x.at)].push(i))
+  const row = i => {
+    const x = h[i]
+    const task = (x.text.split('\n# ')[0] || '').replace(/^# Task[^\n]*\n/, '').replace(/@(ui|ios|android|mark)\d+/g, '·').trim() || '—'
+    return `<div class="hitem" data-i="${i}" tabindex="0" role="button" title="${escapeHTML(task)}">
+      <span class="p">${escapeHTML(task)}</span>
+      <button type="button" class="hcopy ghost ic" data-copy="${i}" title="${escapeHTML(t('hist_copy_tip'))}">${COPY_ICON}</button>
+    </div>`
+  }
+  $('#histlist').innerHTML = ['today', 'yesterday', 'week', 'older'].filter(k => groups[k].length)
+    .map(k => `<div class="hgrouplbl">${escapeHTML(t('hist_' + k))}</div>` + groups[k].map(row).join('')).join('')
 }
 setInterval(renderHistory, 60000)
+async function copyHistoryAt(i) {
+  const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[i]; if (!h) return
+  await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus(t('st_hist_copied'), 'ok')
+}
 $('#histlist').addEventListener('click', async e => {
+  const copyBtn = e.target.closest('.hcopy'); if (copyBtn) { e.stopPropagation(); return copyHistoryAt(Number(copyBtn.dataset.copy)) }
   const it = e.target.closest('.hitem[data-i]'); if (!it) return
   const h = JSON.parse(localStorage.getItem('emucomposer.history') || '[]')[Number(it.dataset.i)]; if (!h) return
-  if (e.altKey) { await navigator.clipboard.writeText(h.text).catch(() => {}); setStatus(t('st_hist_copied'), 'ok'); return }
+  if (e.altKey) return copyHistoryAt(Number(it.dataset.i))
   ed.innerHTML = h.html; refs = new Map(h.refs); refN = h.refN
   for (const c of ed.querySelectorAll('.chip')) { c.classList.add('stale'); refN = Math.max(refN, Number((c.dataset.uid || 'r0').slice(1)) || 0); refOf(c) }
   saveDraft(); syncMarks(); updateDual(); setStatus(t('st_hist_restored'), 'ok')
+})
+$('#histlist').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return
+  const it = e.target.closest('.hitem[data-i]'); if (!it) return
+  e.preventDefault(); it.click()
 })
 
 // ------------------------------------------------------------- dictation ----
@@ -2756,11 +2796,11 @@ function connectEvents() {
       renderDevices(ev.devices || [], ev.serial || '')
       if (ev.projects) renderProjects(ev.projects, ev.active || '')
       if (ev.serial !== activeSerial) {
-        const was = activeSerial; activeSerial = ev.serial
+        activeSerial = ev.serial
         if (!ev.serial) { markLost(t('st_no_device')); return }
         markAlive(); nodes = []; captureId = 0; drawOverlay()
         for (const c of ed.querySelectorAll('.chip')) c.classList.add('stale')
-        if (was !== undefined) setStatus(t('st_connected', ev.serial), 'ok')
+        // No "connected to X" here: the device dropdown + its dot already say so.
         liveStop(); Live.failed = false; Live.touch = false
         if (still()) capture()
         if (mode === 'jem') liveStart(false)
@@ -2783,7 +2823,8 @@ $('#device').addEventListener('change', async e => {
   try {
     const d = await (await fetch('/api/device', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial }) })).json()
     if (d.error) throw new Error(d.error)
-    setStatus(t('st_mirroring', serial), 'ok')
+    // No confirmation text either: the dropdown now shows `serial` selected, dot and all.
+    setStatus('', '')
   } catch (err) { setStatus(err.message, 'err') }
 })
 
