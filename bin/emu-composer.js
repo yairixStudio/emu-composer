@@ -8,7 +8,8 @@
 //   emu-composer install-app     "<App> Composer.app" in ~/Applications (Spotlight / Dock)
 //   emu-composer bar             build + launch the floating bar beside the emulator window
 //   emu-composer doctor          check node, adb, device, agent jar, key, config
-//   emu-composer log [N] [--day YYYY-MM-DD] [--json]   the session journal, last N events
+//   emu-composer log [N] [--day YYYY-MM-DD] [--json] [--follow] [--grep REGEX]
+//                                 the session journal, last N events (or live-tail with --follow)
 import { spawn, execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
@@ -192,21 +193,57 @@ async function doctor() {
 }
 
 // The session journal (~/.config/emu-composer/logs/<day>.jsonl), readable: time, event, the
-// fields that matter. --json passes the raw lines through for a script or an agent.
+// fields that matter. --json passes the raw lines through for a script or an agent. --follow
+// tails the file like `tail -f` (for watching a live session); --grep REGEX keeps only matching
+// lines, checked against the raw JSON so it can match the event name or any field.
 async function journal() {
-  const n = Number(args.find(a => /^\d+$/.test(a))) || 60
-  const day = flag('day') || new Date().toISOString().slice(0, 10)
-  const file = path.join(HOME, 'logs', `${day}.jsonl`)
-  if (!fsSync.existsSync(file)) return say(`no journal for ${day} (${file})`)
-  const lines = fsSync.readFileSync(file, 'utf8').trim().split('\n').slice(-n)
-  if (has('json')) return say(lines.join('\n'))
-  for (const l of lines) {
-    let d; try { d = JSON.parse(l) } catch { continue }
+  const dayFlag = flag('day')
+  // A bare numeric arg is N — unless it is actually a flag's own value (a numeric --grep pattern
+  // would otherwise be mistaken for N); --day's value always has dashes, so it never collides.
+  const flagVals = new Set(['day', 'grep'].map(f => flag(f)).filter(v => typeof v === 'string'))
+  const n = Number(args.find(a => /^\d+$/.test(a) && !flagVals.has(a))) || 60
+  const grep = flag('grep') ? new RegExp(String(flag('grep')), 'i') : null
+  const fileFor = d => path.join(HOME, 'logs', `${d}.jsonl`)
+  let day = dayFlag || new Date().toISOString().slice(0, 10)
+  let file = fileFor(day)
+  const printRaw = raw => {
+    if (grep && !grep.test(raw)) return
+    if (has('json')) return say(raw)
+    let d; try { d = JSON.parse(raw) } catch { return }
     const { t, ev, at, src, mode, serial, ...rest } = d
     const v = Object.entries(rest).filter(([, x]) => x !== undefined && x !== '').map(([k, x]) => `${k}=${typeof x === 'string' ? JSON.stringify(x.length > 90 ? x.slice(0, 90) + '…' : x) : JSON.stringify(x)}`).join(' ')
     say(`${new Date(t).toLocaleTimeString('en-GB')}  ${(src === 'ui' ? '·' : ' ')}${String(ev).padEnd(13)} ${mode ? `[${mode}] ` : ''}${v}`)
   }
-  say(`\n${file}`)
+  let size = 0
+  if (fsSync.existsSync(file)) {
+    const lines = fsSync.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
+    for (const l of lines.slice(-n)) printRaw(l)
+    size = fsSync.statSync(file).size
+  } else if (!has('follow')) {
+    return say(`no journal for ${day} (${file})`)
+  }
+  if (!has('follow')) return say(`\n${file}`)
+  say(`\n(following ${file}${grep ? `, filter /${grep.source}/` : ''} — ^C to stop)`)
+  let tail = ''
+  for (;;) {
+    await new Promise(r => setTimeout(r, 400))
+    // Log filenames are a UTC date, so the file rolls over at UTC midnight — re-resolve it each
+    // poll unless --day pinned a specific one.
+    const curDay = dayFlag || new Date().toISOString().slice(0, 10)
+    if (curDay !== day) { day = curDay; file = fileFor(day); size = 0; tail = ''; say(`\n(new day — now following ${file})`) }
+    if (!fsSync.existsSync(file)) continue
+    const st = fsSync.statSync(file)
+    if (st.size < size) size = 0   // truncated or rotated under us
+    if (st.size === size) continue
+    const fd = fsSync.openSync(file, 'r')
+    const buf = Buffer.alloc(st.size - size)
+    fsSync.readSync(fd, buf, 0, buf.length, size)
+    fsSync.closeSync(fd)
+    size = st.size
+    const parts = (tail + buf.toString('utf8')).split('\n')
+    tail = parts.pop() || ''   // hold a partial trailing line until it completes
+    for (const l of parts) if (l.trim()) printRaw(l)
+  }
 }
 
 const commands = { log: journal, run, init, 'setup-agent': () => sh('setup-agent.sh'), 'setup-ios-agent': () => sh('setup-ios-agent.sh'), 'install-app': installApp, bar, doctor,

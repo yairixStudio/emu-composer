@@ -450,6 +450,16 @@
   #edact button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   #edact #refine svg{stroke:#a78bfa}
   #edact button:hover:not(:disabled){background:var(--panel2);color:var(--fg)}
+  /* Mic level meter: 5 thin bars beside the mic button, fed by the AnalyserNode startMeter()
+     already runs on the recorder's own stream (no second getUserMedia). Height tracks the
+     smoothed level continuously; colour flips to --rec only above SPEECH_LEVEL, the same
+     threshold the dictation itself cuts a segment at a pause with. A `display` rule here has to
+     beat the plain [hidden] one, same as #edact #tokest[hidden] below. */
+  #vu{display:flex;align-items:flex-end;gap:2px;height:15px;padding:0 3px;margin-inline-end:1px}
+  #vu[hidden]{display:none}
+  #vu i{width:3px;border-radius:1px;background:var(--dim2);transition:height .05s linear,background .15s linear}
+  #vu.loud i{background:var(--rec)}
+  @media (prefers-reduced-motion: reduce){ #vu i{transition:none} }
   #edact #rec.on{background:var(--rec);color:#fff}
   body.collect #guide, body.use #guide, body.jem #guide{padding:0;gap:0}
   /* ---- history sidebar: a plain, quiet list — one "New prompt" row, hairline, grouped rows */
@@ -596,6 +606,7 @@
            data-t-ph="placeholder" data-ph=""></div>
       <div id="edact">
         <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
+        <span id="vu" class="vu" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span class="dots"><i></i><i></i><i></i></span></button>
         <span class="sp"></span>
         <span class="splitbtn" id="runWrap" hidden><button id="runAgent" class="ic" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none"/></svg></button><button class="chev" data-pop="run" data-t-title="run_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
@@ -879,6 +890,7 @@ function setMode(m) {
   if (m === mode && nodes.length) return
   mode = m
   uilog('mode', { to: m })
+  uilog('toggle', { use: m !== 'collect', collect: m !== 'use' })
   if (m !== 'jem') plainMode = m
   // Only the mode class changes: the body also carries layout and state classes.
   document.body.classList.remove(...Object.keys(MODES)); document.body.classList.add(m)
@@ -1780,6 +1792,7 @@ ed.addEventListener('copy', e => onCopyCut(e, false))
 ed.addEventListener('cut', e => onCopyCut(e, true))
 ed.addEventListener('paste', e => {
   e.preventDefault()
+  editVia = 'paste'
   const cd = e.clipboardData || window.clipboardData
   const own = cd.getData(CHIP_MIME)
   if (own) {
@@ -1797,12 +1810,30 @@ ed.addEventListener('paste', e => {
       for (const x of box.querySelectorAll('.interim')) x.remove()
       insertHTMLAtCaret(box.innerHTML)
       saveDraft(); syncMarks()
+      editVia = 'typing'
       return setStatus(t('st_pasted', box.querySelectorAll('.chip').length), 'ok')
     } catch {}
   }
   document.execCommand('insertText', false, cd.getData('text/plain'))
+  editVia = 'typing'
 })
-ed.addEventListener('input', () => { saveDraft(); syncMarks() })
+// Journal: a debounced snapshot of the editor once typing/dictation/paste/AI settle, so the log
+// shows text growth without a line per keystroke. `via` is read here — synchronously, while
+// execCommand is still unwinding — because by the time a MutationObserver callback would fire
+// (always a microtask later) each call site below has already reset it back to 'typing'.
+let editVia = 'typing', textEditTimer = null, lastLogChars = 0
+function scheduleTextEditLog() {
+  const via = editVia
+  clearTimeout(textEditTimer)
+  textEditTimer = setTimeout(() => {
+    const chars = ed.textContent.length
+    if (chars === lastLogChars) return   // nothing actually changed
+    const marksN = ed.querySelectorAll('.chip.mark').length
+    uilog('text_edit', { chars, delta: chars - lastLogChars, chips: ed.querySelectorAll('.chip').length - marksN, marks: marksN, via })
+    lastLogChars = chars
+  }, 1000)
+}
+ed.addEventListener('input', () => { saveDraft(); syncMarks(); scheduleTextEditLog() })
 
 // ----------------------------------------------------- assembling the text --
 let orphans = 0
@@ -1912,7 +1943,32 @@ function updateTokEst() {
 }
 // Covers typing, chip insertion and chip/mark removal in one place — every one of them mutates
 // the editor's DOM, so nothing needs its own call site.
-new MutationObserver(scheduleTokEst).observe(ed, { childList: true, subtree: true, characterData: true })
+//
+// Journal: chip_add/chip_remove and mark_add/mark_remove are detected the same way, by diffing
+// the live chip uids against the last snapshot, rather than hooking insertRef/addMark/removeMark
+// directly — backspace, cut, undo, newPrompt and a paste of a previously-copied chip all add or
+// remove a chip without going through those functions, and refine re-inserts the same uids it
+// started with, so it produces no spurious events here.
+let chipSnapshot = new Map()
+function snapshotChips() {
+  const cur = new Map()
+  for (const c of ed.querySelectorAll('.chip[data-uid]')) {
+    const r = refOf(c)
+    cur.set(c.dataset.uid, { mark: c.classList.contains('mark'), n: r?.n, label: r?.label || c.textContent.replace(/^@/, ''), platform: r?.platform || c.dataset.platform || '' })
+  }
+  return cur
+}
+function diffChips() {
+  const cur = snapshotChips()
+  for (const [uid, v] of cur) if (!chipSnapshot.has(uid)) {
+    if (v.mark) uilog('mark_add', { n: v.n, kind: 'mark' }); else uilog('chip_add', { label: v.label, platform: v.platform })
+  }
+  for (const [uid, v] of chipSnapshot) if (!cur.has(uid)) {
+    if (v.mark) uilog('mark_remove', { n: v.n, kind: 'mark' }); else uilog('chip_remove', { label: v.label, platform: v.platform })
+  }
+  chipSnapshot = cur
+}
+new MutationObserver(() => { scheduleTokEst(); diffChips() }).observe(ed, { childList: true, subtree: true, characterData: true })
 
 // The button itself confirms the copy — a status line far from the cursor is easy to miss.
 let copyFlash = null
@@ -1920,7 +1976,8 @@ $('#copyAll').onclick = async () => {
   const { text, used } = serialize()
   const b = $('#copyAll')
   try { await navigator.clipboard.writeText(text) } catch { b.classList.add('fail'); setTimeout(() => b.classList.remove('fail'), 1200); return setStatus(t('st_copy_blocked'), 'err') }
-  pushHistory(text); uilog('copy', { text, refs: used.length })
+  const marksN = used.filter(u => u.kind === 'mark').length
+  pushHistory(text); uilog('copy', { text, refs: used.length, chars: text.length, tokensEst: estimateTokens(text), chips: used.length - marksN, marks: marksN })
   if (orphans) setStatus(t('st_orphans', orphans), 'err')
   clearTimeout(copyFlash)
   b.classList.add('done'); b.title = t('btn_copied', used.length)
@@ -2008,13 +2065,14 @@ $('#agent').addEventListener('change', e => { try { localStorage.setItem('emucom
 let runFlash = null
 $('#runAgent').onclick = async () => {
   const agent = $('#agent').value; if (!agent) return
-  const { text } = serialize()
+  const { text, used } = serialize()
   const name = $('#agent').selectedOptions[0]?.textContent || agent
   setStatus(t('st_running', name), 'busy')
   try {
     const d = await (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent, text, model: LS('emucomposer.model.agent.' + agent) || '' }) })).json()
     if (d.error) throw new Error(d.error)
-    pushHistory(text); uilog('run', { agent, text })
+    const marksN = used.filter(u => u.kind === 'mark').length
+    pushHistory(text); uilog('run', { agent, text, chars: text.length, tokensEst: estimateTokens(text), chips: used.length - marksN, marks: marksN })
     const b = $('#runAgent'); clearTimeout(runFlash)
     b.classList.add('done')
     runFlash = setTimeout(() => b.classList.remove('done'), 1800)
@@ -2031,6 +2089,8 @@ $('#save').onclick = async () => {
       body: JSON.stringify({ text, crops, screen: fullShot() }) })).json()
     if (d.error) throw new Error(d.error)
     await navigator.clipboard.writeText(d.text).catch(() => {})
+    const marksN = used.filter(u => u.kind === 'mark').length
+    uilog('save', { file: d.file, chars: text.length, tokensEst: estimateTokens(text), chips: used.length - marksN, marks: marksN })
     setStatus(t('st_saved', d.file), 'ok')
   } catch (e) { setStatus(e.message, 'err') }
 }
@@ -2147,7 +2207,12 @@ $('#histlist').addEventListener('keydown', e => {
 // recorder starts BEFORE the previous one stops, so no word falls into the gap.
 let mediaRec = null, recOn = false, audioCtx = null, stream = null
 let seg = null, segN = 0, lastTranscript = ''
+let recStartAt = 0, segCutCount = 0
 const SEG_MIN_MS = 1200, SEG_MAX_MS = 15000, SILENCE_MS = 450, SPEECH_LEVEL = 0.06
+// The level meter beside the mic button: 5 bars, tallest in the middle — a glance-readable
+// level, not a spectrum (there is only one RMS number, not per-band data).
+const vuBars = [...document.querySelectorAll('#vu i')]
+const VU_MAX = [5, 9, 13, 9, 5]
 
 async function toggleRec() {
   if (recOn) return stopRec()
@@ -2155,18 +2220,26 @@ async function toggleRec() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   } catch (e) { return setStatus(t('st_mic', e.message), 'err') }
-  recOn = true; uilog('rec', { on: true })
-  $('#rec').classList.add('on'); recTitle(); renderGuide()
+  recOn = true; recStartAt = Date.now(); segCutCount = 0
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(mt => MediaRecorder.isTypeSupported(mt)) || ''
+  const track = stream.getAudioTracks()[0]
+  uilog('rec', { on: true })
+  uilog('rec_start', { mimeType: mime, sampleRate: track?.getSettings?.().sampleRate || null, deviceLabel: track?.label || '',
+    speechLevel: SPEECH_LEVEL, silenceMs: SILENCE_MS, segMinMs: SEG_MIN_MS, segMaxMs: SEG_MAX_MS })
+  $('#rec').classList.add('on'); $('#vu').hidden = false; recTitle(); renderGuide()
   setStatus(t('st_rec_hint'), 'busy')
   startMeter()
-  startSegment()
+  startSegment(mime)
 }
-function startSegment() {
+function startSegment(mime) {
   if (!recOn) return
-  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || ''
-  const rec = mediaRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
-  const s = seg = { n: ++segN, t0: Date.now(), lastLoud: Date.now(), hadSpeech: false, marker: null, rec }
-  rec.ondataavailable = ev => { if (s.hadSpeech && ev.data.size > 1000) sendSegment(ev.data, s); else s.marker?.remove() }
+  const m = mime || ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(mt => MediaRecorder.isTypeSupported(mt)) || ''
+  const rec = mediaRec = new MediaRecorder(stream, m ? { mimeType: m } : undefined)
+  const s = seg = { n: ++segN, t0: Date.now(), lastLoud: Date.now(), hadSpeech: false, marker: null, rec, peak: 0, rmsSum: 0, rmsCount: 0, durMs: 0 }
+  rec.ondataavailable = ev => {
+    if (s.hadSpeech && ev.data.size > 1000) sendSegment(ev.data, s)
+    else { uilog('seg_skip', { segIdx: s.n, bytes: ev.data.size }); s.marker?.remove() }
+  }
   rec.onstop = () => { if (!recOn && seg === s) stream?.getTracks().forEach(t => t.stop()) }
   rec.start()
 }
@@ -2180,9 +2253,12 @@ function placeSegMarker(s) {
   caretAfter(s.marker)
   back?.focus({ preventScroll: true })
 }
-function cutSegment() {
+function cutSegment(reason = 'pause') {
   const s = seg
   if (!s || s.rec.state !== 'recording') return
+  s.durMs = Date.now() - s.t0
+  segCutCount++
+  uilog('seg_cut', { segIdx: s.n, durMs: s.durMs, reason, speech: s.hadSpeech, peak: +s.peak.toFixed(3), avgRms: +(s.rmsCount ? s.rmsSum / s.rmsCount : 0).toFixed(3) })
   if (s.hadSpeech && !s.marker) placeSegMarker(s)   // (a safety net: normally placed at onset)
   if (recOn) startSegment()                         // overlap: the next one is already listening
   s.rec.stop()
@@ -2192,12 +2268,15 @@ function segBreak(why) {
   if (!recOn || !seg?.hadSpeech || seg.rec.state !== 'recording') return
   uilog('seg-break', { why, ms: Date.now() - seg.t0 })
   seg.broken = true
-  cutSegment()
+  cutSegment('break')   // not a natural pause or the max-length cap — 'why' above has the real cause
 }
 function stopRec() {
-  recOn = false; uilog('rec', { on: false })
-  if (seg?.rec.state === 'recording') cutSegment()
+  recOn = false
+  if (seg?.rec.state === 'recording') cutSegment('stop')
+  uilog('rec', { on: false })
+  uilog('rec_stop', { durMs: Date.now() - recStartAt, segments: segCutCount })
   $('#rec').classList.remove('on'); $('#rec').style.setProperty('--lv', 0); recTitle(); renderGuide()
+  $('#vu').hidden = true; $('#vu').classList.remove('loud'); for (const b of vuBars) b.style.height = ''
   audioCtx?.close().catch(() => {}); audioCtx = null
   setStatus(t('st_rec_done'), 'ok')
 }
@@ -2206,17 +2285,30 @@ function startMeter() {
   const src = audioCtx.createMediaStreamSource(stream)
   const an = audioCtx.createAnalyser(); an.fftSize = 1024; src.connect(an)
   const buf = new Float32Array(an.fftSize)
+  let smoothed = 0, windowPeak = 0, lastLevelAt = Date.now()
   const tick = () => {
     if (!recOn) return
     an.getFloatTimeDomainData(buf)
     let sum = 0; for (const v of buf) sum += v * v
     const rms = Math.sqrt(sum / buf.length)
     $('#rec').style.setProperty('--lv', Math.min(1, rms / 0.25).toFixed(3))
+    // The meter's own smoothing (for the bars) is separate from the raw `rms` the pause/speech
+    // detection below reads — that threshold must stay exactly as sensitive as it always was.
+    smoothed = smoothed * 0.7 + Math.min(1, rms / 0.25) * 0.3
+    const loud = rms > SPEECH_LEVEL
+    $('#vu').classList.toggle('loud', loud)
+    for (let i = 0; i < vuBars.length; i++) vuBars[i].style.height = (2 + (VU_MAX[i] - 2) * smoothed).toFixed(1) + 'px'
     const now = Date.now()
     if (seg) {
-      if (rms > SPEECH_LEVEL) { if (!seg.hadSpeech) placeSegMarker(seg); seg.lastLoud = now; seg.hadSpeech = true }
+      seg.peak = Math.max(seg.peak, rms); seg.rmsSum += rms; seg.rmsCount++
+      if (loud) { if (!seg.hadSpeech) placeSegMarker(seg); seg.lastLoud = now; seg.hadSpeech = true }
       const len = now - seg.t0, quiet = now - seg.lastLoud
-      if ((seg.hadSpeech && len > SEG_MIN_MS && quiet > SILENCE_MS) || len > SEG_MAX_MS) cutSegment()
+      if ((seg.hadSpeech && len > SEG_MIN_MS && quiet > SILENCE_MS) || len > SEG_MAX_MS) cutSegment(len > SEG_MAX_MS ? 'max' : 'pause')
+    }
+    windowPeak = Math.max(windowPeak, rms)
+    if (now - lastLevelAt >= 1000) {   // a compact level sample, at most once a second
+      uilog('rec_level', { rms: +rms.toFixed(3), peak: +windowPeak.toFixed(3), silent: windowPeak <= SPEECH_LEVEL })
+      lastLevelAt = now; windowPeak = 0
     }
     requestAnimationFrame(tick)
   }
@@ -2224,18 +2316,22 @@ function startMeter() {
 }
 async function sendSegment(blob, s) {
   const b64 = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(blob) })
+  uilog('seg_sent', { segIdx: s.n, bytes: blob.size, durMs: s.durMs })
+  const tSend = Date.now()
   try {
     const d = await (await fetch('/api/transcribe', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ audio: b64, mime: blob.type, language: sttOverride ?? sttLanguage, prompt: lastTranscript, model: modelFor('stt') }) })).json()
-    if (d.error) { setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
+    const ms = Date.now() - tSend
+    if (d.error) { uilog('seg_error', { segIdx: s.n, ms, message: String(d.error).slice(0, 200) }); setStatus(d.error, 'err'); if (/OpenAI key/.test(d.error)) stopRec(); s.marker?.remove(); return }
     const t = (d.text || '').trim()
-    if (!t) { s.marker?.remove(); return }
+    if (!t) { uilog('seg_empty', { segIdx: s.n, ms }); s.marker?.remove(); return }
+    uilog('seg_result', { segIdx: s.n, ms, chars: t.length, preview: t.slice(0, 60) })
     lastTranscript = (lastTranscript + ' ' + t).slice(-600)
     uilog('transcript', { text: t, ms: Date.now() - s.t0 })
     await refineIdle   // a transcript that lands while the AI edits waits for its answer
     placeTranscript(s.marker, t, s.broken)
     if (recOn) setStatus(t('st_rec'), 'busy')
-  } catch (e) { setStatus(t('st_stt_fail', e.message), 'err'); s.marker?.remove() }
+  } catch (e) { uilog('seg_error', { segIdx: s.n, ms: Date.now() - tSend, message: String(e.message || e).slice(0, 200) }); setStatus(t('st_stt_fail', e.message), 'err'); s.marker?.remove() }
 }
 // Replace the marker through the selection so the insert is undoable, then put the user's
 // caret back where it was.
@@ -2260,7 +2356,9 @@ function placeTranscript(marker, text, broken = false) {
   if (broken) text = text.replace(/[.。]$/, '')
   // Dictated words are grey, typed ones white: the transcript goes in as a .said span (the
   // space after it stays outside, so typing on from there is white again).
+  editVia = 'dictation'
   document.execCommand('insertHTML', false, (prev && !/\s/.test(prev) ? ' ' : '') + `<span class="said">${escapeHTML(text)}</span> `)
+  editVia = 'typing'
   if (userRange && !(marker && userRange.intersectsNode?.(marker))) { try { s.removeAllRanges(); s.addRange(userRange) } catch {} }
   rememberCaret(); saveDraft()
   back?.focus({ preventScroll: true })
@@ -2268,7 +2366,7 @@ function placeTranscript(marker, text, broken = false) {
 $('#rec').onclick = toggleRec
 // Typing, Enter, a paste or a delete in the text while speaking: the words so far go before it.
 // Only the user's own input — the markers and transcripts inserted here are not a break.
-ed.addEventListener('beforeinput', e => { if (e.isTrusted) segBreak(e.inputType) })
+ed.addEventListener('beforeinput', e => { if (e.isTrusted) { editVia = 'typing'; segBreak(e.inputType) } })
 
 // ---------------------------------------------------------------- AI edit ---
 // Three levels of involvement: plain dictation, a light clean-up, or a full edit that reads
@@ -2347,7 +2445,9 @@ async function refineText(level = aiLevel) {
     ed.focus()
     const r = document.createRange(); r.selectNodeContents(ed)
     const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+    editVia = 'ai'
     document.execCommand('insertHTML', false, html)
+    editVia = 'typing'
     for (const c of ed.querySelectorAll('.chip')) refOf(c)
     rememberCaret(); saveDraft(); syncMarks(); updateDual()
     setStatus(t('st_refined', t('ai_' + level)), 'ok')
@@ -2838,7 +2938,7 @@ for (const id of ['#project', '#device', '#agent', '#mStt', '#mClean', '#mFull',
 applyLang()
 setAiLevel(aiLevel, false)
 loadAgents()
-loadDraft(); syncMarks(); updateTokEst()
+loadDraft(); syncMarks(); updateTokEst(); chipSnapshot = snapshotChips()   // seed after the restore, not before — a fresh draft's chips are not "adds"
 health(); setInterval(health, 20000)
 {
   let initCollect = true, initUse = false

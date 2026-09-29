@@ -934,27 +934,41 @@ async function openaiKey() {
   return ''
 }
 
+// Scrub a stray API key out of anything that lands in the journal — OpenAI's own error text
+// sometimes echoes a masked key back.
+const scrubKey = s => String(s).replace(/sk-[A-Za-z0-9_*-]{4,}/g, 'sk-***')
+
 async function transcribe(audioB64, mime, language, prompt, model) {
-  const key = await openaiKey()
-  if (!key) throw userError('no OpenAI key — add one with the "מפתח API" button')
-  const bytes = Buffer.from(audioB64, 'base64')
-  const ext = /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'mp4' : 'webm'
-  const form = new FormData()
-  form.append('file', new Blob([bytes], { type: mime }), `seg.${ext}`)
-  form.append('model', model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe')
-  if (language) form.append('language', language)
-  // The previous segment's tail primes the model, which is what keeps a sentence that was
-  // cut at a pause from restarting with a capital letter or losing its first word.
-  if (prompt) form.append('prompt', String(prompt).slice(-400))
-  const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(30000),
-  })
-  const body = await r.text()
-  if (!r.ok) {
-    let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {}
-    throw userError(`OpenAI ${r.status}: ${msg}`)
+  const bytes = Buffer.from(audioB64, 'base64').length
+  const usedModel = model || process.env.EMU_COMPOSER_STT_MODEL || P.cfg.stt.model || 'gpt-4o-transcribe'
+  const t0 = Date.now()
+  try {
+    const key = await openaiKey()
+    if (!key) throw userError('no OpenAI key — add one with the "מפתח API" button')
+    const buf = Buffer.from(audioB64, 'base64')
+    const ext = /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'mp4' : 'webm'
+    const form = new FormData()
+    form.append('file', new Blob([buf], { type: mime }), `seg.${ext}`)
+    form.append('model', usedModel)
+    if (language) form.append('language', language)
+    // The previous segment's tail primes the model, which is what keeps a sentence that was
+    // cut at a pause from restarting with a capital letter or losing its first word.
+    if (prompt) form.append('prompt', String(prompt).slice(-400))
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(30000),
+    })
+    const body = await r.text()
+    if (!r.ok) {
+      let msg = body; try { msg = JSON.parse(body).error?.message || body } catch {}
+      throw userError(`OpenAI ${r.status}: ${msg}`)
+    }
+    const text = JSON.parse(body).text || ''
+    slog('transcribe', { model: usedModel, language: language || '', bytes, ms: Date.now() - t0, chars: text.length })
+    return text
+  } catch (e) {
+    slog('transcribe', { model: usedModel, language: language || '', bytes, ms: Date.now() - t0, chars: 0, error: scrubKey(e.message || e) })
+    throw e
   }
-  return JSON.parse(body).text || ''
 }
 
 // ------------------------------------------------------------------- run ---
