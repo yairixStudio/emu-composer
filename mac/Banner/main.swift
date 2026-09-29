@@ -31,6 +31,9 @@ final class Bar: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         buildPanel(); buildMenu()
         Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in self.follow() }
+        // Re-stack at once when any app comes forward, instead of waiting for the next tick.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { _ in self.follow() }
         Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in self.health() }
         follow(); health()
     }
@@ -38,7 +41,11 @@ final class Bar: NSObject, NSApplicationDelegate {
     func buildPanel() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: barW, height: barH),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = .floating
+        // Normal level, stacked directly above the emulator window in follow(): the bar lives in
+        // the emulator's layer, so a browser brought in front of the emulator covers the bar too
+        // (2026-09-29: at .floating it stayed on top of every app and hid what the owner was
+        // reading).
+        panel.level = .normal
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -95,25 +102,32 @@ final class Bar: NSObject, NSApplicationDelegate {
     // is two windows — the phone and a 54 px side toolbar to its right — and docking to the
     // largest one alone put the bar on top of that toolbar (measured: phone 353×813 at x=100,
     // toolbar 54×506 at x=453).
-    func emulatorFrame() -> CGRect? {
+    // Also returns the emulator's FRONTMOST window number (the list is front-to-back) and
+    // whether the bar already sits directly above it, so follow() re-stacks only when needed.
+    func emulatorFrame() -> (frame: CGRect, top: Int, stacked: Bool)? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
         var union: CGRect? = nil
-        for w in list {
+        var top = 0, topIdx = -1, barIdx = -1
+        for (i, w) in list.enumerated() {
+            if (w[kCGWindowNumber as String] as? Int) == panel.windowNumber { barIdx = i; continue }
             guard let owner = (w[kCGWindowOwnerName as String] as? String)?.lowercased(), owner.contains(ownerMatch),
                   (w[kCGWindowLayer as String] as? Int) == 0,
                   let b = w[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
             let r = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
             if r.width < 30 || r.height < 200 { continue }           // menu bar rows, tooltips
             union = union.map { $0.union(r) } ?? r
+            if topIdx < 0 { topIdx = i; top = (w[kCGWindowNumber as String] as? Int) ?? 0 }
         }
-        return union
+        guard let u = union else { return nil }
+        return (u, top, barIdx >= 0 && barIdx == topIdx - 1)
     }
 
     // CG coordinates have their origin at the top-left of the primary display; AppKit at the
     // bottom-left. Dock to the top-right of the window, or top-left if that runs off-screen.
     func follow() {
-        guard let f = emulatorFrame() else { if panel.isVisible { panel.orderOut(nil) }; return }
+        guard let e = emulatorFrame() else { if panel.isVisible { panel.orderOut(nil) }; return }
         if hidden { return }
+        let f = e.frame
         let primaryH = NSScreen.screens.first?.frame.height ?? 0
         var x = f.maxX + 8
         let y = primaryH - f.minY - barH
@@ -123,8 +137,10 @@ final class Bar: NSObject, NSApplicationDelegate {
         if f != lastFrame || !panel.isVisible {
             lastFrame = f
             panel.setFrameOrigin(target)
-            if !panel.isVisible { panel.orderFrontRegardless() }
         }
+        // Keep the bar exactly one step above the emulator in the window stack — never above
+        // whatever app the user brought in front of it.
+        if !e.stacked || !panel.isVisible { panel.order(.above, relativeTo: e.top) }
     }
 
     func health() {
