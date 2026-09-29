@@ -294,6 +294,23 @@
   body.collect #right, body.use #right, body.jem #right{flex:0 0 var(--rw);width:var(--rw);min-width:0}
   #topbar{gap:6px;justify-content:center;flex-wrap:wrap}
   #agentpill{margin-inline-start:4px}
+  /* repo + emulator: a caption for the mirrored screen right below it — text and a chevron
+     only, no box, no background, sitting directly on the panel. */
+  #targetbar{gap:10px;justify-content:center;padding-top:2px;padding-bottom:2px}
+  #targetbar .dd{background:none;border-color:transparent;padding:0 2px;height:24px;color:var(--dim2)}
+  #targetbar .dd:hover:not(:disabled){background:var(--panel2);border-color:transparent;color:var(--fg)}
+  #targetbar .dd.open{border-color:transparent}
+  /* two independent on/off switches replacing the old 3-way mode selector */
+  .togs{display:flex;align-items:center;gap:14px}
+  .swtoggle{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;color:var(--dim);font:600 11.5px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+  .swtoggle:hover{color:var(--fg)}
+  .swtoggle input{position:absolute;opacity:0;width:0;height:0}
+  .swtrack{position:relative;flex:0 0 auto;width:30px;height:18px;border-radius:9px;background:var(--line2);transition:background .15s}
+  .swtrack::after{content:'';position:absolute;top:2px;inset-inline-start:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:inset-inline-start .15s}
+  .swtoggle input:checked + .swtrack{background:var(--accent2)}
+  .swtoggle input:checked + .swtrack::after{inset-inline-start:14px}
+  .swtoggle input:focus-visible + .swtrack{box-shadow:0 0 0 2px #38bdf855}
+  [data-theme="light"] .swtrack{background:#d9dde4}
   #stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center}
   #shot{max-height:none}
   #tools, body.collect #tools, body.jem #tools{display:none}
@@ -337,6 +354,10 @@
   #rhead{gap:2px;padding:8px 10px;flex-wrap:nowrap}
   #rhead #status{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #rhead #ctx{flex:1 1 auto;min-width:0;margin:0 8px;max-width:none;text-align:end;font:500 11px/1.3 var(--mono);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* approximate token count of the full prompt (text + every chip's block) — a quiet, secondary
+     readout beside the context line, never competing with the text itself */
+  #tokest{flex:0 0 auto;color:var(--dim2);font:500 11px/1.3 var(--mono);white-space:nowrap;margin-inline-start:8px}
+  #tokest[hidden]{display:none}
   #rhead button.ic{width:28px;height:28px}
   #foot{display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:nowrap;min-width:0}
   #foot .runwrap{min-width:0}
@@ -464,6 +485,14 @@
   .pitem.on{background:var(--violet-soft);color:#d8ccff}
   [data-theme="light"] #pop{box-shadow:0 14px 40px #0002}
   [data-theme="light"] .pitem.on{color:#5b21b6}
+  /* chip hover card: the same fields the click-to-copy puts on the clipboard */
+  #chipcard{position:fixed;z-index:46;max-width:360px;padding:9px 11px;border-radius:10px;background:var(--panel);
+            border:1px solid var(--line2);box-shadow:0 14px 40px #000a;pointer-events:none}
+  #chipcard[hidden]{display:none}
+  #chipcard .cchead{font:700 11.5px/1.3 var(--mono);color:var(--fg);margin-bottom:5px;direction:ltr;unicode-bidi:isolate}
+  #chipcard .ccbody{margin:0;white-space:pre-wrap;word-break:break-word;color:var(--dim);font:11px/1.55 var(--mono);
+                     direction:ltr;unicode-bidi:isolate;max-height:260px;overflow:auto}
+  [data-theme="light"] #chipcard{box-shadow:0 14px 40px #0002}
   #topbar{position:relative}
   #guideOpen{position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);display:none;width:30px;height:30px;border:none;border-radius:8px;background:none;color:var(--dim)}
   #guideOpen svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -500,15 +529,18 @@
 <div id="left">
   <div class="bar" id="topbar">
     <button id="guideOpen" class="ghost ic" data-t-title="guide_open"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/><path d="M5.8 8.5h1.6M5.8 11h1.6M5.8 13.5h1.6"/></svg></button>
-    <div class="seg modes" data-t-title="modes_title">
-      <button id="mCollect" class="on" data-t="mode_collect">איסוף</button>
-      <button id="mUse" class="alt" data-t="mode_use">שימוש</button>
-      <button id="mJem" class="jm" data-t="mode_jem">ג׳ם</button>
+    <div class="togs">
+      <label class="swtoggle"><input type="checkbox" id="togUse"><span class="swtrack"></span><span class="swlbl" data-t="mode_use">שימוש</span></label>
+      <label class="swtoggle"><input type="checkbox" id="togCollect" checked><span class="swtrack"></span><span class="swlbl" data-t="mode_collect">איסוף</span></label>
     </div>
+    <span id="modehint" hidden></span>
+  </div>
+  <!-- The device/project picker is a caption for the mirrored screen below it, not a composer
+       control — it sits right above the device it names, minimal text + chevron only. -->
+  <div class="bar" id="targetbar">
     <select id="project" data-t-title="project_title"></select>
     <select id="device" data-t-title="device_title"></select>
     <span id="agentpill" class="pill" title="on-device agent"></span>
-    <span id="modehint" hidden></span>
   </div>
   <div id="problems"></div>
   <div id="stage">
@@ -538,6 +570,7 @@
   <div class="row" id="rhead">
     <span id="status" data-t="ready">מוכן</span>
     <span id="ctx"></span>
+    <span id="tokest" hidden></span>
     <button id="settingsbtn" class="ghost ic" data-t-title="settings_title"><svg viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </div>
 
@@ -548,16 +581,16 @@
       <div id="edact">
         <button id="rec" type="button" aria-label="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
         <button id="refine" type="button" aria-label="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span class="dots"><i></i><i></i><i></i></span></button>
-        <button id="save" class="ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
         <span class="sp"></span>
         <span class="splitbtn" id="runWrap" hidden><button id="runAgent" class="ic" data-t-title="run_tip"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none"/></svg></button><button class="chev" data-pop="run" data-t-title="run_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
+        <button id="save" class="ic" data-t-title="save"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></button>
         <span class="splitbtn"><button id="copyAll" class="ic" data-t-title="copy_tip"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button><button class="chev" data-pop="copy" data-t-title="copy_opts"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button></span>
-        <button id="clear" class="ic" data-t-title="clear"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V4.5h4V7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
       </div>
     </div>
   </div>
   <span id="warn" hidden></span>
   <div id="pop" hidden></div>
+  <div id="chipcard" hidden></div>
 
 
   <div id="settings" class="modal" role="dialog" aria-modal="true">
@@ -627,7 +660,7 @@ const LS = (k, v) => { try { if (v === undefined) return localStorage.getItem(k)
 // ------------------------------------------------------------------- i18n ---
 const I18N = {
   he: {
-    mode_collect: 'איסוף', mode_use: 'שימוש', mode_jem: 'ג׳ם', prompt: 'Prompt',
+    mode_collect: 'איסוף', mode_use: 'שימוש', prompt: 'Prompt',
     jem_title: 'ג׳ם', jem_intro: 'לוחצים באפליקציה ומדברים או מקלידים. כל לחיצה מסמנת את האלמנט בטקסט וגם מפעילה אותו.',
     g_kbd: 'מקלדת', g_mouse: 'עכבר', g_tips: 'טיפים', g_to_text: 'מקלדת → טקסט', g_to_app: 'מקלדת → אפליקציה', g_rec_on: 'מקליט', g_rec_off: 'מיקרופון כבוי',
     g_tool: 'כלי: {0}', g_anchor: 'כל הקשה גם מסמנת את האלמנט בטקסט',
@@ -636,7 +669,7 @@ const I18N = {
     ms_tap: 'מסמן בטקסט וגם מקיש באפליקציה', ms_taponly: 'הקשה בלבד, בלי עוגן', ms_ref: 'עוגן בלבד, בלי להקיש', ms_swipe: 'החלקה', ms_scroll: 'גלילה', ms_hover: 'מדגיש את מה שלחיצה תסמן', ms_raw: 'בחירת הצומת הגולמי',
     tip_items: 'שורה עם -- בלבד מפרידה בין משימות', tip_speak: 'בזמן הקלטה דיבור, הקלדה, אנטר ועוגנים נכנסים לטקסט בסדר שבו קרו', tip_chip: 'לחיצה על עוגן בטקסט מעתיקה אותו לבד',
     tip_draw: 'בכלי ציור הגרירה מציירת על המסך במקום להחליק. מסך שציירת עליו נשאר קפוא עד שתפעיל את האפליקציה, וה-AI רואה את הציור כשהוא עורך',
-    modes_title: 'איסוף: לחיצה מסמנת · שימוש: שליטה חיה · ג׳ם: שניהם יחד (⌘E, ⌘J)', copy_tip: 'העתקת הפרומפט המלא (⌘↩)',
+    copy_tip: 'העתקת הפרומפט המלא (⌘↩)',
     nav_back: 'חזרה (⌘B)', nav_home: 'מסך הבית (⌘⇧H)', nav_recents: 'אפליקציות אחרונות', nav_refresh: 'צילום מחדש של המסך',
     g_more: 'כל הקיצורים והטיפים', g_basics: 'הבסיס',
     tab_models: 'מודלים', models_note: 'איזה מודל עושה כל עבודה. "ברירת מחדל" משאיר את הבחירה לכלי.',
@@ -644,7 +677,7 @@ const I18N = {
     m_full: 'עריכה', m_full_note: 'מבין את כל השיחה ומסדר אותה — כדאי מודל חזק', m_agent: 'סוכן להרצה',
     m_agent_model: 'מודל של הסוכן', m_agent_model_note: 'המודל שהסוכן ירוץ איתו כשלוחצים "הרץ"', m_default: 'ברירת מחדל ({0})', m_agent_default: 'ברירת המחדל של הסוכן',
     run_in: 'הרץ ב-{0}', copy_opts: 'מה מצורף להעתקה', run_opts: 'סוכן ומודל',
-    tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'ג׳ם', tab_keys: 'קיצורים',
+    tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'הקשה ועוגן', tab_keys: 'קיצורים',
     s_theme: 'מראה', s_theme_note: 'בהיר, כהה, או לפי המערכת', theme_system: 'מערכת', theme_light: 'בהיר', theme_dark: 'כהה',
     s_dir_note: 'הכיוון של שדה הטקסט', prompt_note: 'מה מצורף לפרומפט המלא בנוסף לטקסט ולעוגנים.',
     notes_note: 'הנחיות קצרות לסוכן: איפה הקוד, איך המחרוזות בנויות, מה המידות', anchor_note: 'לחיצה על כפתור גם מכניסה אותו לטקסט וגם מקישה עליו. ⇧ לחיצה מקישה בלבד',
@@ -660,7 +693,7 @@ const I18N = {
     ai_note: 'מה כפתור ✨ עושה. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד חזרות, מסדר ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. ההקלטה עצמה רק מתמללת. העוגנים נשמרים תמיד; ⌘Z מבטל.',
     refine_tip: 'עריכה עם AI — {0} (⌘⇧E)', st_refining: 'ה-AI עורך ({0})…', st_refined: 'נערך — {0} · ⌘Z מבטל', st_refine_empty: 'אין טקסט לעריכה', st_locked: 'ה-AI עורך את הטקסט — רגע, עוד לא אפשר להוסיף',
     sc_refine: 'עריכת הטקסט עם AI', g_ai: 'AI: {0}', rec: 'הקלטה (⌘⇧R)', rec_stop: 'עצירת הקלטה (⌘⇧R)', history: 'היסטוריה',
-    settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', clear: 'נקה', notes: 'הערות לסוכן',
+    settings_title: 'הגדרות', copy_all: 'העתק', save: 'שמור לקובץ', notes: 'הערות לסוכן',
     history_lbl: 'שיחות קודמות', new_prompt: 'פרומפט חדש (הנוכחי נשמר ברשימה)', guide_open: 'פתיחת רשימת השיחות', settings_lbl: 'הגדרות', close: 'סגור', ready: 'מוכן', save_key: 'שמור',
     s_ui_lang: 'שפת הממשק', s_stt_lang: 'שפת ההקלטה', s_key: 'מפתח OpenAI לתמלול', s_notes: 'הערות לסוכן בפרומפט', s_dir: 'כיוון טקסט',
     key_note: 'נשמר ב-~/.config/emu-composer/openai-key (600), מחוץ לריפו. הדפדפן לא מקבל אותו בחזרה.',
@@ -675,6 +708,7 @@ const I18N = {
     placeholder: 'כתוב כאן. במצב איסוף כל לחיצה על אלמנט מכניסה רפרנס במקום הסמן. קליק ימני על האמולטור = הקשה במכשיר בלי לצאת ממצב איסוף. לחיצה על רפרנס מעתיקה אותו לבד.',
     chip_title: 'לחץ להעתקת הרפרנס · הובר מדגיש במסך',
     st_elements: '{0} אלמנטים · {1}ms', st_slow: ' · slow path', st_lost: 'המכשיר לא מגיב — {0}', st_no_device: 'אין מכשיר מחובר',
+    tok_est: '≈{0} טוקנים',
     st_resolving: '@{0} — {1}', st_chip_copied: 'הרפרנס "{0}" הועתק', st_copied: 'הועתק — {0} רפרנסים, {1} תווים',
     btn_copied: 'הועתק ✓ {0} רפרנסים', st_copy_blocked: 'ההעתקה נחסמה — סמן והעתק ידנית', st_orphans: 'אזהרה: {0} תגים בלי נתוני רפרנס — הועתקו כטקסט בלבד',
     st_saving: 'שומר…', st_saved: 'נשמר והועתק — {0}', st_cleared: 'נוקה', st_hist_copied: 'הפרומפט הועתק מההיסטוריה', hist_empty: 'עדיין אין שיחות. כל פרומפט שמועתק, מורץ או נשמר יופיע כאן.',
@@ -691,7 +725,7 @@ const I18N = {
     st_mark_added: 'סימון {0} נוסף — כתוב מה לעשות איתו', st_mark_undone: 'סימון {0} בוטל', st_screen_changed: 'המסך השתנה — נלכד מחדש', st_marks_hold: 'המסך השתנה, אבל נשאר קפוא כי ציירת עליו — הקשה באפליקציה או רענון ימשיכו',
   },
   en: {
-    mode_collect: 'Collect', mode_use: 'Use', mode_jem: 'Jem', prompt: 'Prompt',
+    mode_collect: 'Collect', mode_use: 'Use', prompt: 'Prompt',
     jem_title: 'Jem', jem_intro: 'Click through the app and talk or type. Every click marks the element in the text and presses it.',
     g_kbd: 'Keyboard', g_mouse: 'Mouse', g_tips: 'Tips', g_to_text: 'keyboard → text', g_to_app: 'keyboard → app', g_rec_on: 'recording', g_rec_off: 'mic off',
     g_tool: 'tool: {0}', g_anchor: 'Every tap also marks the element in the text',
@@ -700,7 +734,7 @@ const I18N = {
     ms_tap: 'Marks it in the text and taps it in the app', ms_taponly: 'Tap only, no anchor', ms_ref: 'Anchor only, no tap', ms_swipe: 'Swipe', ms_scroll: 'Scroll', ms_hover: 'Highlights what a click would mark', ms_raw: 'Pick the raw node',
     tip_items: 'A line with only -- separates tasks', tip_speak: 'While recording, speech, typing, Enter and anchors land in the order they happened', tip_chip: 'Click an anchor in the text to copy it alone',
     tip_draw: 'With a drawing tool, a drag draws on the screen instead of swiping. A screen you drew on stays still until you act on the app, and the AI edit sees the drawing',
-    modes_title: 'Collect: a click marks · Use: live control · Jem: both at once (⌘E, ⌘J)', copy_tip: 'Copy the full prompt (⌘↩)',
+    copy_tip: 'Copy the full prompt (⌘↩)',
     nav_back: 'Back (⌘B)', nav_home: 'Home (⌘⇧H)', nav_recents: 'Recent apps', nav_refresh: 'Capture the screen again',
     g_more: 'All shortcuts and tips', g_basics: 'Basics',
     tab_models: 'Models', models_note: 'Which model does each job. "Default" leaves the choice to the tool.',
@@ -708,7 +742,7 @@ const I18N = {
     m_full: 'Edit', m_full_note: 'Reads the whole talk and organizes it — a strong model fits', m_agent: 'Agent to run',
     m_agent_model: 'Agent model', m_agent_model_note: 'The model the agent runs with when you press Run', m_default: 'Default ({0})', m_agent_default: "The agent's default",
     run_in: 'Run in {0}', copy_opts: 'What the copy carries', run_opts: 'Agent and model',
-    tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Jem', tab_keys: 'Shortcuts',
+    tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Tap & Anchor', tab_keys: 'Shortcuts',
     s_theme: 'Appearance', s_theme_note: 'Light, dark, or follow the system', theme_system: 'System', theme_light: 'Light', theme_dark: 'Dark',
     s_dir_note: 'Direction of the text field', prompt_note: 'What the full prompt carries besides the text and its anchors.',
     notes_note: 'Short notes for the agent: where the code is, how strings are built, the units', anchor_note: 'A click both puts the element in the text and taps it. ⇧-click taps only',
@@ -724,7 +758,7 @@ const I18N = {
     ai_note: 'What ✨ does. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges repeats, orders and sharpens it into a clear request, adding nothing you did not say. Recording itself only transcribes. Anchors are always kept; ⌘Z undoes.',
     refine_tip: 'Edit with AI — {0} (⌘⇧E)', st_refining: 'AI is editing ({0})…', st_refined: 'edited — {0} · ⌘Z undoes', st_refine_empty: 'nothing to edit', st_locked: 'the AI is editing the text — adding waits until it is done',
     sc_refine: 'Edit the text with AI', g_ai: 'AI: {0}', rec: 'Record (⌘⇧R)', rec_stop: 'Stop recording (⌘⇧R)', history: 'History',
-    settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', clear: 'Clear', notes: 'Agent notes',
+    settings_title: 'Settings', copy_all: 'Copy', save: 'Save to file', notes: 'Agent notes',
     history_lbl: 'Previous prompts', new_prompt: 'New prompt (the current one is kept in the list)', guide_open: 'Open the prompt list', settings_lbl: 'Settings', close: 'Close', ready: 'Ready', save_key: 'Save',
     s_ui_lang: 'Interface language', s_stt_lang: 'Dictation language', s_key: 'OpenAI key for dictation', s_notes: 'Include agent notes in the prompt', s_dir: 'Text direction',
     key_note: 'Stored at ~/.config/emu-composer/openai-key (mode 600), outside the repo. The page never receives it back.',
@@ -739,6 +773,7 @@ const I18N = {
     placeholder: 'Write here. In collect mode every click on an element inserts a reference at the caret. Right-click on the emulator = tap the device without leaving collect. Click a reference to copy it alone.',
     chip_title: 'Click to copy this reference · hover to highlight it on screen',
     st_elements: '{0} elements · {1}ms', st_slow: ' · slow path', st_lost: 'device not responding — {0}', st_no_device: 'no device attached',
+    tok_est: '≈{0} tokens',
     st_resolving: '@{0} — {1}', st_chip_copied: 'reference "{0}" copied', st_copied: 'copied — {0} references, {1} chars',
     btn_copied: 'Copied ✓ {0} references', st_copy_blocked: 'clipboard blocked — select and copy by hand', st_orphans: 'warning: {0} chips without reference data — copied as plain text',
     st_saving: 'saving…', st_saved: 'saved and copied — {0}', st_cleared: 'cleared', st_hist_copied: 'prompt copied from history', hist_empty: 'No prompts yet. Every prompt you copy, run or save lands here.',
@@ -808,17 +843,26 @@ const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': 
 const MODES = { collect: { still: true, watch: true }, use: { still: false, watch: false }, jem: { still: true, watch: true } }
 const still = () => MODES[mode].still
 let plainMode = 'collect'   // where ⌘J returns to
+// No more "modes" in the UI: two independent switches (use / collect, both may be on) drive
+// everything below. `mode` stays as the internal name for the resulting behaviour — collect-only,
+// use-only, or both together (what used to be called "jem") — derived from the two booleans on
+// every change, never stored on its own. At least one switch is always on: turning off the last
+// one flips Use back on.
+function modeFor(collect, use) { if (!collect && !use) use = true; return collect && use ? 'jem' : collect ? 'collect' : 'use' }
+function syncToggles(m) {
+  const collect = m !== 'use', use = m !== 'collect'
+  LS('emucomposer.collectOn', collect ? '1' : '0'); LS('emucomposer.useOn', use ? '1' : '0')
+  $('#togCollect').checked = collect; $('#togUse').checked = use
+}
 function setMode(m) {
   if (!MODES[m]) m = 'collect'
+  syncToggles(m)   // always resync the switches, even if the mode itself did not change
   if (m === mode && nodes.length) return
   mode = m
   uilog('mode', { to: m })
   if (m !== 'jem') plainMode = m
   // Only the mode class changes: the body also carries layout and state classes.
   document.body.classList.remove(...Object.keys(MODES)); document.body.classList.add(m)
-  $('#mCollect').classList.toggle('on', m === 'collect')
-  $('#mUse').classList.toggle('on', m === 'use')
-  $('#mJem').classList.toggle('on', m === 'jem')
   if (m !== 'jem') setKbdApp(false)
   modeHint(); renderGuide(); requestAnimationFrame(fitScreen)
   $('#ov').style.display = still() ? 'block' : 'none'
@@ -837,9 +881,8 @@ function setWatch(on) {
   fetch('/api/watch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client: clientId, on }) }).catch(() => {})
 }
 const modeHint = () => { $('#modehint').textContent = mode !== 'collect' ? t('hint_use') : tool !== 'pick' ? t('hint_draw') : t('hint_collect') }
-$('#mCollect').onclick = () => setMode('collect')
-$('#mUse').onclick = () => setMode('use')
-$('#mJem').onclick = () => setMode('jem')
+$('#togCollect').onchange = e => setMode(modeFor(e.target.checked, $('#togUse').checked))
+$('#togUse').onchange = e => setMode(modeFor($('#togCollect').checked, e.target.checked))
 $('#recap').onclick = () => still() ? capture() : setMode('collect')
 
 // ------------------------------------------------------------ live frames ---
@@ -1417,12 +1460,48 @@ ed.addEventListener('mouseout', e => {
   drawOverlay(); for (const g of $('#marks').querySelectorAll('.hl')) g.classList.remove('hl')
 })
 
+// ------------------------------------------------------- chip hover card ----
+// A small card under the chip with the same fields the click-to-copy puts on the clipboard:
+// label, what/screen/source (already in r.block), platform, and for a mark its bounds/covered
+// elements (also already in r.block). Independent of the highlight above — works for any chip,
+// current capture or not.
+function chipCardText(r) {
+  let body = r.block || ''
+  if (r.platform) body += (body ? '\n' : '') + `platform: ${r.platform}`
+  return body
+}
+function showChipCard(chip, r) {
+  const card = $('#chipcard')
+  card.innerHTML = `<div class="cchead">@<bdi>${escapeHTML(r.label)}</bdi></div><pre class="ccbody">${escapeHTML(chipCardText(r))}</pre>`
+  card.hidden = false
+  const cr = chip.getBoundingClientRect()
+  card.style.left = '0px'; card.style.top = '-9999px'
+  const w = card.offsetWidth, h = card.offsetHeight
+  let top = cr.bottom + 6
+  if (top + h > innerHeight - 8) top = Math.max(8, cr.top - h - 6)
+  const left = Math.max(8, Math.min(innerWidth - w - 8, cr.left))
+  card.style.left = left + 'px'; card.style.top = top + 'px'
+}
+function hideChipCard() { $('#chipcard').hidden = true }
+ed.addEventListener('mouseover', e => {
+  const chip = e.target.closest('.chip'); if (!chip || chip.contains(e.relatedTarget)) return
+  const r = refOf(chip); if (!r) return
+  chip.dataset._title = chip.title; chip.removeAttribute('title')
+  showChipCard(chip, r)
+})
+ed.addEventListener('mouseout', e => {
+  const chip = e.target.closest('.chip'); if (!chip || chip.contains(e.relatedTarget)) return
+  if (chip.dataset._title !== undefined) { chip.title = chip.dataset._title; delete chip.dataset._title }
+  hideChipCard()
+})
+$('#edscroll').addEventListener('scroll', hideChipCard, { passive: true })
+
 // ------------------------------------------------------------------ marks ----
 // A drawing on the screenshot is a reference too: pen, box or arrow, in device px, kept on
 // a chip like an element. The prompt gets its bounds, the elements it covers (an arrow: what
 // it points from and to) and the path of the screenshot with the numbered marks burned in —
 // written to .emu-composer/marks/ as marks come and go, so the agent can open the picture.
-let tool = 'pick', markColor = '#ef4444', drawing = null, pendingCapture = false
+let tool = 'pick', markColor = '#ef4444', drawing = null, pendingCapture = false, hoverMarkN = -1
 const COLOR_NAMES = { '#ef4444': 'red', '#facc15': 'yellow', '#3b82f6': 'blue' }
 const capImages = new Map()
 function rememberCapture(id, src, w) {
@@ -1435,6 +1514,7 @@ function setTool(tl) {
   for (const b of $('#toolseg').children) b.classList.toggle('on', b.dataset.tool === tl)
   modeHint(); renderGuide()
   if (tl !== 'pick') { hotIdx = -1; drawOverlay() }
+  if (tl !== 'pick' && hoverMarkN !== -1) { hoverMarkN = -1; renderMarks() }
 }
 $('#toolseg').onclick = e => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool) }
 $('#colors').onclick = e => {
@@ -1519,14 +1599,24 @@ function addMark(d) {
   syncMarks()
   setStatus(t('st_mark_added', n), 'ok')
 }
+// Deleting a mark: the chip in the text is the record, so removing it (and re-syncing) is the
+// one true removal path — #undoMark used it already; the on-canvas × below reuses it too.
+function removeMark(n) {
+  const c = [...ed.querySelectorAll('.chip.mark')].find(x => refOf(x)?.n === n)
+  if (!c) return
+  c.remove(); hoverMarkN = -1; saveDraft(); syncMarks(); setStatus(t('st_mark_undone', n))
+}
 $('#undoMark').onclick = () => {
-  const chips = [...ed.querySelectorAll('.chip.mark')].map(c => ({ c, r: refOf(c) })).filter(x => x.r).sort((a, b) => b.r.n - a.r.n)
-  if (!chips.length) return
-  chips[0].c.remove(); saveDraft(); syncMarks(); setStatus(t('st_mark_undone', chips[0].r.n))
+  const top = allMarks().sort((a, b) => b.n - a.n)[0]
+  if (top) removeMark(top.n)
 }
 // SVG on screen, in device px; sizes scale with the view so a stroke is ~2.5 px whatever the zoom.
 const SVG = (tag, attrs) => { const el = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); return el }
-function markShapes(m, u) {
+// A mark's badge sits where its numbered circle is drawn — also the hit target for deleting it.
+function markBadgePos(m) {
+  return m.shape === 'pen' ? { x: m.pts[0][0], y: m.pts[0][1] } : { x: m.x1, y: m.y1 }
+}
+function markShapes(m, u, hovered) {
   const els = [], sw = 2.5 * u
   if (m.shape === 'rect') els.push(SVG('rect', { x: m.x1, y: m.y1, width: m.x2 - m.x1, height: m.y2 - m.y1, rx: 4 * u, fill: m.color, 'fill-opacity': .08, stroke: m.color, 'stroke-width': sw }))
   else if (m.shape === 'pen') els.push(SVG('polyline', { points: m.pts.map(p => p.join(',')).join(' '), fill: 'none', stroke: m.color, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }))
@@ -1536,20 +1626,47 @@ function markShapes(m, u) {
     els.push(SVG('polygon', { points: [[m.x2, m.y2], [m.x2 - h * Math.cos(a - .45), m.y2 - h * Math.sin(a - .45)], [m.x2 - h * Math.cos(a + .45), m.y2 - h * Math.sin(a + .45)]].map(p => p.join(',')).join(' '), fill: m.color }))
   }
   if (m.n) {
-    const bx = m.shape === 'arrow' ? m.x1 : m.shape === 'pen' ? m.pts[0][0] : m.x1, by = m.shape === 'arrow' ? m.y1 : m.shape === 'pen' ? m.pts[0][1] : m.y1
-    els.push(SVG('circle', { cx: bx, cy: by, r: 9 * u, fill: m.color, stroke: '#000', 'stroke-opacity': .35, 'stroke-width': u }))
-    const tx = SVG('text', { x: bx, y: by, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: m.color === '#facc15' ? '#000' : '#fff', 'font-size': 11 * u, 'font-weight': 700, 'font-family': 'system-ui,sans-serif' })
-    tx.textContent = m.n; els.push(tx)
+    const { x: bx, y: by } = markBadgePos(m)
+    els.push(SVG('circle', { cx: bx, cy: by, r: (hovered ? 10 : 9) * u, fill: hovered ? 'var(--bad)' : m.color, stroke: '#000', 'stroke-opacity': .35, 'stroke-width': u }))
+    const tx = SVG('text', { x: bx, y: by, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: hovered ? '#fff' : (m.color === '#facc15' ? '#000' : '#fff'), 'font-size': (hovered ? 13 : 11) * u, 'font-weight': 700, 'font-family': 'system-ui,sans-serif' })
+    tx.textContent = hovered ? '×' : m.n; els.push(tx)
   }
   return els
 }
+// While the pick tool is active, hovering a mark's badge (in device px, within ~14 screen px)
+// is what shows the × and is what a click deletes — never while a drawing tool is selected.
+function markNear(clientX, clientY) {
+  if (tool !== 'pick' || !still() || !img.naturalWidth) return -1
+  const p = toDisplay(clientX, clientY), rad = 14 / kFactor()
+  for (const m of allMarks()) {
+    if (m.captureId !== captureId) continue
+    const b = markBadgePos(m)
+    if (Math.hypot(p.x - b.x, p.y - b.y) <= rad) return m.n
+  }
+  return -1
+}
+$('#screen').addEventListener('mousemove', e => {
+  const n = markNear(e.clientX, e.clientY)
+  if (n !== hoverMarkN) { hoverMarkN = n; renderMarks() }
+})
+$('#screen').addEventListener('mouseleave', () => { if (hoverMarkN !== -1) { hoverMarkN = -1; renderMarks() } })
+// Capture phase: swallow the press and the click before collect's insert-ref, use/jem's tap, or
+// a drawing can see them — the × is a delete, not also a tap or an anchor.
+$('#screen').addEventListener('mousedown', e => {
+  if (e.button === 0 && markNear(e.clientX, e.clientY) !== -1) { e.preventDefault(); e.stopImmediatePropagation() }
+}, true)
+$('#screen').addEventListener('click', e => {
+  const n = markNear(e.clientX, e.clientY); if (n === -1) return
+  e.preventDefault(); e.stopImmediatePropagation()
+  removeMark(n)
+}, true)
 function renderMarks() {
   const svg = $('#marks'); svg.innerHTML = ''
   if (!img.naturalWidth) return
   const u = 1 / kFactor()
   for (const m of allMarks()) {
     if (m.captureId !== captureId) continue
-    const g = SVG('g', { 'data-n': m.n }); for (const s of markShapes(m, u)) g.appendChild(s); svg.appendChild(g)
+    const g = SVG('g', { 'data-n': m.n }); for (const s of markShapes(m, u, tool === 'pick' && m.n === hoverMarkN)) g.appendChild(s); svg.appendChild(g)
   }
   if (drawing) { const g = SVG('g', {}); for (const s of markShapes({ ...drawing, ...markGeometry(drawing), n: 0 }, u)) g.appendChild(s); svg.appendChild(g) }
 }
@@ -1745,6 +1862,37 @@ function serialize() {
   return { text: L.join('\n').trim() + '\n', used: [...used, ...marks], orphans }
 }
 
+// ------------------------------------------------------------ token estimate --
+// A cheap, approximate count of what copy/run would actually send: the full serialized prompt
+// (text + every chip's expanded block + marks), not just what's visible. Latin runs roughly
+// 4 chars/token, Hebrew and other non-Latin scripts run denser, roughly 2.5 chars/token.
+function estimateTokens(s) {
+  if (!s) return 0
+  let latin = 0, other = 0
+  for (const ch of s) { if (ch.charCodeAt(0) < 128) latin++; else other++ }
+  return Math.max(0, Math.round(latin / 4 + other / 2.5))
+}
+function fmtCount(n) {
+  if (n < 1000) return String(n)
+  const k = n / 1000
+  return (k < 10 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)) + 'k'
+}
+let tokEstTimer = null
+function scheduleTokEst() { clearTimeout(tokEstTimer); tokEstTimer = setTimeout(updateTokEst, 150) }
+function updateTokEst() {
+  // serialize() also writes the shared `orphans` counter that copy/run read right after their
+  // own call — save and restore it so this periodic, read-only estimate can never race them.
+  const savedOrphans = orphans
+  const { text } = serialize()
+  orphans = savedOrphans
+  const has = Boolean(text && text.trim())
+  $('#tokest').hidden = !has
+  if (has) $('#tokest').textContent = t('tok_est', fmtCount(estimateTokens(text)))
+}
+// Covers typing, chip insertion and chip/mark removal in one place — every one of them mutates
+// the editor's DOM, so nothing needs its own call site.
+new MutationObserver(scheduleTokEst).observe(ed, { childList: true, subtree: true, characterData: true })
+
 // The button itself confirms the copy — a status line far from the cursor is easy to miss.
 let copyFlash = null
 $('#copyAll').onclick = async () => {
@@ -1870,7 +2018,6 @@ function newPrompt() {
   if (ed.textContent.trim() || ed.querySelector('.chip')) pushHistory(serialize().text)
   ed.innerHTML = ''; refs.clear(); refN = 0; updateDual(); saveDraft(); syncMarks(); setStatus(t('st_cleared')); restoreCaret()
 }
-$('#clear').onclick = newPrompt
 // A click on the empty space under the text puts the caret at the end, as if the field
 // filled the panel.
 $('#edscroll').addEventListener('mousedown', e => {
@@ -2650,7 +2797,12 @@ for (const id of ['#project', '#device', '#agent', '#mStt', '#mClean', '#mFull',
 applyLang()
 setAiLevel(aiLevel, false)
 loadAgents()
-loadDraft(); syncMarks()
+loadDraft(); syncMarks(); updateTokEst()
 health(); setInterval(health, 20000)
-setMode('collect')
+{
+  let initCollect = true, initUse = false
+  try { const v = localStorage.getItem('emucomposer.collectOn'); if (v !== null) initCollect = v === '1' } catch {}
+  try { const v = localStorage.getItem('emucomposer.useOn'); if (v !== null) initUse = v === '1' } catch {}
+  setMode(modeFor(initCollect, initUse))
+}
 </script>
