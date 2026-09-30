@@ -24,6 +24,7 @@ import { discover as discoverGrpc, EmuGrpc } from './emugrpc.mjs'
 import { slog, LOG_DIR } from './sessionlog.mjs'
 import { SimBridge } from './simbridge.mjs'
 import { desktopRoute, sessionTitle, tmuxName, hostedExec, attachExec, startHosted, hasSession, followToApp, transcriptPath } from './claudehost.mjs'
+import { codexAppRoute, newThreadUrl, openNewThread, waitForThread } from './codexhost.mjs'
 
 const execFileP = promisify(execFile)
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -1032,8 +1033,8 @@ async function sttSession({ model, language, noise = true, prompt, delay } = {})
 
 // ------------------------------------------------------------------- run ---
 // "Run in an agent": the finished prompt goes straight to a coding-agent CLI, in the active
-// project's root — Claude Code live in the Claude app when it can, everything else in a new
-// Terminal window. The prompt is written to a file under .emu-composer/prompts/ and a
+// project's root — Claude Code live in the Claude app and Codex in the Codex app when they
+// can, everything else in a new Terminal window. The prompt is written to a file under .emu-composer/prompts/ and a
 // .command script runs it — `open` runs a .command in Terminal with no AppleScript/automation
 // permission to grant.
 const AGENTS = [
@@ -1055,7 +1056,8 @@ async function findAgents() {
 }
 const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
 // Claude Code opens live in the Claude app when it can (host 'auto', the default): hosted in
-// tmux with Remote Control, see claudehost.mjs. 'desktop' insists on the app — a missing app,
+// tmux with Remote Control, see claudehost.mjs. Codex opens as a new thread in the Codex app
+// with the prompt typed in, see codexhost.mjs. 'desktop' insists on the app — a missing app,
 // tmux or CLI is an error instead of a quiet Terminal. 'terminal' is the old behaviour. Once
 // the session has started, every failure shows THAT session in Terminal: never a second run.
 const HOSTS = ['auto', 'desktop', 'terminal']
@@ -1084,14 +1086,46 @@ async function runInAgent({ agent: id, text, dryRun, model = '', host = 'auto' }
   const header = `${a.name} · ${root} · prompt: ${rel}`
   const base = { agent: a.id, model, root, file: rel, chars: text.length, dryRun: Boolean(dryRun) }
 
-  let route = null, why = ''
-  if (a.id === 'claude' && host !== 'terminal') {
+  let route = null, codex = null, why = ''
+  if (host === 'terminal') { if (a.id === 'claude' || a.id === 'codex') why = 'set to Terminal' }
+  else if (a.id === 'claude') {
     route = await desktopRoute(a.bin)
     if (!route.ok) {
       if (host === 'desktop') throw userError(`cannot open in the Claude app: ${route.why}`)
       why = route.why; route = null
     }
-  } else if (a.id === 'claude') why = 'set to Terminal'
+  } else if (a.id === 'codex') {
+    codex = await codexAppRoute()
+    if (!codex.ok) {
+      if (host === 'desktop') throw userError(`cannot open in the Codex app: ${codex.why}`)
+      why = codex.why; codex = null
+    }
+  }
+
+  // Codex: a new thread in the Codex app with the prompt typed in (see codexhost.mjs). Once the
+  // link is open the prompt waits there for Enter — never a Terminal copy after that point.
+  if (codex) {
+    if (dryRun) return { ok: true, agent: a.name, file: rel, host: 'codex-app', url: newThreadUrl(root, text) }
+    const since = Date.now()
+    try { await openNewThread(root, text) }
+    catch (e) {
+      const msg = String(e.message || e).split('\n')[0]
+      if (host === 'desktop') throw userError(`the Codex app did not open: ${msg}`)
+      why = `the Codex app did not open: ${msg}`; codex = null
+    }
+    if (codex) {
+      const session = crypto.randomUUID()
+      log(`run → ${a.name} in ${root} via the Codex app (prompt typed in, waiting for Enter there)${model ? ` — model ${model} is not passed, the app's own applies` : ''}`)
+      slog('run', { ...base, host: 'codex-app', why: host === 'desktop' ? 'set to the app' : 'the Codex app is here', session, ...(model ? { modelIgnored: model } : {}) })
+      broadcast({ type: 'run', agent: 'codex', stage: 'prefilled', session, title: sessionTitle(text), modelIgnored: model || undefined })
+      waitForThread({ root, prompt: text, since }).then(r => {
+        log(`run codex ${session} → ${r.outcome}${r.thread ? ` (thread ${r.thread})` : ''} after ${r.ms} ms`)
+        slog('run_host', { session, agent: 'codex', stage: r.outcome, ms: r.ms, thread: r.thread })
+        broadcast({ type: 'run', agent: 'codex', session, stage: r.outcome, ms: r.ms, thread: r.thread })
+      }).catch(e => slog('run_host', { session, agent: 'codex', stage: 'error', why: String(e.message || e) }))
+      return { ok: true, agent: a.name, file: rel, host: 'codex-app', session }
+    }
+  }
 
   if (route) {
     const sessionId = crypto.randomUUID(), title = sessionTitle(text)

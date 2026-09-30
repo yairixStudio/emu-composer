@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+- **Run → Codex opens in the Codex app with the prompt typed in.** A thread the Codex CLI
+  runs cannot be shown live in the Codex desktop app (ChatGPT.app, `com.openai.codex`): it has
+  one writer, and while the CLI holds it the app shows a read-only copy. So the app starts the
+  thread itself: `codex://threads/new?path=<project root>&prompt=<prompt>&mode=codex` opens a
+  new thread in that project (a folder the app has not seen becomes a project) with the prompt
+  in the composer, not sent — press Enter there and the thread is the app's own, live. The
+  model picked in emu-composer is not passed (the link has no model parameter); the app's
+  applies. Automatic falls back to Terminal only when the app is missing or the link does not
+  open; once it opened, never (the prompt is waiting in the app). The thread's creation is
+  read from `~/.codex/state_5.sqlite` for up to an hour (read-only through `node:sqlite`, which
+  reads the WAL where a new thread first lands — the sqlite3 CLI's `immutable` mode missed it)
+  and reported in the activity log ("sent in the app"). The setting is now "Where the agent opens".
+  `src/codexhost.mjs`, `test/codexhost.test.mjs`.
 - **Run → Claude Code opens live in the Claude app.** The session runs interactively in a
   detached tmux session (`tmux -L claude-sessions`, `cc-<session id>`) with
   `--session-id`, `--name` and `--remote-control <title>` (the title is the task's first

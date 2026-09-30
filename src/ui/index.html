@@ -727,7 +727,7 @@
           <div class="srow"><div><b data-t="m_full">עריכה</b><small data-t="m_full_note"></small></div><select id="mFull" data-m="full"></select></div>
           <div class="srow"><div><b data-t="m_agent">סוכן להרצה</b><small data-t="agent_title"></small></div><select id="agent"></select></div>
           <div class="srow"><div><b data-t="m_agent_model">מודל של הסוכן</b><small data-t="m_agent_model_note"></small></div><select id="mAgent"></select></div>
-          <div class="srow"><div><b data-t="m_host">איפה Claude Code נפתח</b><small data-t="m_host_note"></small></div><select id="mHost"><option value="auto" data-t="host_auto"></option><option value="desktop" data-t="host_desktop"></option><option value="terminal" data-t="host_terminal"></option></select></div>
+          <div class="srow"><div><b data-t="m_host">איפה הסוכן נפתח</b><small data-t="m_host_note"></small></div><select id="mHost"><option value="auto" data-t="host_auto"></option><option value="desktop" data-t="host_desktop"></option><option value="terminal" data-t="host_terminal"></option></select></div>
         </section>
         <section data-tab="prompt">
           <h3 data-t="tab_prompt">פרומפט</h3>
@@ -772,7 +772,7 @@ const I18N = {
     m_stt: 'תמלול', m_stt_note: 'הופך את ההקלטה לטקסט', m_clean: 'ניקוי', m_clean_note: 'פיסוק ותיקון קל — כדאי מודל מהיר',
     m_full: 'עריכה', m_full_note: 'מבין את כל השיחה ומסדר אותה — כדאי מודל חזק', m_agent: 'סוכן להרצה',
     m_agent_model: 'מודל של הסוכן', m_agent_model_note: 'המודל שהסוכן ירוץ איתו כשלוחצים "הרץ"', m_default: 'ברירת מחדל ({0})', m_agent_default: 'ברירת המחדל של הסוכן',
-    m_host: 'איפה Claude Code נפתח', m_host_note: 'באפליקציית Claude הסשן חי, ואפשר להקליד בו גם מהטלפון. באוטומטי — טרמינל כשאין אפליקציה, tmux או claude', host_auto: 'אוטומטי', host_desktop: 'רק אפליקציית Claude', host_terminal: 'תמיד טרמינל',
+    m_host: 'איפה הסוכן נפתח', m_host_note: 'Claude Code — באפליקציית Claude, חי, ואפשר להקליד בו גם מהטלפון. Codex — באפליקציית Codex עם הפרומפט מוקלד: לוחצים שם Enter. באוטומטי — טרמינל כשהאפליקציה חסרה', host_auto: 'אוטומטי', host_desktop: 'רק באפליקציה', host_terminal: 'תמיד טרמינל',
     run_in: 'הרץ ב-{0}', copy_opts: 'מה מצורף להעתקה', run_opts: 'סוכן ומודל',
     tab_general: 'כללי', tab_voice: 'קול ו-AI', tab_prompt: 'פרומפט', tab_jem: 'הקשה ועוגן', tab_keys: 'קיצורים',
     s_theme: 'מראה', s_theme_note: 'בהיר, כהה, או לפי המערכת', theme_system: 'מערכת', theme_light: 'בהיר', theme_dark: 'כהה',
@@ -783,8 +783,8 @@ const I18N = {
     use_title: 'שימוש', use_intro: 'המסך חי. לחיצות, גרירות, גלילה ומקלדת עוברים ישר למכשיר.',
     ms_c_click: 'מסמן את האלמנט בטקסט', ms_c_right: 'מקיש במכשיר בלי לצאת מאיסוף', ms_c_wheel: 'גלילה במכשיר',
     ms_u_click: 'הקשה במכשיר', ms_u_keys: 'המקלדת מקלידה במכשיר (גם עברית)', sc_jem_go: 'מעבר לג׳ם', sc_mode_go: 'מעבר בין איסוף לשימוש',
-    run: 'הרץ', run_tip: 'מריץ את הסוכן בתיקיית הפרויקט עם הפרומפט המלא — Claude Code באפליקציית Claude, השאר בטרמינל (⌘⇧↩)', agent_title: 'איזה סוכן יריץ את הפרומפט — מה שמותקן במחשב',
-    st_running: 'פותח את {0}…', st_ran: '{0} נפתח בטרמינל — הפרומפט נשמר ב-{1}', st_ran_app: '{0} עולה באפליקציית Claude — הפרומפט נשמר ב-{1}', btn_ran: 'נפתח ✓', sc_run: 'הרצת הפרומפט בסוכן',
+    run: 'הרץ', run_tip: 'מריץ את הסוכן בתיקיית הפרויקט עם הפרומפט המלא — Claude Code באפליקציית Claude, Codex באפליקציית Codex, השאר בטרמינל (⌘⇧↩)', agent_title: 'איזה סוכן יריץ את הפרומפט — מה שמותקן במחשב',
+    st_running: 'פותח את {0}…', st_ran: '{0} נפתח בטרמינל — הפרומפט נשמר ב-{1}', st_ran_app: '{0} עולה באפליקציית Claude — הפרומפט נשמר ב-{1}', st_ran_codex: 'הפרומפט מוקלד באפליקציית Codex — לחץ שם Enter כדי לשלוח', btn_ran: 'נפתח ✓', sc_run: 'הרצת הפרומפט בסוכן',
     ai_lbl: 'AI', ai_transcribe: 'תמלול', ai_clean: 'ניקוי', ai_full: 'עריכה', s_ai: 'מעורבות ה-AI',
     ai_title: 'כמה ה-AI נוגע בטקסט: תמלול בלבד · ניקוי (פיסוק, מילות מילוי, גמגומים) · עריכה מלאה (מבין את כל השיחה, מאחד חזרות, מסדר ומדייק)',
     ai_note: 'מה כפתור ✨ עושה. ניקוי: פיסוק ותיקון בלי לשנות סדר. עריכה: ה-AI לומד את כל מה שנאמר, מאחד חזרות, מסדר ומדייק לבקשה ברורה, בלי להוסיף דברים שלא אמרת. ההקלטה עצמה רק מתמללת. העוגנים נשמרים תמיד; ⌘Z מבטל.',
@@ -853,7 +853,7 @@ const I18N = {
     m_stt: 'Dictation', m_stt_note: 'Turns the recording into text', m_clean: 'Clean', m_clean_note: 'Punctuation and light fixes — a fast model fits',
     m_full: 'Edit', m_full_note: 'Reads the whole talk and organizes it — a strong model fits', m_agent: 'Agent to run',
     m_agent_model: 'Agent model', m_agent_model_note: 'The model the agent runs with when you press Run', m_default: 'Default ({0})', m_agent_default: "The agent's default",
-    m_host: 'Where Claude Code opens', m_host_note: 'In the Claude app the session is live and you can type into it from your phone too. Automatic uses Terminal when the app, tmux or claude is missing', host_auto: 'Automatic', host_desktop: 'Claude app only', host_terminal: 'Always Terminal',
+    m_host: 'Where the agent opens', m_host_note: 'Claude Code — in the Claude app, live, and you can type into it from your phone too. Codex — in the Codex app with the prompt typed in: press Enter there. Automatic uses Terminal when the app is missing', host_auto: 'Automatic', host_desktop: 'App only', host_terminal: 'Always Terminal',
     run_in: 'Run in {0}', copy_opts: 'What the copy carries', run_opts: 'Agent and model',
     tab_general: 'General', tab_voice: 'Voice & AI', tab_prompt: 'Prompt', tab_jem: 'Tap & Anchor', tab_keys: 'Shortcuts',
     s_theme: 'Appearance', s_theme_note: 'Light, dark, or follow the system', theme_system: 'System', theme_light: 'Light', theme_dark: 'Dark',
@@ -864,8 +864,8 @@ const I18N = {
     use_title: 'Use', use_intro: 'The screen is live. Clicks, drags, the wheel and the keyboard go straight to the device.',
     ms_c_click: 'Marks the element in the text', ms_c_right: 'Taps the device without leaving collect', ms_c_wheel: 'Scrolls the device',
     ms_u_click: 'Taps the device', ms_u_keys: 'The keyboard types into the device (any script)', sc_jem_go: 'Go to jem', sc_mode_go: 'Switch collect / use',
-    run: 'Run', run_tip: 'Runs the agent in the project folder with the full prompt — Claude Code in the Claude app, the others in Terminal (⌘⇧↩)', agent_title: 'Which agent runs the prompt — the ones installed on this Mac',
-    st_running: 'opening {0}…', st_ran: '{0} opened in Terminal — prompt saved at {1}', st_ran_app: '{0} is starting in the Claude app — prompt saved at {1}', btn_ran: 'Opened ✓', sc_run: 'Run the prompt in an agent',
+    run: 'Run', run_tip: 'Runs the agent in the project folder with the full prompt — Claude Code in the Claude app, Codex in the Codex app, the others in Terminal (⌘⇧↩)', agent_title: 'Which agent runs the prompt — the ones installed on this Mac',
+    st_running: 'opening {0}…', st_ran: '{0} opened in Terminal — prompt saved at {1}', st_ran_app: '{0} is starting in the Claude app — prompt saved at {1}', st_ran_codex: 'The prompt is typed into the Codex app — press Enter there to send it', btn_ran: 'Opened ✓', sc_run: 'Run the prompt in an agent',
     ai_lbl: 'AI', ai_transcribe: 'Dictate', ai_clean: 'Clean', ai_full: 'Edit', s_ai: 'AI involvement',
     ai_title: 'How much the AI touches the text: dictation only · clean (punctuation, fillers, stumbles) · full edit (reads the whole talk, merges repeats, orders and sharpens)',
     ai_note: 'What ✨ does. Clean: punctuation and fixes, order unchanged. Edit: the AI reads everything you said, merges repeats, orders and sharpens it into a clear request, adding nothing you did not say. Recording itself only transcribes. Anchors are always kept; ⌘Z undoes.',
@@ -1019,8 +1019,8 @@ function act(key, text, state = 'info') {
   r.state = state; r.li.className = state; r.li.dataset.norm = actNorm(text + took); delete r.li.dataset.n
   const span = r.li.querySelector('span'); span.textContent = text + took; span.title = text + took
 }
-// A Claude Code run hosted for the Claude app (server: followHosted): one row per session,
-// updated in place from "starting" to where it ended up.
+// A run opened in an agent's app (server: followHosted for Claude Code, the Codex branch of
+// runInAgent): one row per session, updated in place from its start to where it ended up.
 function runHostEvent(ev) {
   const key = 'run:' + ev.session
   switch (ev.stage) {
@@ -1030,6 +1030,11 @@ function runHostEvent(ev) {
     case 'bridge': return act(key, L2('Remote Control מחובר — פותח את אפליקציית Claude', 'Remote Control connected — opening the Claude app'), 'wait')
     case 'app': return act(key, L2('Claude Code נפתח באפליקציית Claude', 'Claude Code opened in the Claude app'), 'ok')
     case 'terminal': return act(key, L2(`לא נפתח באפליקציה — מוצג בטרמינל (${clip(ev.why, 90)})`, `not in the Claude app — shown in Terminal (${clip(ev.why, 90)})`), 'warn')
+    case 'prefilled': return act(key, L2(`Codex: הפרומפט מוקלד באפליקציה — לחץ שם Enter · ${ev.title}${ev.modelIgnored ? ` (המודל ${ev.modelIgnored} לא מועבר — של האפליקציה קובע)` : ''}`,
+      `Codex: prompt typed into the app — press Enter there · ${ev.title}${ev.modelIgnored ? ` (model ${ev.modelIgnored} is not passed — the app's applies)` : ''}`), 'wait')
+    case 'sent': return act(key, L2('Codex: נשלח באפליקציה', 'Codex: sent in the app'), 'ok')
+    case 'unsent': return act(key, L2('Codex: לא נשלח באפליקציה תוך שעה', 'Codex: not sent in the app within an hour'), 'info')
+    case 'unknown': return act(key, L2('Codex: אי אפשר לדעת אם נשלח (צריך Node 22.5 ומעלה)', 'Codex: cannot tell whether it was sent (needs Node 22.5+)'), 'info')
     case 'ended': return act(key, L2(`Claude Code נסגר לפני שהתחבר: ${clip(ev.why, 90)}`, `Claude Code closed before it connected: ${clip(ev.why, 90)}`), 'err')
     default: return act(key, L2(`פתיחת Claude Code נכשלה: ${clip(ev.why, 90)}`, `opening Claude Code failed: ${clip(ev.why, 90)}`), 'err')
   }
@@ -2338,8 +2343,8 @@ $('#runAgent').onclick = async () => {
     const b = $('#runAgent'); clearTimeout(runFlash)
     b.classList.add('done')
     runFlash = setTimeout(() => b.classList.remove('done'), 1800)
-    setStatus(t(d.host === 'app' ? 'st_ran_app' : 'st_ran', d.agent, d.file), 'ok')
-    if (d.host === 'terminal' && d.why && agent === 'claude') act(null, L2(`Claude Code בטרמינל — ${d.why}`, `Claude Code in Terminal — ${d.why}`), 'info')
+    setStatus(t({ app: 'st_ran_app', 'codex-app': 'st_ran_codex' }[d.host] || 'st_ran', d.agent, d.file), 'ok')
+    if (d.host === 'terminal' && d.why) act(null, L2(`${d.agent} בטרמינל — ${d.why}`, `${d.agent} in Terminal — ${d.why}`), 'info')
   } catch (e) { setStatus(e.message, 'err') }
 }
 $('#save').onclick = async () => {
