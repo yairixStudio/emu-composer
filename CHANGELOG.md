@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+- **Run → Claude Code opens live in the Claude app.** The session runs interactively in a
+  detached tmux session (`tmux -L claude-sessions`, `cc-<session id>`) with
+  `--session-id`, `--name` and `--remote-control <title>` (the title is the task's first
+  line, "emu · …"), so the Claude app, the phone and claude.ai list it under the project and
+  you can type into it from any of them. Once `~/.claude/sessions/*.json` shows the session's
+  `bridgeSessionId` (matched by session id), `claude://claude.ai/epitaxy/<id>` switches the
+  app to it; a folder Claude Code has not trusted yet has its "trust this folder" screen
+  answered. Everything else is unchanged: the same prompt file, `.command` script, login
+  shell (`zsh -lic`, so PATH is what Terminal gets), model flag and permission mode. Markers
+  inherited from a Claude session (`CLAUDE*`, `MCP_*`, `ANTHROPIC_BASE_URL` — with them the
+  transcript is not saved) are cleared in the session's own shell. Settings › Models ›
+  "Where Claude Code opens": automatic (default — Terminal when the Claude app, tmux or the
+  CLI is missing), only the Claude app (those are errors), always Terminal. A failure after
+  the session started (no bridge in 45 s: not signed in with a claude.ai account, Remote
+  Control off, offline; `open` failed) opens Terminal attached to that same session — the
+  prompt never runs twice. Journal: `run {host, why, session}`, `run_host {stage}`; the
+  activity log follows each run from "starting" to "opened in the Claude app" / "shown in
+  Terminal". Other agents still open in Terminal. `src/claudehost.mjs`,
+  `test/claudehost.test.mjs`.
 - **Dictation: words while you speak, a session that is ready before you are.** Measured on
   the first real recording (2026-09-29): with `gpt-4o-transcribe` the first delta of every
   utterance came only once it ended (`firstDeltaMs` ≈ `durMs`, 10 of 10). The realtime

@@ -23,6 +23,7 @@ import { DeviceShell } from './devshell.mjs'
 import { discover as discoverGrpc, EmuGrpc } from './emugrpc.mjs'
 import { slog, LOG_DIR } from './sessionlog.mjs'
 import { SimBridge } from './simbridge.mjs'
+import { desktopRoute, sessionTitle, tmuxName, hostedExec, attachExec, startHosted, hasSession, followToApp, transcriptPath } from './claudehost.mjs'
 
 const execFileP = promisify(execFile)
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -1030,10 +1031,11 @@ async function sttSession({ model, language, noise = true, prompt, delay } = {})
 }
 
 // ------------------------------------------------------------------- run ---
-// "Run in an agent": the finished prompt goes straight to a coding-agent CLI, in a new
-// Terminal window, in the active project's root. The prompt is written to a file under
-// .emu-composer/prompts/ and a .command script opens it — `open` runs a .command in
-// Terminal with no AppleScript/automation permission to grant.
+// "Run in an agent": the finished prompt goes straight to a coding-agent CLI, in the active
+// project's root — Claude Code live in the Claude app when it can, everything else in a new
+// Terminal window. The prompt is written to a file under .emu-composer/prompts/ and a
+// .command script runs it — `open` runs a .command in Terminal with no AppleScript/automation
+// permission to grant.
 const AGENTS = [
   { id: 'claude', name: 'Claude Code', args: f => `"$(cat ${f})"`, model: m => `--model ${m}`, models: ['opus', 'sonnet', 'haiku'] },
   { id: 'codex', name: 'Codex', args: f => `"$(cat ${f})"`, model: m => `-m ${m}`, models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'] },
@@ -1052,29 +1054,88 @@ async function findAgents() {
   return agentCache
 }
 const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
-async function runInAgent({ agent: id, text, dryRun, model = '' }) {
+// Claude Code opens live in the Claude app when it can (host 'auto', the default): hosted in
+// tmux with Remote Control, see claudehost.mjs. 'desktop' insists on the app — a missing app,
+// tmux or CLI is an error instead of a quiet Terminal. 'terminal' is the old behaviour. Once
+// the session has started, every failure shows THAT session in Terminal: never a second run.
+const HOSTS = ['auto', 'desktop', 'terminal']
+const commandScript = (what, root, header, body) => `#!/bin/zsh -l
+# emu-composer: ${what}
+cd ${shq(root)} || exit 1
+clear
+printf '\\033[2m%s\\033[0m\\n' ${shq(header)}
+${body}
+`
+const openInTerminal = async (cmd, script) => { await fs.writeFile(cmd, script, { mode: 0o755 }); await execFileP('open', ['-a', 'Terminal', cmd]) }
+async function runInAgent({ agent: id, text, dryRun, model = '', host = 'auto' }) {
   const a = (await findAgents()).find(x => x.id === id)
   if (!a) throw userError(`${id} was not found on this Mac`)
   if (!String(text || '').trim()) throw userError('the prompt is empty')
-  const root = P.cfg.root
+  if (!HOSTS.includes(host)) host = 'auto'
+  const root = path.resolve(P.cfg.root)
   const dir = path.join(root, '.emu-composer', 'prompts')
   await fs.mkdir(dir, { recursive: true })
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
   const file = path.join(dir, `${stamp}-${a.id}.md`), cmd = path.join(dir, `${stamp}-${a.id}.command`)
   await fs.writeFile(file, text)
   const spec = AGENTS.find(x => x.id === a.id)
-  const script = `#!/bin/zsh -l
-# emu-composer: run the composed prompt in ${a.name}, in ${root}
-cd ${shq(root)} || exit 1
-clear
-printf '\\033[2m%s\\033[0m\\n' ${shq(`${a.name} · ${root} · prompt: ${path.relative(root, file)}`)}
-exec ${shq(a.bin)}${model && /^[\w.:\-\/]+$/.test(model) ? ' ' + spec.model(shq(model)) : ''} ${spec.args(shq(file))}
-`
-  await fs.writeFile(cmd, script, { mode: 0o755 })
-  if (!dryRun) await execFileP('open', ['-a', 'Terminal', cmd])
-  log(`run → ${a.name} in ${root}${dryRun ? ' (dry run)' : ''}`)
-  slog('run', { agent: a.id, model, root, file: path.relative(root, file), chars: text.length, dryRun: Boolean(dryRun) })
-  return { ok: true, agent: a.name, file: path.relative(root, file), script: dryRun ? script : undefined }
+  const modelArg = model && /^[\w.:\-\/]+$/.test(model) ? spec.model(shq(model)) : ''
+  const rel = path.relative(root, file)
+  const header = `${a.name} · ${root} · prompt: ${rel}`
+  const base = { agent: a.id, model, root, file: rel, chars: text.length, dryRun: Boolean(dryRun) }
+
+  let route = null, why = ''
+  if (a.id === 'claude' && host !== 'terminal') {
+    route = await desktopRoute(a.bin)
+    if (!route.ok) {
+      if (host === 'desktop') throw userError(`cannot open in the Claude app: ${route.why}`)
+      why = route.why; route = null
+    }
+  } else if (a.id === 'claude') why = 'set to Terminal'
+
+  if (route) {
+    const sessionId = crypto.randomUUID(), title = sessionTitle(text)
+    const script = commandScript(`run the composed prompt in ${a.name}, in ${root} — hosted in tmux (${tmuxName(sessionId)}) with Remote Control, so the Claude app shows it live`,
+      root, header, hostedExec({ claude: route.claude, sessionId, title, extra: modelArg, promptArg: spec.args(shq(file)) }))
+    await fs.writeFile(cmd, script, { mode: 0o755 })
+    if (dryRun) return { ok: true, agent: a.name, file: rel, host: 'app', script }
+    let started = true, startErr = ''
+    try { await startHosted({ tmux: route.tmux, root, script: cmd, sessionId }) }
+    catch (e) { startErr = String(e.stderr || e.message || e).trim().split('\n')[0]; started = await hasSession(route.tmux, sessionId) }
+    if (started) {
+      log(`run → ${a.name} in ${root} via the Claude app (tmux ${tmuxName(sessionId)})`)
+      slog('run', { ...base, host: 'app', why: host === 'desktop' ? 'set to the Claude app' : 'Claude app, tmux and the CLI are all here', session: sessionId, title })
+      broadcast({ type: 'run', stage: 'starting', session: sessionId, title })
+      followHosted(route, sessionId, root, path.join(dir, `${stamp}-${a.id}-attach.command`))
+      return { ok: true, agent: a.name, file: rel, host: 'app', session: sessionId }
+    }
+    // tmux could not start it and nothing is running: nothing has seen the prompt yet.
+    if (host === 'desktop') throw userError(`tmux could not start the session: ${startErr}`)
+    why = `tmux could not start the session: ${startErr}`
+  }
+
+  const script = commandScript(`run the composed prompt in ${a.name}, in ${root}`, root, header,
+    `exec ${shq(a.bin)}${modelArg ? ' ' + modelArg : ''} ${spec.args(shq(file))}`)
+  if (dryRun) await fs.writeFile(cmd, script, { mode: 0o755 })
+  else await openInTerminal(cmd, script)
+  log(`run → ${a.name} in ${root} in Terminal${why ? ` (${why})` : ''}${dryRun ? ' (dry run)' : ''}`)
+  slog('run', { ...base, host: 'terminal', ...(why ? { why } : {}) })
+  return { ok: true, agent: a.name, file: rel, host: 'terminal', why: why || undefined, script: dryRun ? script : undefined }
+}
+
+// After a hosted start: trust screen, bridge, the app — or the same session in Terminal.
+// Each step goes to the journal and, live, to the page's activity log.
+function followHosted(route, sessionId, root, attachCmd) {
+  const say = (stage, d = {}) => { slog('run_host', { session: sessionId, stage, ...d }); broadcast({ type: 'run', session: sessionId, stage, ...d }) }
+  followToApp({ tmux: route.tmux, sessionId, onStage: say }).then(async r => {
+    if (r.outcome === 'terminal') {
+      try { await openInTerminal(attachCmd, commandScript(`show Claude Code session ${tmuxName(sessionId)} (hosted in tmux) — ${r.why}`, root, `Claude Code · ${root} · the Claude app route failed: ${r.why}`, attachExec(route.tmux, sessionId))) }
+      catch (e) { r.why += `; Terminal did not open either: ${String(e.message || e).split('\n')[0]}` }
+    }
+    log(`run ${tmuxName(sessionId)} → ${r.outcome}${r.why ? ` (${r.why})` : ''} after ${r.ms} ms`)
+    if (r.output) log(`run ${tmuxName(sessionId)} last output:\n${r.output}`)
+    say(r.outcome, { ms: r.ms, why: r.why, bridge: r.bridge, output: r.output, transcript: transcriptPath(root, sessionId) })
+  }).catch(e => say('error', { why: String(e.message || e) }))
 }
 
 // Which OpenAI models the stored key can use, split by purpose (cached 10 min).
