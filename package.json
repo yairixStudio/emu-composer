@@ -1,17 +1,17 @@
 {
   "name": "emu-composer",
   "version": "0.1.0",
-  "description": "Write prompts for coding agents next to a live Android emulator: point at any UI element and get a reference resolved to the source that renders it. Drive the emulator from the same page. Dictate.",
+  "description": "Visual prompt composer for AI coding agents: point at UI in a live Android emulator or iOS simulator and resolve it to the source code that renders it.",
   "type": "module",
   "bin": { "emu-composer": "bin/emu-composer.js" },
-  "files": ["bin", "src", "scripts", "mac", "README.md", "LICENSE", "CHANGELOG.md"],
+  "files": ["bin", "src", "scripts", "mac", "ios", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "check": "node --check bin/emu-composer.js && for f in src/*.mjs; do node --check \"$f\"; done && node -e \"const s=require('fs').readFileSync('src/ui/index.html','utf8');new Function(s.match(/<script>([\\s\\S]*)<\\/script>/)[1])\""
   },
   "engines": { "node": ">=20" },
   "os": ["darwin", "linux"],
-  "keywords": ["android", "emulator", "adb", "uiautomator", "prompt", "coding-agent", "claude-code", "cursor", "jetpack-compose", "dictation"],
+  "keywords": ["android", "ios", "android-emulator", "ios-simulator", "mobile-development", "developer-tools", "ai-coding", "coding-agent", "claude-code", "codex", "cursor", "jetpack-compose", "swiftui", "adb", "uiautomator", "accessibility", "prompt-engineering", "dictation"],
   "repository": { "type": "git", "url": "https://github.com/yairixStudio/emu-composer.git" },
   "homepage": "https://github.com/yairixStudio/emu-composer#readme",
   "bugs": "https://github.com/yairixStudio/emu-composer/issues",

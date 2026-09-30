@@ -1,26 +1,60 @@
 # emu-composer
 
-> Point at the button. Get the line of code. Say what's wrong. Paste.
+<p align="center">
+  <strong>Point at the UI. Get the source. Tell your coding agent exactly what to change.</strong>
+</p>
 
-Coding agents are good at changing an Android app once they know *which* element you mean.
-Telling them is the slow part: you describe a button in words, they grep for it, you correct
-them. emu-composer removes that round trip. It puts a prompt box next to a live Android
-emulator; every click on the screen drops an `@reference` into your text that carries the
-element's role and position, the **string resource and the source line that render it**, and
-the state of the device, build and repo. You write around the references — or dictate — and
-copy one prompt that an agent can act on without asking where anything is.
+<p align="center">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f97316.svg"></a>
+  <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-%E2%89%A520-5fa04e.svg">
+  <img alt="Android and iOS" src="https://img.shields.io/badge/mobile-Android%20%2B%20iOS-0ea5e9.svg">
+  <img alt="Zero npm dependencies" src="https://img.shields.io/badge/npm%20dependencies-0-8b5cf6.svg">
+</p>
 
+**emu-composer** is an open-source visual prompt composer for AI coding agents. It puts a
+live Android Emulator or iOS Simulator beside a prompt editor. Click any UI element to add
+an inline `@reference` containing its role, state, bounds, string resource, translations,
+and the **source file and line that render it**. Write or dictate the change, then copy the
+complete prompt or open it directly in Claude Code or Codex.
+
+<img src="docs/composer.png" width="100%" alt="emu-composer showing a live Android emulator beside a prompt editor with source-aware UI element references">
+
+*The device stays live on the left. The prompt on the right carries source-aware references
+that a coding agent can act on without another “which button?” round trip.*
+
+## Why emu-composer
+
+- **Source-aware UI references.** Resolve visible copy to Android resources, iOS String
+  Catalogs or Kotlin registries, then rank the real Jetpack Compose, XML, SwiftUI or UIKit
+  call sites that render it.
+- **One prompt across Android and iOS.** Collect `@android1` and `@ios1` references from the
+  same feature and ask an agent to keep both implementations in sync.
+- **The debugging context comes with the request.** Add the screen path, filtered device
+  errors, build and repo state, or numbered marks drawn over a captured frame.
+- **Human-in-the-loop by design.** Mobile automation tools help an agent operate a device;
+  emu-composer helps a person express a precise change to any coding agent.
+- **Local and lightweight.** One Node.js process, no npm runtime dependencies, and no source
+  code upload. Optional OpenAI transcription sends microphone audio only while recording.
+
+## Quick start
+
+Install the current release directly from GitHub, then run it inside your mobile project:
+
+```sh
+npm install --global github:yairixStudio/emu-composer
+
+cd /path/to/your/mobile-app
+emu-composer init    # detects package IDs, source roots and string resources
+emu-composer         # starts or reuses the daemon and opens the composer
 ```
-npx emu-composer init          # in your Android project: detects package, sources, strings
-npx emu-composer               # boots an AVD if needed, starts the server, opens the page
-```
 
-<img src="docs/composer.png" width="900" alt="The composer: a live emulator on the left with an element highlighted, a prompt on the right with two @reference chips inline">
+For fast Android accessibility snapshots, run `emu-composer setup-agent` once. For iOS,
+boot a Simulator and run `emu-composer setup-ios-agent` once. The slower Android path works
+without the optional agent.
 
-*Left: the emulator, live. Right: the prompt. The chips are references; the block each one
-expands to is below.*
+## What the agent receives
 
-## What a reference looks like
+### What a reference looks like
 
 ```
 ### @ui1 — "Schedule"  (label of the selected tab)
@@ -54,7 +88,7 @@ when elements come from several screens.
 
 ## Every project you have open, one daemon
 
-The server is not tied to the repo it was started from. `npx emu-composer` in a second
+The server is not tied to the repo it was started from. `emu-composer` in a second
 project **registers** that project with the one already running and switches to it: the page
 keeps its draft, its history and its device, while the sources a reference resolves against,
 the string registry, the version file and the agent notes all change together. The project
@@ -119,7 +153,7 @@ bundle id and serves its `XCUIElementSnapshot` over HTTP for as long as
 `xcodebuild test-without-building` keeps it alive — the simulator twin of `u2.jar`. Built once:
 
 ```
-npx emu-composer setup-ios-agent   # Xcode + XcodeGen (brew install xcodegen); a few minutes
+emu-composer setup-ios-agent   # Xcode + XcodeGen (brew install xcodegen); a few minutes
 ```
 
 **The screen and the touch skip XCUITest: `simbridge`.** A small Objective-C helper
@@ -233,8 +267,8 @@ to over JSON-RPC through an adb forward) changes the numbers:
 | text | ASCII only | any Unicode (clipboard + paste) |
 
 ```
-npx emu-composer setup-agent   # once; pip-installs uiautomator2 into an isolated venv and
-                               # copies the jar out. Nothing else is downloaded, ever.
+emu-composer setup-agent   # once; pip-installs uiautomator2 into an isolated venv and
+                           # copies the jar out. Nothing else is downloaded, ever.
 ```
 
 Without the jar everything works on the slow path and the **AGENT** pill says so. With it,
@@ -246,7 +280,7 @@ emulator's AccessibilityManagerService dead, and only a reboot fixed it.
 
 ## Opening it later
 
-- `npx emu-composer` from the project. Idempotent: a running server is reused, so an open
+- `emu-composer` from the project. Idempotent: a running server is reused, so an open
   composer keeps its draft.
 - **macOS:** `emu-composer install-app` writes *"<App> Composer.app"* to `~/Applications` —
   Spotlight finds it, the Dock can hold it, and it boots the AVD when none is running.
