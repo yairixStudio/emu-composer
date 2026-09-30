@@ -14,7 +14,7 @@ result:     filled by the agent — date · branch · what changed (Hebrew, for 
 -->
 
 ## README: mode terminology stale after the toggle-switch UI change
-- status: done
+- status: dropped
 - added: 2026-09-29
 - priority: 3
 - complexity: low
@@ -32,7 +32,7 @@ result:     filled by the agent — date · branch · what changed (Hebrew, for 
 - result: 2026-09-29 · תוקן בתוך שכתוב ההכתבה (ספקי תמלול + תמלול חי) — המשתנה המקומי שונה ל-text, ההודעה המזויפת "תמלול נכשל" נעלמה
 
 ## Fix 'emu-composer help' crash (TypeError on undefined.catch)
-- status: done
+- status: dropped
 - added: 2026-09-29
 - priority: 3
 - complexity: low
@@ -41,7 +41,7 @@ result:     filled by the agent — date · branch · what changed (Hebrew, for 
 - result: 2026-09-29 · backlog/fix-emu-composer-help-crash-typeerror-on · הפקודה emu-composer help כבר לא קורסת: היא מדפיסה את מסך העזרה ויוצאת תקין. התיקון מגן גם על פקודות סינכרוניות שיתווספו בעתיד. הבדיקות עוברות. · 37k
 
 ## Live dictation: measure streaming, consider gpt-live-transcribe
-- status: blocked
+- status: dropped
 - added: 2026-09-29
 - priority: 2
 - complexity: medium
@@ -50,7 +50,7 @@ result:     filled by the agent — date · branch · what changed (Hebrew, for 
 - result: 2026-09-29 · אפשר לעשות כמה הקלטות אמיתיות קצרות עם השרת המעודכן (gpt-live-transcribe) ואז להריץ emu-composer log --grep rt_utterance? צריך לבדוק שמופיע beforeCommit:true ושאין rt_error, ואז לסגור את המשימה.
 
 ## Local server accepts cross-origin POSTs (no Origin/Host check)
-- status: done
+- status: dropped
 - added: 2026-09-29
 - priority: 2
 - complexity: low
