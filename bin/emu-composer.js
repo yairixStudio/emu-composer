@@ -249,4 +249,4 @@ async function journal() {
 const commands = { log: journal, run, init, 'setup-agent': () => sh('setup-agent.sh'), 'setup-ios-agent': () => sh('setup-ios-agent.sh'), 'install-app': installApp, bar, doctor,
   help: () => say(fsSync.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).map(l => l.replace(/^\/\/ ?/, '')).join('\n')) }
 if (!commands[cmd]) die(`unknown command "${cmd}"\n` + Object.keys(commands).join(' | '))
-commands[cmd]().catch(e => die(e.message))
+Promise.resolve().then(() => commands[cmd]()).catch(e => die(e.message))
